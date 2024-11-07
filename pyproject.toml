@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python",
@@ -27,15 +28,15 @@ include = ["esdbclient/py.typed"]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
-grpcio = ">=1.51.0,!=1.52.*,<1.63"  # 1.52.0 hangs on fork
+grpcio = ">=1.51.0,!=1.52.*,<1.68"  # 1.52.0 hangs on fork
 protobuf = ">=3.11.0"
 #protobuf = "^4.21.0"
 #protobuf = ">=3.11.0,<3.21.0"
 typing_extensions = "*"
 
-opentelemetry-api = { version = "^1.25.0", optional = true }
-opentelemetry-instrumentation = { version = "^0.46b0", optional = true }
-opentelemetry-semantic-conventions = { version = "^0.46b0", optional = true }
+opentelemetry-api = { version = "^1.28.0", optional = true }
+opentelemetry-instrumentation = { version = "^0.49b0", optional = true }
+opentelemetry-semantic-conventions = { version = "^0.49b0", optional = true }
 
 [tool.poetry.extras]
 opentelemetry = ["opentelemetry-api", "opentelemetry-instrumentation", "opentelemetry-semantic-conventions"]
@@ -58,9 +59,9 @@ types-protobuf = "*"
 mypy-protobuf = "*"
 coverage = "^7.2.7"
 fastapi = "^0.111.0"
-opentelemetry-exporter-otlp-proto-http = "^1.25.0"
-opentelemetry-exporter-otlp-proto-grpc = "^1.25.0"
-opentelemetry-instrumentation-grpc = "^0.46b0"
+opentelemetry-exporter-otlp-proto-http = "^1.28.0"
+#opentelemetry-exporter-otlp-proto-grpc = "^1.25.0"
+opentelemetry-instrumentation-grpc = "^0.49b0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -23,7 +23,10 @@ from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.case import _AssertRaisesContext
 from uuid import uuid4
 
+# import opentelemetry.instrumentation.version as instrumentation_version
+import opentelemetry.instrumentation.grpc.version as instrumentation_grpc_version
 import opentelemetry.sdk.trace as trace_sdk
+import opentelemetry.sdk.version as sdk_version
 import opentelemetry.trace as trace_api
 
 # from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -907,7 +910,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
             "service.name": "eventstoredb",
             "telemetry.sdk.language": "python",
             "telemetry.sdk.name": "opentelemetry",
-            "telemetry.sdk.version": "1.25.0",
+            "telemetry.sdk.version": sdk_version.__version__,
         }
         self.assertEqual(resource_attributes, span.resource.attributes)
 
@@ -1078,7 +1081,7 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
             "service.name": "eventstoredb",
             "telemetry.sdk.language": "python",
             "telemetry.sdk.name": "opentelemetry",
-            "telemetry.sdk.version": "1.25.0",
+            "telemetry.sdk.version": sdk_version.__version__,
         }
         self.assertEqual(resource_attributes, span.resource.attributes)
 
@@ -3263,7 +3266,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_name="/event_store.client.streams.Streams/BatchAppend",
             span_kind=trace_api.SpanKind.CLIENT,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             rpc_service="event_store.client.streams.Streams",
             rpc_method="BatchAppend",
         )
@@ -3351,7 +3354,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_name="/event_store.client.streams.Streams/Read",
             span_kind=trace_api.SpanKind.CLIENT,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             rpc_service="event_store.client.streams.Streams",
             rpc_method="Read",
         )
@@ -3450,7 +3453,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_index=6,
             parent_span_index=2,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             span_name="/event_store.client.streams.Streams/Read",
             span_kind=trace_api.SpanKind.CLIENT,
             rpc_service="event_store.client.streams.Streams",
@@ -3540,7 +3543,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_name="/event_store.client.streams.Streams/BatchAppend",
             span_kind=trace_api.SpanKind.CLIENT,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             rpc_service="event_store.client.streams.Streams",
             rpc_method="BatchAppend",
         )
@@ -3628,7 +3631,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_name="/event_store.client.streams.Streams/Read",
             span_kind=trace_api.SpanKind.CLIENT,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             rpc_service="event_store.client.streams.Streams",
             rpc_method="Read",
         )
@@ -3735,7 +3738,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_index=6,
             parent_span_index=2,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
-            instrumentation_scope_version="0.46b0",
+            instrumentation_scope_version=instrumentation_grpc_version.__version__,
             span_name="/event_store.client.streams.Streams/Read",
             span_kind=trace_api.SpanKind.CLIENT,
             rpc_service="event_store.client.streams.Streams",
