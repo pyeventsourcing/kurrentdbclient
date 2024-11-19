@@ -8,12 +8,12 @@ down for <a href="#asyncio-client">information</a> about `AsyncEventStoreDBClien
 
 These clients have been developed and are being maintained in a collaboration
 with the EventStoreDB team, and are officially support by Event Store Ltd.
-Although not all aspects of the EventStoreDB gRPC API are implemented, many
-of the most useful features are presented in an easy-to-use interface.
+Although not all aspects of the EventStoreDB gRPC API are implemented, most
+features are presented in an easy-to-use interface.
 
-These clients have been tested to work with EventStoreDB LTS versions 22.10 and 23.10,
-and release candidates 24.2 and 24.6, without and without SSL/TLS, with both single-server
-and cluster modes, and with Python versions 3.8, 3.9, 3.10, 3.11 and 3.12.
+These clients have been tested to work with EventStoreDB LTS versions 22.10, 23.10,
+and 24.10, without and without SSL/TLS, with both single-server
+and cluster modes, and with Python versions 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
 
 The test suite has 100% line and branch coverage. The code has typing annotations
 checked strictly with mypy. The code is formatted with black and isort, and checked
@@ -295,7 +295,7 @@ The EventStoreDB server can be run locally using the official Docker container i
 
 For development, you can run a "secure" EventStoreDB server using the following command.
 
-    $ docker run -d --name eventstoredb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy --dev
+    $ docker run -d --name eventstoredb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --dev
 
 As we will see, your client will need an EventStoreDB connection string URI as the value
 of its `uri` constructor argument. The connection string for this "secure" EventStoreDB
@@ -325,7 +325,7 @@ server_certificate = ssl.get_server_certificate(addr=('localhost', 2113))
 
 Alternatively, you can start an "insecure" server using the following command.
 
-    $ docker run -d --name eventstoredb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy --insecure
+    $ docker run -d --name eventstoredb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --insecure
 
 The connection string URI for this "insecure" server would be:
 

@@ -4,7 +4,8 @@
 
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy
-EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
+# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
+EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:24.2.0-alpha.115-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-staging-ce/eventstoredb-ce:24.6.0-nightly-x64-8.0-jammy
 
