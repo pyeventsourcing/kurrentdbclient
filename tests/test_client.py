@@ -7958,8 +7958,8 @@ class FakeUnknownRpcError(FakeRpcError):
         super().__init__(status_code=StatusCode.UNKNOWN)
 
 
-def random_data() -> bytes:
-    return os.urandom(16)
+def random_data(size: int = 16) -> bytes:
+    return os.urandom(size)
 
 
-del EventStoreDBClientTestCase
+# del EventStoreDBClientTestCase

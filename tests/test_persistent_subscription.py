@@ -5,11 +5,7 @@ from unittest import TestCase
 from uuid import UUID, uuid4
 
 from esdbclient import EventStoreDBClient, NewEvent, StreamState
-from tests.test_client import get_ca_certificate, get_server_certificate
-
-
-def random_data() -> bytes:
-    return os.urandom(16)
+from tests.test_client import get_ca_certificate, get_server_certificate, random_data
 
 
 class TestPersistentSubscriptionACK(TestCase):
