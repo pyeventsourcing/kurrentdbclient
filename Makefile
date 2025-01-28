@@ -98,6 +98,10 @@ test:
 # 	$(POETRY) run python -m pytest -v tests/test_docs.py
 # 	$(POETRY) run python -m unittest discover tests -v
 
+.PHONY: benchmark
+benchmark:
+	$(POETRY) run python tests/benchmark.py
+
 .PHONY: build
 build:
 	$(POETRY) build
