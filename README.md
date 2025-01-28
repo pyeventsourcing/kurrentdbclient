@@ -3704,6 +3704,13 @@ issues (don't know why) which might be problematic. If you encounter such
 issues, you can resolve these issues by deleting the virtual environment
 and creating the Poetry virtual environment using PyCharm (see above).
 
+### Install timeout command
+
+If you are running on a Mac, you may need to install the timeout command. You
+can do this by installing GNU Coreutils with Homebrew.
+
+    $ brew install coreutils
+
 ### Project Makefile commands<a id="project-makefile-commands"></a>
 
 You can start EventStoreDB using the following command.
@@ -3726,9 +3733,15 @@ You can reformat the code using the following command.
 
     $ make fmt
 
-Tests belong in `./tests`. Code-under-test belongs in `./esdbclient`.
+### Making changes
 
-Edit package dependencies in `pyproject.toml`. Update installed packages (and the
-`poetry.lock` file) using the following command.
+Tests belong in `./tests`.
+
+Code-under-test belongs in `./esdbclient`.
+
+Edit package dependencies in `pyproject.toml`.
+
+Update the `poetry.lock` file, and the project's virtual environment, using the
+following command.
 
     $ make update-packages
