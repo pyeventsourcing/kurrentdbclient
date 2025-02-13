@@ -20,12 +20,12 @@ def print(*args):
         _print(*args)
 
 
-ESDB_TARGET = "localhost:2114"
+KDB_TARGET = "localhost:2114"
 qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
 client = KurrentDBClient(
-    uri=f"kdb://admin:changeit@{ESDB_TARGET}?{qs}",
-    root_certificates=get_server_certificate(ESDB_TARGET),
+    uri=f"kdb://admin:changeit@{KDB_TARGET}?{qs}",
+    root_certificates=get_server_certificate(KDB_TARGET),
 )
 
 stream_name = str(uuid4())

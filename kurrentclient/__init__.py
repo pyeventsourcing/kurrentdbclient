@@ -2,8 +2,8 @@
 from kurrentclient.asyncio_client import AsyncioKurrentDBClient, AsyncKurrentDBClient
 from kurrentclient.client import (
     DEFAULT_EXCLUDE_FILTER,
-    ESDB_PERSISTENT_CONFIG_EVENTS_REGEX,
-    ESDB_SYSTEM_EVENTS_REGEX,
+    KDB_PERSISTENT_CONFIG_EVENTS_REGEX,
+    KDB_SYSTEM_EVENTS_REGEX,
     KurrentDBClient,
 )
 from kurrentclient.events import (
@@ -26,8 +26,8 @@ __version__ = "1.1"
 
 __all__ = [
     "DEFAULT_EXCLUDE_FILTER",
-    "ESDB_PERSISTENT_CONFIG_EVENTS_REGEX",
-    "ESDB_SYSTEM_EVENTS_REGEX",
+    "KDB_PERSISTENT_CONFIG_EVENTS_REGEX",
+    "KDB_SYSTEM_EVENTS_REGEX",
     "AsyncioKurrentDBClient",
     "AsyncCatchupSubscription",
     "AsyncKurrentDBClient",

@@ -18,8 +18,8 @@ NUM_EVENTS = [10000]
 
 
 class Benchmark(KurrentDBClientTestCase):
-    # ESDB_TARGET = "localhost:2113"
-    # ESDB_TLS = False
+    # KDB_TARGET = "localhost:2113"
+    # KDB_TLS = False
 
     def test_benchmark(self) -> None:
         print("Benchmarking client with blocking I/0...")

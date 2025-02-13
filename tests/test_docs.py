@@ -24,15 +24,15 @@ class TestDocs(TestCase):
         #         raise
 
     def setup_environ(self) -> None:
-        os.environ["ESDB_ROOT_CERTIFICATES"] = ssl.get_server_certificate(
+        os.environ["KDB_ROOT_CERTIFICATES"] = ssl.get_server_certificate(
             addr=("localhost", 2114)
         )
-        os.environ["ESDB_URI"] = "kdb://admin:changeit@localhost:2114"
+        os.environ["KDB_URI"] = "kdb://admin:changeit@localhost:2114"
 
     def tearDown(self) -> None:
-        del os.environ["ESDB_URI"]
+        del os.environ["KDB_URI"]
         try:
-            del os.environ["ESDB_ROOT_CERTIFICATES"]
+            del os.environ["KDB_ROOT_CERTIFICATES"]
         except KeyError:
             pass
 
@@ -204,4 +204,4 @@ class TestDocs(TestCase):
 
 class TestDocsInsecure(TestDocs):
     def setup_environ(self) -> None:
-        os.environ["ESDB_URI"] = "kdb://localhost:2113?Tls=false"
+        os.environ["KDB_URI"] = "kdb://localhost:2113?Tls=false"

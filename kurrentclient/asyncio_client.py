@@ -45,7 +45,7 @@ from kurrentclient.common import (
     AbstractAsyncPersistentSubscription,
     GrpcOptions,
 )
-from kurrentclient.connection import AsyncESDBConnection
+from kurrentclient.connection import AsyncKurrentDBConnection
 from kurrentclient.connection_spec import (
     NODE_PREFERENCE_LEADER,
     URI_SCHEMES_NON_DISCOVER,
@@ -170,7 +170,9 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                 # Todo: Test with concurrent writes to wrong node state.
                 pass
 
-    async def _connect(self, grpc_target: Optional[str] = None) -> AsyncESDBConnection:
+    async def _connect(
+        self, grpc_target: Optional[str] = None
+    ) -> AsyncKurrentDBConnection:
         if grpc_target:
             # Just connect to the given target.
             return self._construct_esdb_connection(grpc_target)
@@ -185,7 +187,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         # Discover preferred node in cluster.
         return await self._discover_preferred_node()
 
-    async def _discover_preferred_node(self) -> AsyncESDBConnection:
+    async def _discover_preferred_node(self) -> AsyncKurrentDBConnection:
         attempts = self.connection_spec.options.MaxDiscoverAttempts
         assert attempts > 0
         if self.connection_spec.scheme in URI_SCHEMES_NON_DISCOVER:
@@ -244,7 +246,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
 
     def _construct_esdb_connection(
         self, grpc_target: str, grpc_options: GrpcOptions = ()
-    ) -> AsyncESDBConnection:
+    ) -> AsyncKurrentDBConnection:
         grpc_options = self.grpc_options + grpc_options
         if self.connection_spec.options.Tls is True:
             channel_credentials = grpc.ssl_channel_credentials(
@@ -262,7 +264,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                 target=grpc_target, options=grpc_options
             )
 
-        return AsyncESDBConnection(
+        return AsyncKurrentDBConnection(
             grpc_channel=grpc_channel,
             grpc_target=grpc_target,
             connection_spec=self.connection_spec,

@@ -47,7 +47,7 @@ from kurrentclient.common import (
     BasicAuthCallCredentials,
     GrpcOptions,
 )
-from kurrentclient.connection import ESDBConnection
+from kurrentclient.connection import KurrentDBConnection
 from kurrentclient.connection_spec import (
     NODE_PREFERENCE_FOLLOWER,
     NODE_PREFERENCE_LEADER,
@@ -87,11 +87,14 @@ from kurrentclient.projections import (
 from kurrentclient.streams import StreamsService, StreamState
 
 # Matches the 'type' of "system" events.
-ESDB_SYSTEM_EVENTS_REGEX = r"\$.+"
+KDB_SYSTEM_EVENTS_REGEX = r"\$.+"
 # Matches the 'type' of "PersistentConfig" events.
-ESDB_PERSISTENT_CONFIG_EVENTS_REGEX = r"PersistentConfig\d+"
+KDB_PERSISTENT_CONFIG_EVENTS_REGEX = r"PersistentConfig\d+"
 
-DEFAULT_EXCLUDE_FILTER = (ESDB_SYSTEM_EVENTS_REGEX, ESDB_PERSISTENT_CONFIG_EVENTS_REGEX)
+DEFAULT_EXCLUDE_FILTER = (
+    KDB_SYSTEM_EVENTS_REGEX,
+    KDB_PERSISTENT_CONFIG_EVENTS_REGEX,
+)
 
 _TCallable = TypeVar("_TCallable", bound=Callable[..., Any])
 
@@ -313,7 +316,7 @@ class KurrentDBClient(BaseKurrentDBClient):
     def projections(self) -> ProjectionsService:
         return self._connection.projections
 
-    def _connect(self, grpc_target: Optional[str] = None) -> ESDBConnection:
+    def _connect(self, grpc_target: Optional[str] = None) -> KurrentDBConnection:
         if grpc_target:
             # Just connect to the given target.
             return self._construct_esdb_connection(grpc_target)
@@ -328,7 +331,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         # Discover preferred node in cluster.
         return self._discover_preferred_node()
 
-    def _discover_preferred_node(self) -> ESDBConnection:
+    def _discover_preferred_node(self) -> KurrentDBConnection:
         attempts = self.connection_spec.options.MaxDiscoverAttempts
         assert attempts > 0
         if self.connection_spec.scheme in URI_SCHEMES_NON_DISCOVER:
@@ -397,8 +400,8 @@ class KurrentDBClient(BaseKurrentDBClient):
 
     def _construct_esdb_connection(
         self, grpc_target: str, grpc_options: GrpcOptions = ()
-    ) -> ESDBConnection:
-        return ESDBConnection(
+    ) -> KurrentDBConnection:
+        return KurrentDBConnection(
             grpc_channel=self._construct_grpc_channel(grpc_target, grpc_options),
             grpc_target=grpc_target,
             connection_spec=self.connection_spec,

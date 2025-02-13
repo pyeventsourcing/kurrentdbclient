@@ -7,8 +7,8 @@ import grpc.aio
 
 from kurrentclient.common import (
     AsyncGrpcStreamers,
-    ESDBService,
     GrpcStreamers,
+    KurrentDBService,
     Metadata,
     TGrpcStreamers,
     handle_rpc_error,
@@ -35,7 +35,7 @@ GOSSIP_API_NODE_STATES_MAPPING = {
 }
 
 
-class BaseGossipService(ESDBService[TGrpcStreamers]):
+class BaseGossipService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
         channel: Union[grpc.Channel, grpc.aio.Channel],

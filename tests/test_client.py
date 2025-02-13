@@ -18,7 +18,7 @@ from grpc._channel import _MultiThreadedRendezvous, _RPCState
 from grpc._cython.cygrpc import IntegratedCall
 
 import kurrentclient.protos.Grpc.persistent_pb2 as grpc_persistent
-from kurrentclient import ESDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
+from kurrentclient import KDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
 from kurrentclient.client import KurrentDBClient
 from kurrentclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
@@ -398,29 +398,29 @@ def get_server_certificate(grpc_target: str) -> str:
 class KurrentDBClientTestCase(TimedTestCase):
     client: KurrentDBClient
 
-    ESDB_TARGET = "localhost:2114"
-    ESDB_TLS = True
-    ESDB_CLUSTER_SIZE = 1
+    KDB_TARGET = "localhost:2114"
+    KDB_TLS = True
+    KDB_CLUSTER_SIZE = 1
 
     def construct_esdb_client(self, qs: str = "") -> None:
-        if self.ESDB_CLUSTER_SIZE > 1:
+        if self.KDB_CLUSTER_SIZE > 1:
             qs = f"MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1&{qs}"
-        if self.ESDB_TLS:
-            uri = f"kdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
+        if self.KDB_TLS:
+            uri = f"kdb://admin:changeit@{self.KDB_TARGET}?{qs}"
             root_certificates = self.get_root_certificates()
         else:
-            uri = f"kdb://{self.ESDB_TARGET}?Tls=false&{qs}"
+            uri = f"kdb://{self.KDB_TARGET}?Tls=false&{qs}"
             root_certificates = None
         self.client = KurrentDBClient(uri, root_certificates=root_certificates)
 
     def get_root_certificates(self) -> str:
-        if self.ESDB_CLUSTER_SIZE == 1:
-            return get_server_certificate(self.ESDB_TARGET.split(",")[0])
-        elif self.ESDB_CLUSTER_SIZE == 3:
+        if self.KDB_CLUSTER_SIZE == 1:
+            return get_server_certificate(self.KDB_TARGET.split(",")[0])
+        elif self.KDB_CLUSTER_SIZE == 3:
             return get_ca_certificate()
         else:
             raise ValueError(
-                f"Test doesn't work with cluster size {self.ESDB_CLUSTER_SIZE}"
+                f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
             )
 
     def tearDown(self) -> None:
@@ -828,7 +828,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[2].id, event3.id)
 
     def test_resolve_links_when_reading_from_dollar_et_projection(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
 
         self.construct_esdb_client()
@@ -1520,7 +1520,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated. Should exclude event1.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, "OrderCreated"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "OrderCreated"],
             expected={
                 "OrderUpdated",
                 "OrderDeleted",
@@ -1534,7 +1534,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated and OrderDeleted. Should exclude event1 and event3.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, "OrderCreated", "OrderDeleted"],
+            filter_exclude=[
+                KDB_SYSTEM_EVENTS_REGEX,
+                "OrderCreated",
+                "OrderDeleted",
+            ],
             expected={
                 "OrderUpdated",
                 "InvoiceCreated",
@@ -1547,7 +1551,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Order. Should exclude nothing.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, "Order"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order"],
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1562,7 +1566,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Created. Should exclude nothing.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, "Created"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Created"],
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1577,7 +1581,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Order.*. Should exclude event1, event2, event3.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, "Order.*"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order.*"],
             expected={
                 "InvoiceCreated",
                 "InvoiceUpdated",
@@ -1589,7 +1593,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude *.Created. Should exclude event1 and event4.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, r".*Created"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*Created"],
             expected={
                 "OrderUpdated",
                 "OrderDeleted",
@@ -1602,7 +1606,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude *.thing.*. Should exclude event7.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, r".*thing.*"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*thing.*"],
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1616,7 +1620,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated.+. Should exclude nothing.
         self.assertFilteredEvents(
             commit_position=commit_position,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, r".OrderCreated.+"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".OrderCreated.+"],
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1710,7 +1714,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertFilteredEvents(
             commit_position=commit_position,
             filter_by_stream_name=True,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, stream_name1],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, stream_name1],
             expected={stream_name2, stream_name3},
         )
 
@@ -1718,7 +1722,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertFilteredEvents(
             commit_position=commit_position,
             filter_by_stream_name=True,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, stream_name2, stream_name3],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, stream_name2, stream_name3],
             expected={stream_name1},
         )
 
@@ -1726,7 +1730,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertFilteredEvents(
             commit_position=commit_position,
             filter_by_stream_name=True,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, prefix1 + ".*"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix1 + ".*"],
             expected={stream_name3},
         )
 
@@ -1734,7 +1738,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertFilteredEvents(
             commit_position=commit_position,
             filter_by_stream_name=True,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, prefix2 + ".*"],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix2 + ".*"],
             expected={stream_name1, stream_name2},
         )
 
@@ -1742,7 +1746,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertFilteredEvents(
             commit_position=commit_position,
             filter_by_stream_name=True,
-            filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX, prefix2],
+            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix2],
             expected={stream_name1, stream_name2, stream_name3},
         )
 
@@ -1775,7 +1779,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
     def test_read_all_filter_nothing(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
 
         self.construct_esdb_client()
@@ -1788,7 +1792,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 break
 
     def test_read_all_resolve_links(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
 
         self.construct_esdb_client()
@@ -2696,7 +2700,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             timeout=5,
         )
 
-        # We shouldn't get an extra checkpoint at the end (ESDB bug < v23.10),
+        # We shouldn't get an extra checkpoint at the end (bug with <v23.10),
         # that has a commit position greater than the current commit position (v24.2).
         checkpoint_commit_position: Optional[int] = None
         try:
@@ -4069,7 +4073,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[1].id, event4.id)
 
     def test_subscription_to_all_filter_nothing(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
         self.construct_esdb_client()
 
@@ -4090,7 +4094,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 break
 
     def test_subscription_to_all_resolve_links(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
         self.construct_esdb_client()
         commit_position = self.client.get_commit_position()
@@ -5959,7 +5963,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     # Todo: subscribe from end? not interesting, because you can get commit position
 
     def test_subscription_to_stream_resolve_links(self) -> None:
-        if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+        if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
             self.skipTest("This test doesn't work with this configuration")
         self.construct_esdb_client()
 
@@ -6003,7 +6007,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(len(events), 1)
 
     # def test_print_resolve_links(self) -> None:
-    #     if self.ESDB_CLUSTER_SIZE > 1 or self.ESDB_TLS is not True:
+    #     if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
     #         self.skipTest("This test doesn't work with this configuration")
     #     self.construct_esdb_client()
     #
@@ -6211,7 +6215,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # For some reason, we can set stream metadata, even though the stream
         # has been tombstoned, and even though we can't get stream metadata.
-        # Todo: Ask ESDB team why this is?
+        # Todo: Ask DB team why this is?
         self.client.set_stream_metadata(
             stream_name=stream_name,
             metadata=metadata,
@@ -6229,15 +6233,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
     def test_gossip_read(self) -> None:
         self.construct_esdb_client()
-        if self.ESDB_CLUSTER_SIZE == 1:
+        if self.KDB_CLUSTER_SIZE == 1:
             cluster_info = self.client.read_gossip()
             self.assertEqual(len(cluster_info), 1)
-            expected_address = self.ESDB_TARGET.split(":")[0]
-            expected_port = int(self.ESDB_TARGET.split(":")[1])
+            expected_address = self.KDB_TARGET.split(":")[0]
+            expected_port = int(self.KDB_TARGET.split(":")[1])
             self.assertEqual(cluster_info[0].state, NODE_STATE_LEADER)
             self.assertEqual(cluster_info[0].address, expected_address)
             self.assertEqual(cluster_info[0].port, expected_port)
-        elif self.ESDB_CLUSTER_SIZE == 3:
+        elif self.KDB_CLUSTER_SIZE == 3:
             retries = 10
             while True:
                 retries -= 1
@@ -6261,7 +6265,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                     else:
                         raise
         else:
-            self.fail(f"Test doesn't work with cluster size {self.ESDB_CLUSTER_SIZE}")
+            self.fail(f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}")
 
     def test_create_projection(self) -> None:
         self.construct_esdb_client()
@@ -6710,8 +6714,8 @@ PROJECTION_QUERY_TEMPLATE1 = """fromStream('%s')
 
 
 class TestKurrentDBClientWithInsecureConnection(TestKurrentDBClient):
-    ESDB_TARGET = "localhost:2113"
-    ESDB_TLS = False
+    KDB_TARGET = "localhost:2113"
+    KDB_TLS = False
 
 
 # Todo: Test error from sending call credentials to insecure server
@@ -6720,19 +6724,19 @@ class TestKurrentDBClientWithInsecureConnection(TestKurrentDBClient):
 # 	sufficient security level to transfer call credential."
 
 
-class TestESDBClusterNode1(TestKurrentDBClient):
-    ESDB_TARGET = "127.0.0.1:2110,127.0.0.1:2110"  # make it do discovery
-    ESDB_CLUSTER_SIZE = 3
+class TestClusterNode1(TestKurrentDBClient):
+    KDB_TARGET = "127.0.0.1:2110,127.0.0.1:2110"  # make it do discovery
+    KDB_CLUSTER_SIZE = 3
 
 
-class TestESDBClusterNode2(TestKurrentDBClient):
-    ESDB_TARGET = "127.0.0.1:2111,127.0.0.1:2111"  # make it do discovery
-    ESDB_CLUSTER_SIZE = 3
+class TestClusterNode2(TestKurrentDBClient):
+    KDB_TARGET = "127.0.0.1:2111,127.0.0.1:2111"  # make it do discovery
+    KDB_CLUSTER_SIZE = 3
 
 
-class TestESDBClusterNode3(TestKurrentDBClient):
-    ESDB_TARGET = "127.0.0.1:2112,127.0.0.1:2112"  # make it do discovery
-    ESDB_CLUSTER_SIZE = 3
+class TestClusterNode3(TestKurrentDBClient):
+    KDB_TARGET = "127.0.0.1:2112,127.0.0.1:2112"  # make it do discovery
+    KDB_CLUSTER_SIZE = 3
 
 
 class TestRootCertificatesAreOptional(TimedTestCase):
@@ -6826,7 +6830,7 @@ class TestOptionalClientAuth(TimedTestCase):
         self.assertEqual(tls_ca_file_contents, client_with_tls_ca.root_certificates)
 
 
-class TestESDBDiscoverScheme(TestCase):
+class TestDiscoverScheme(TestCase):
     def test_calls_dns_and_uses_given_port_number_or_default(self) -> None:
         # Cluster name not configured in DNS, default port.
         with self.assertRaises(DiscoveryFailed) as cm1:
@@ -7516,14 +7520,14 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
     def test_read_gossip(self) -> None:
         self.client.read_gossip()
 
-    # Getting 'AccessDenied' with ESDB v23.10.
+    # Getting 'AccessDenied' with KurrentDB v23.10.
     # def test_read_cluster_gossip(self) -> None:
     #     self.client.read_cluster_gossip()
 
 
 class TestRaisesDiscoveryFailed(KurrentDBClientTestCase):
-    ESDB_TARGET = "localhost:2222,localhost:2222"  # make it do discovery
-    ESDB_TLS = False
+    KDB_TARGET = "localhost:2222,localhost:2222"  # make it do discovery
+    KDB_TLS = False
 
     def test(self) -> None:
         with self.assertRaises(DiscoveryFailed):
@@ -7531,8 +7535,8 @@ class TestRaisesDiscoveryFailed(KurrentDBClientTestCase):
 
 
 class TestConnectsDespiteBadTarget(KurrentDBClientTestCase):
-    ESDB_TARGET = "localhost:2222,localhost:2113"  # make it do discovery
-    ESDB_TLS = False
+    KDB_TARGET = "localhost:2222,localhost:2113"  # make it do discovery
+    KDB_TLS = False
 
     def test(self) -> None:
         self.construct_esdb_client()
@@ -7541,8 +7545,8 @@ class TestConnectsDespiteBadTarget(KurrentDBClientTestCase):
 
 
 class TestConnectToPreferredNode(KurrentDBClientTestCase):
-    ESDB_TARGET = "localhost:2114,localhost:2114"  # make it do discovery
-    ESDB_CLUSTER_SIZE = 1
+    KDB_TARGET = "localhost:2114,localhost:2114"  # make it do discovery
+    KDB_CLUSTER_SIZE = 1
 
     def test_no_followers(self) -> None:
         with self.assertRaises(FollowerNotFound):

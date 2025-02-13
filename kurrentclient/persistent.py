@@ -46,9 +46,9 @@ from kurrentclient.common import (
     AbstractPersistentSubscription,
     AsyncGrpcStreamer,
     AsyncGrpcStreamers,
-    ESDBService,
     GrpcStreamer,
     GrpcStreamers,
+    KurrentDBService,
     Metadata,
     TGrpcStreamers,
     construct_filter_exclude_regex,
@@ -925,7 +925,7 @@ class SubscriptionInfo:
         return kwargs
 
 
-class BasePersistentSubscriptionsService(ESDBService[TGrpcStreamers]):
+class BasePersistentSubscriptionsService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
         channel: Union[grpc.Channel, grpc.aio.Channel],

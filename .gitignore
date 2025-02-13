@@ -134,5 +134,5 @@ dmypy.json
 
 *.sqlite3*
 
-# ESDB es-gencert-cli Docker container output
+# KurrentDB es-gencert-cli Docker container output
 certs/

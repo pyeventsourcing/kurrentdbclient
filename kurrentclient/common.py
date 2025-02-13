@@ -62,7 +62,12 @@ if TYPE_CHECKING:  # pragma: no cover
 else:
     Metadata = Tuple[Tuple[str, str], ...]
 
-__all__ = ["handle_rpc_error", "BasicAuthCallCredentials", "ESDBService", "Metadata"]
+__all__ = [
+    "handle_rpc_error",
+    "BasicAuthCallCredentials",
+    "KurrentDBService",
+    "Metadata",
+]
 
 
 PROTOBUF_MAX_DEADLINE_SECONDS = 315576000000
@@ -285,7 +290,7 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientException:  # noqa: C90
     return GrpcError(e)
 
 
-class ESDBService(Generic[TGrpcStreamers]):
+class KurrentDBService(Generic[TGrpcStreamers]):
     def __init__(
         self,
         connection_spec: ConnectionSpec,

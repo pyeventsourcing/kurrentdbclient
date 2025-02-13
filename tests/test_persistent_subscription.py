@@ -10,28 +10,28 @@ from tests.test_client import get_ca_certificate, get_server_certificate, random
 class TestPersistentSubscriptionACK(TestCase):
     client: KurrentDBClient
 
-    ESDB_TARGET = "localhost:2114"
-    ESDB_TLS = True
-    ESDB_CLUSTER_SIZE = 1
+    KDB_TARGET = "localhost:2114"
+    KDB_TLS = True
+    KDB_CLUSTER_SIZE = 1
 
     def construct_esdb_client(self) -> None:
         qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        if self.ESDB_TLS:
-            uri = f"kdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
+        if self.KDB_TLS:
+            uri = f"kdb://admin:changeit@{self.KDB_TARGET}?{qs}"
             root_certificates = self.get_root_certificates()
         else:
-            uri = f"kdb://{self.ESDB_TARGET}?Tls=false&{qs}"
+            uri = f"kdb://{self.KDB_TARGET}?Tls=false&{qs}"
             root_certificates = None
         self.client = KurrentDBClient(uri, root_certificates=root_certificates)
 
     def get_root_certificates(self) -> str:
-        if self.ESDB_CLUSTER_SIZE == 1:
-            return get_server_certificate(self.ESDB_TARGET)
-        elif self.ESDB_CLUSTER_SIZE == 3:
+        if self.KDB_CLUSTER_SIZE == 1:
+            return get_server_certificate(self.KDB_TARGET)
+        elif self.KDB_CLUSTER_SIZE == 3:
             return get_ca_certificate()
         else:
             raise ValueError(
-                f"Test doesn't work with cluster size {self.ESDB_CLUSTER_SIZE}"
+                f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
             )
 
     def setUp(self) -> None:

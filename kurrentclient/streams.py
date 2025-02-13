@@ -26,9 +26,9 @@ from kurrentclient.common import (
     AbstractReadResponse,
     AsyncGrpcStreamer,
     AsyncGrpcStreamers,
-    ESDBService,
     GrpcStreamer,
     GrpcStreamers,
+    KurrentDBService,
     Metadata,
     TGrpcStreamers,
     construct_filter_exclude_regex,
@@ -402,7 +402,7 @@ class BatchAppendResponse:
 #         del self
 
 
-class BaseStreamsService(ESDBService[TGrpcStreamers]):
+class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
         grpc_channel: Union[grpc.Channel, grpc.aio.Channel],
@@ -551,7 +551,7 @@ class BaseStreamsService(ESDBService[TGrpcStreamers]):
             elif error_details.Is(shared_pb2.StreamDeleted.DESCRIPTOR):
                 stream_deleted = shared_pb2.StreamDeleted()
                 error_details.Unpack(stream_deleted)
-                # Todo: Ask ESDB team if this is ever different from request value.
+                # Todo: Ask DB team if this is ever different from request value.
                 # stream_name = stream_deleted.stream_identifier.stream_name
                 msg = f"Stream {stream_name !r} is deleted"
                 raise StreamIsDeleted(msg)

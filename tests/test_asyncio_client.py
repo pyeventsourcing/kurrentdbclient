@@ -395,7 +395,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # For some reason, we can set stream metadata, even though the stream
         # has been tombstoned, and even though we can't get stream metadata.
-        # Todo: Ask ESDB team why this is?
+        # Todo: Ask DB team why this is?
         await self.client.set_stream_metadata(
             stream_name=stream_name,
             metadata=metadata,

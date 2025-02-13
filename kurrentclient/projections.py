@@ -8,8 +8,8 @@ from google.protobuf import struct_pb2
 
 from kurrentclient.common import (
     AsyncGrpcStreamers,
-    ESDBService,
     GrpcStreamers,
+    KurrentDBService,
     Metadata,
     TGrpcStreamers,
     handle_rpc_error,
@@ -52,7 +52,7 @@ class ProjectionResult:
     value: Any
 
 
-class BaseProjectionsService(ESDBService[TGrpcStreamers]):
+class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
         channel: Union[grpc.Channel, grpc.aio.Channel],

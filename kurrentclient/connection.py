@@ -13,7 +13,7 @@ from kurrentclient.projections import AsyncProjectionsService, ProjectionsServic
 from kurrentclient.streams import AsyncStreamsService, StreamsService
 
 
-class BaseESDBConnection:
+class BaseKurrentDBConnection:
     def __init__(self, grpc_target: str):
         self._grpc_target = grpc_target
 
@@ -22,7 +22,7 @@ class BaseESDBConnection:
         return self._grpc_target
 
 
-class ESDBConnection(BaseESDBConnection):
+class KurrentDBConnection(BaseKurrentDBConnection):
     def __init__(
         self,
         grpc_channel: grpc.Channel,
@@ -70,7 +70,7 @@ class ESDBConnection(BaseESDBConnection):
         # print("closed channel")
 
 
-class AsyncESDBConnection(BaseESDBConnection):
+class AsyncKurrentDBConnection(BaseKurrentDBConnection):
     def __init__(
         self,
         grpc_channel: grpc.aio.Channel,

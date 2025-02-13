@@ -405,8 +405,8 @@ taken from the operating system environment.
 import os
 
 client = KurrentDBClient(
-    uri=os.getenv("ESDB_URI"),
-    root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
+    uri=os.getenv("KDB_URI"),
+    root_certificates=os.getenv("KDB_ROOT_CERTIFICATES"),
 )
 ```
 
@@ -3297,8 +3297,8 @@ from kurrentclient import AsyncKurrentDBClient
 async def demonstrate_async_client():
     # Construct client.
     client = AsyncKurrentDBClient(
-        uri=os.getenv("ESDB_URI"),
-        root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
+        uri=os.getenv("KDB_URI"),
+        root_certificates=os.getenv("KDB_ROOT_CERTIFICATES"),
     )
 
     # Connect to KurrentDB.
@@ -3412,17 +3412,17 @@ the `$` sign. Persistence subscription events generated when manipulating
 persistence subscriptions have `type` strings that start with `PersistentConfig`.
 
 For example, to match the type of KurrentDB system events, use the regular
-expression string `r'\$.+'`. Please note, the constant `ESDB_SYSTEM_EVENTS_REGEX` is
+expression string `r'\$.+'`. Please note, the constant `KDB_SYSTEM_EVENTS_REGEX` is
 set to this value. You can import this constant from `kurrentclient` and use it when
 building longer sequences of regular expressions.
 
 Similarly, to match the type of KurrentDB persistence subscription events, use the
-regular expression `r'PersistentConfig\d+'`. The constant `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`
+regular expression `r'PersistentConfig\d+'`. The constant `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`
 is set to this value. You can import this constant from `kurrentclient` and use it when
 building longer sequences of regular expressions.
 
 The constant `DEFAULT_EXCLUDE_FILTER` is a sequence of regular expressions that includes
-both `ESDB_SYSTEM_EVENTS_REGEX` and `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
+both `KDB_SYSTEM_EVENTS_REGEX` and `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
 as the default value of `filter_exclude` so that the events generated internally by
 KurrentDB are excluded by default.
 
@@ -3433,7 +3433,7 @@ would otherwise be included.
 
 This value can be extended. For example, if you want to exclude system events and
 persistent subscription events and also events that have a type that ends with
-`'Snapshot'`, then you can use `DEFAULT_EXCLUDE_FILTER + ['.*Snapshot']` as the
+`'Snapshot'`, then you can use `(*DEFAULT_EXCLUDE_FILTER, '.*Snapshot')` as the
 `filter_exclude` argument.
 
 The `filter_include` and `filter_exclude` arguments are designed to have exactly

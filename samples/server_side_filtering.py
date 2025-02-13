@@ -2,7 +2,7 @@
 from uuid import uuid4
 
 from kurrentclient import (
-    ESDB_SYSTEM_EVENTS_REGEX,
+    KDB_SYSTEM_EVENTS_REGEX,
     Checkpoint,
     KurrentDBClient,
     NewEvent,
@@ -21,12 +21,12 @@ def print(*args):
         _print(*args)
 
 
-ESDB_TARGET = "localhost:2114"
+KDB_TARGET = "localhost:2114"
 qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
 client = KurrentDBClient(
-    uri=f"kdb://admin:changeit@{ESDB_TARGET}?{qs}",
-    root_certificates=get_server_certificate(ESDB_TARGET),
+    uri=f"kdb://admin:changeit@{KDB_TARGET}?{qs}",
+    root_certificates=get_server_certificate(KDB_TARGET),
 )
 
 subscription: CatchupSubscription
@@ -54,7 +54,7 @@ client.append_to_stream(
 print("region exclude-system")
 # region exclude-system
 subscription = client.subscribe_to_all(
-    filter_exclude=[ESDB_SYSTEM_EVENTS_REGEX]
+    filter_exclude=[KDB_SYSTEM_EVENTS_REGEX]
 )
 
 for event in subscription:
