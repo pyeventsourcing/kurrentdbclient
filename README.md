@@ -287,7 +287,7 @@ The KurrentDB server can be run locally using the official Docker container imag
 
 For development, you can run a "secure" KurrentDB server using the following command.
 
-    $ docker run -d --name kurrentdb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore/kurrentdb-ee:24.10.0-x64-8.0-bookworm-slim --dev
+    $ docker run -d --name kurrentdb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --dev
 
 As we will see, your client will need an KurrentDB connection string URI as the value
 of its `uri` constructor argument. The connection string for this "secure" KurrentDB
@@ -317,7 +317,7 @@ server_certificate = ssl.get_server_certificate(addr=('localhost', 2113))
 
 Alternatively, you can start an "insecure" server using the following command.
 
-    $ docker run -d --name kurrentdb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore/kurrentdb-ee:24.10.0-x64-8.0-bookworm-slim --insecure
+    $ docker run -d --name kurrentdb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --insecure
 
 The connection string URI for this "insecure" server would be:
 
