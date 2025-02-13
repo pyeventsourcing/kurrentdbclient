@@ -17,10 +17,10 @@ from grpc import RpcError, StatusCode
 from grpc._channel import _MultiThreadedRendezvous, _RPCState
 from grpc._cython.cygrpc import IntegratedCall
 
-import esdbclient.protos.Grpc.persistent_pb2 as grpc_persistent
-from esdbclient import ESDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
-from esdbclient.client import EventStoreDBClient
-from esdbclient.common import (
+import kurrentclient.protos.Grpc.persistent_pb2 as grpc_persistent
+from kurrentclient import ESDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
+from kurrentclient.client import KurrentDBClient
+from kurrentclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
     DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
     DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
@@ -32,13 +32,13 @@ from esdbclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
     handle_rpc_error,
 )
-from esdbclient.connection_spec import (
+from kurrentclient.connection_spec import (
     NODE_PREFERENCE_FOLLOWER,
     NODE_PREFERENCE_LEADER,
     ConnectionSpec,
 )
-from esdbclient.events import CaughtUp, Checkpoint, NewEvent
-from esdbclient.exceptions import (
+from kurrentclient.events import CaughtUp, Checkpoint, NewEvent
+from kurrentclient.exceptions import (
     AbortedByServer,
     AlreadyExists,
     ConsumerTooSlow,
@@ -61,9 +61,9 @@ from esdbclient.exceptions import (
     UnknownError,
     WrongCurrentVersion,
 )
-from esdbclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
-from esdbclient.persistent import SubscriptionReadReqs
-from esdbclient.protos.Grpc import persistent_pb2
+from kurrentclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
+from kurrentclient.persistent import SubscriptionReadReqs
+from kurrentclient.protos.Grpc import persistent_pb2
 
 started = datetime.datetime.now()
 last = datetime.datetime.now()
@@ -118,24 +118,24 @@ class TestConnectionSpec(TestCase):
 
         # No targets specified.
         with self.assertRaises(ValueError) as cm1:
-            ConnectionSpec(uri="esdb://")
+            ConnectionSpec(uri="kdb://")
         self.assertIn("No targets specified:", cm1.exception.args[0])
 
         # More than one target specified.
         with self.assertRaises(ValueError) as cm1:
-            ConnectionSpec(uri="esdb+discover://localhost:2222,localhost:2223")
+            ConnectionSpec(uri="kdb+discover://localhost:2222,localhost:2223")
         self.assertIn("More than one target specified:", cm1.exception.args[0])
 
         # Secure without username or password.
         with self.assertRaises(ValueError) as cm0:
-            ConnectionSpec(uri="esdb://localhost:2222")
+            ConnectionSpec(uri="kdb://localhost:2222")
         self.assertIn(
             "Username and password are required",
             cm0.exception.args[0],
         )
 
     def test_uri(self) -> None:
-        uri = "esdb://host1:2110?Tls=false"
+        uri = "kdb://host1:2110?Tls=false"
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.uri, uri)
 
@@ -146,53 +146,65 @@ class TestConnectionSpec(TestCase):
         spec = ConnectionSpec("esdb+discover://host1:2110?Tls=false")
         self.assertEqual(spec.scheme, "esdb+discover")
 
+        spec = ConnectionSpec("kurrentdb://host1:2110?Tls=false")
+        self.assertEqual(spec.scheme, "kurrentdb")
+
+        spec = ConnectionSpec("kurrentdb+discover://host1:2110?Tls=false")
+        self.assertEqual(spec.scheme, "kurrentdb+discover")
+
+        spec = ConnectionSpec("kdb://host1:2110?Tls=false")
+        self.assertEqual(spec.scheme, "kdb")
+
+        spec = ConnectionSpec("kdb+discover://host1:2110?Tls=false")
+        self.assertEqual(spec.scheme, "kdb+discover")
+
     def test_targets(self) -> None:
-        spec = ConnectionSpec("esdb://host1:2110?Tls=false")
+        spec = ConnectionSpec("kdb://host1:2110?Tls=false")
         self.assertEqual(spec.targets, ["host1:2110"])
 
-        spec = ConnectionSpec("esdb://host1:2110,host2:2111,host3:2112?Tls=false")
+        spec = ConnectionSpec("kdb://host1:2110,host2:2111,host3:2112?Tls=false")
         self.assertEqual(spec.targets, ["host1:2110", "host2:2111", "host3:2112"])
 
     def test_tls(self) -> None:
         # Tls default true.
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222")
         self.assertIs(spec.options.Tls, True)
 
         # Set Tls "true".
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222?Tls=true")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?Tls=true")
         self.assertIs(spec.options.Tls, True)
 
         # Set Tls "false".
-        spec = ConnectionSpec("esdb://localhost:2222?Tls=false")
+        spec = ConnectionSpec("kdb://localhost:2222?Tls=false")
         self.assertIs(spec.options.Tls, False)
 
         # Check case insensitivity.
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222?TLS=true")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?TLS=true")
         self.assertIs(spec.options.Tls, True)
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222?tls=true")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?tls=true")
         self.assertIs(spec.options.Tls, True)
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222?tls=TRUE")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?tls=TRUE")
         self.assertIs(spec.options.Tls, True)
-        spec = ConnectionSpec("esdb://localhost:2222?TLS=false")
+        spec = ConnectionSpec("kdb://localhost:2222?TLS=false")
         self.assertIs(spec.options.Tls, False)
-        spec = ConnectionSpec("esdb://localhost:2222?tls=false")
+        spec = ConnectionSpec("kdb://localhost:2222?tls=false")
         self.assertIs(spec.options.Tls, False)
-        spec = ConnectionSpec("esdb://localhost:2222?tls=FALSE")
+        spec = ConnectionSpec("kdb://localhost:2222?tls=FALSE")
         self.assertIs(spec.options.Tls, False)
 
         # Invalid value.
         with self.assertRaises(ValueError):
-            ConnectionSpec("esdb://localhost:2222?Tls=blah")
+            ConnectionSpec("kdb://localhost:2222?Tls=blah")
 
         # Repeated field (use first value).
-        spec = ConnectionSpec("esdb://admin:changeit@localhost:2222?Tls=true&Tls=false")
+        spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?Tls=true&Tls=false")
         self.assertTrue(spec.options.Tls)
-        spec = ConnectionSpec("esdb://localhost:2222?Tls=false&Tls=true")
+        spec = ConnectionSpec("kdb://localhost:2222?Tls=false&Tls=true")
         self.assertFalse(spec.options.Tls)
 
     def test_connection_name(self) -> None:
         # ConnectionName not mentioned.
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         spec = ConnectionSpec(uri)
         self.assertIsInstance(spec.options.ConnectionName, str)
 
@@ -211,7 +223,7 @@ class TestConnectionSpec(TestCase):
 
     def test_max_discover_attempts(self) -> None:
         # MaxDiscoverAttempts not mentioned.
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.options.MaxDiscoverAttempts, 10)
 
@@ -220,7 +232,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.MaxDiscoverAttempts, 5)
 
     def test_discovery_interval(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         # DiscoveryInterval not mentioned.
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.options.DiscoveryInterval, 100)
@@ -230,7 +242,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.DiscoveryInterval, 200)
 
     def test_gossip_timeout(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         # GossipTimeout not mentioned.
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.options.GossipTimeout, 5)
@@ -240,7 +252,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.GossipTimeout, 10)
 
     def test_node_preference(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         # NodePreference not mentioned.
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
@@ -266,7 +278,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_FOLLOWER)
 
     def test_tls_verify_cert(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
         # TlsVerifyCert not mentioned.
         spec = ConnectionSpec(uri)
         self.assertEqual(spec.options.TlsVerifyCert, True)
@@ -292,7 +304,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.TlsVerifyCert, False)
 
     def test_default_deadline(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # DefaultDeadline not mentioned.
         spec = ConnectionSpec(uri)
@@ -303,7 +315,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.DefaultDeadline, 10)
 
     def test_keep_alive_interval(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # KeepAliveInterval not mentioned.
         spec = ConnectionSpec(uri)
@@ -314,7 +326,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.KeepAliveInterval, 10)
 
     def test_keep_alive_timeout(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # KeepAliveTimeout not mentioned.
         spec = ConnectionSpec(uri)
@@ -325,7 +337,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.KeepAliveTimeout, 10)
 
     def test_tls_ca_file(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # TlsCaFile not mentioned.
         spec = ConnectionSpec(uri)
@@ -336,7 +348,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.TlsCaFile, "some-ca-file")
 
     def test_user_cert_file(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # UserCertFile not mentioned.
         spec = ConnectionSpec(uri)
@@ -347,7 +359,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.UserCertFile, "some-path")
 
     def test_user_key_file(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         # UserKeyFile not mentioned.
         spec = ConnectionSpec(uri)
@@ -358,7 +370,7 @@ class TestConnectionSpec(TestCase):
         self.assertEqual(spec.options.UserKeyFile, "some-key")
 
     def test_raises_when_query_string_has_unsupported_field(self) -> None:
-        uri = "esdb://localhost:2222?Tls=false"
+        uri = "kdb://localhost:2222?Tls=false"
 
         with self.assertRaises(ValueError) as cm1:
             ConnectionSpec(uri + "&NotSupported=10")
@@ -383,8 +395,8 @@ def get_server_certificate(grpc_target: str) -> str:
     )
 
 
-class EventStoreDBClientTestCase(TimedTestCase):
-    client: EventStoreDBClient
+class KurrentDBClientTestCase(TimedTestCase):
+    client: KurrentDBClient
 
     ESDB_TARGET = "localhost:2114"
     ESDB_TLS = True
@@ -394,12 +406,12 @@ class EventStoreDBClientTestCase(TimedTestCase):
         if self.ESDB_CLUSTER_SIZE > 1:
             qs = f"MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1&{qs}"
         if self.ESDB_TLS:
-            uri = f"esdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
+            uri = f"kdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
             root_certificates = self.get_root_certificates()
         else:
-            uri = f"esdb://{self.ESDB_TARGET}?Tls=false&{qs}"
+            uri = f"kdb://{self.ESDB_TARGET}?Tls=false&{qs}"
             root_certificates = None
-        self.client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        self.client = KurrentDBClient(uri, root_certificates=root_certificates)
 
     def get_root_certificates(self) -> str:
         if self.ESDB_CLUSTER_SIZE == 1:
@@ -428,7 +440,7 @@ class EventStoreDBClientTestCase(TimedTestCase):
             super().tearDown()
 
 
-class TestEventStoreDBClient(EventStoreDBClientTestCase):
+class TestKurrentDBClient(KurrentDBClientTestCase):
     def test_context_manager(self) -> None:
         self.construct_esdb_client()
         self.assertFalse(self.client.is_closed)
@@ -1897,7 +1909,7 @@ class TestEventStoreDBClient(EventStoreDBClientTestCase):
         #     )
         # self.client.append_events(stream_name, current_version=1, events=[event3])
 
-        sleep(0.1)  # sometimes we need to wait a little bit for EventStoreDB
+        sleep(0.1)  # sometimes we need to wait a little bit for KurrentDB
         self.assertEqual(2, self.client.get_current_version(stream_name))
         self.client.append_events(stream_name, current_version=2, events=[event4])
 
@@ -3291,7 +3303,7 @@ class TestEventStoreDBClient(EventStoreDBClientTestCase):
             if event.id == event3.id:
                 break
 
-        # Sleep before calling replay_parked_events() so EventStoreDB catches up.
+        # Sleep before calling replay_parked_events() so KurrentDB catches up.
         sleep(0.5)
         self.client.replay_parked_events(group_name=group_name)
 
@@ -3374,7 +3386,7 @@ class TestEventStoreDBClient(EventStoreDBClientTestCase):
             if event.id == event3.id:
                 break
 
-        # Sleep before calling replay_parked_events() so EventStoreDB catches up.
+        # Sleep before calling replay_parked_events() so KurrentDB catches up.
         sleep(0.5)
         self.client.replay_parked_events(
             group_name=group_name, stream_name=stream_name1
@@ -6697,7 +6709,7 @@ PROJECTION_QUERY_TEMPLATE1 = """fromStream('%s')
 """
 
 
-class TestEventStoreDBClientWithInsecureConnection(TestEventStoreDBClient):
+class TestKurrentDBClientWithInsecureConnection(TestKurrentDBClient):
     ESDB_TARGET = "localhost:2113"
     ESDB_TLS = False
 
@@ -6708,17 +6720,17 @@ class TestEventStoreDBClientWithInsecureConnection(TestEventStoreDBClient):
 # 	sufficient security level to transfer call credential."
 
 
-class TestESDBClusterNode1(TestEventStoreDBClient):
+class TestESDBClusterNode1(TestKurrentDBClient):
     ESDB_TARGET = "127.0.0.1:2110,127.0.0.1:2110"  # make it do discovery
     ESDB_CLUSTER_SIZE = 3
 
 
-class TestESDBClusterNode2(TestEventStoreDBClient):
+class TestESDBClusterNode2(TestKurrentDBClient):
     ESDB_TARGET = "127.0.0.1:2111,127.0.0.1:2111"  # make it do discovery
     ESDB_CLUSTER_SIZE = 3
 
 
-class TestESDBClusterNode3(TestEventStoreDBClient):
+class TestESDBClusterNode3(TestKurrentDBClient):
     ESDB_TARGET = "127.0.0.1:2112,127.0.0.1:2112"  # make it do discovery
     ESDB_CLUSTER_SIZE = 3
 
@@ -6727,14 +6739,14 @@ class TestRootCertificatesAreOptional(TimedTestCase):
     def test_tls_true_no_root_certificates(self) -> None:
         # NB Client can work with Tls=True without setting 'root_certificates'
         # if grpc lib can verify server cert using locally installed CA certs.
-        uri = "esdb://admin:changeit@127.0.0.1:2110"
+        uri = "kdb://admin:changeit@127.0.0.1:2110"
         with self.assertRaises(SSLError):
-            client = EventStoreDBClient(uri)
+            client = KurrentDBClient(uri)
             client.get_commit_position()
 
     def test_one_target_tls_true_invalid_root_certificates(self) -> None:
-        uri = "esdb://admin:changeit@127.0.0.1:2110"
-        client = EventStoreDBClient(uri, root_certificates="blah")
+        uri = "kdb://admin:changeit@127.0.0.1:2110"
+        client = KurrentDBClient(uri, root_certificates="blah")
 
         with self.assertRaises(SSLError):
             client.get_commit_position()
@@ -6747,11 +6759,11 @@ class TestRootCertificatesAreOptional(TimedTestCase):
         # self.assertIn("routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED", s)
 
     def test_two_targets_tls_true_invalid_root_certificates(self) -> None:
-        uri = "esdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
+        uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
         uri += "?MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
         with self.assertRaises(DiscoveryFailed):
-            EventStoreDBClient(uri, root_certificates="blah")
+            KurrentDBClient(uri, root_certificates="blah")
 
 
 class TestOptionalClientAuth(TimedTestCase):
@@ -6777,10 +6789,10 @@ class TestOptionalClientAuth(TimedTestCase):
     def test_tls_true_client_auth(self) -> None:
         secure_grpc_target = "localhost:2114"
         root_certificates = get_server_certificate(secure_grpc_target)
-        uri = f"esdb://admin:changeit@{secure_grpc_target}"
+        uri = f"kdb://admin:changeit@{secure_grpc_target}"
 
         # Construct client without client auth.
-        client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        client = KurrentDBClient(uri, root_certificates=root_certificates)
 
         # User cert and key should be None.
         self.assertIsNone(client.private_key)
@@ -6791,7 +6803,7 @@ class TestOptionalClientAuth(TimedTestCase):
 
         # Construct client with client auth.
         uri += f"?UserKeyFile={self.user_key_file}&UserCertFile={self.user_cert_file}"
-        client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        client = KurrentDBClient(uri, root_certificates=root_certificates)
 
         # User cert and key should have expected values.
         self.assertEqual(self.user_key, client.private_key)
@@ -6803,7 +6815,7 @@ class TestOptionalClientAuth(TimedTestCase):
 
         # Construct client with TlsCaFile (instead of passing root_certificates directly).
         uri += f"&TlsCaFile={self.tls_ca_file}"
-        client_with_tls_ca = EventStoreDBClient(uri)
+        client_with_tls_ca = KurrentDBClient(uri)
 
         # Read the contents of TlsCaFile as bytes, since root_certificates are compared as bytes
         with open(self.tls_ca_file, "rb") as f:
@@ -6819,10 +6831,10 @@ class TestESDBDiscoverScheme(TestCase):
         # Cluster name not configured in DNS, default port.
         with self.assertRaises(DiscoveryFailed) as cm1:
             uri = (
-                "esdb+discover://my-unresolvable-cluster"
+                "kdb+discover://my-unresolvable-cluster"
                 "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
             )
-            EventStoreDBClient(uri)
+            KurrentDBClient(uri)
         self.assertIn(":2113", str(cm1.exception))
         self.assertIn("DNS resolution failed", str(cm1.exception))
         self.assertNotIn("Deadline Exceeded", str(cm1.exception))
@@ -6830,64 +6842,64 @@ class TestESDBDiscoverScheme(TestCase):
         # Cluster name not configured in DNS, non-default port.
         with self.assertRaises(DiscoveryFailed) as cm2:
             uri = (
-                "esdb+discover://my-unresolvable-cluster:9898"
+                "kdb+discover://my-unresolvable-cluster:9898"
                 "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
             )
-            EventStoreDBClient(uri)
+            KurrentDBClient(uri)
         self.assertIn(":9898", str(cm2.exception))
         self.assertIn("DNS resolution failed", str(cm2.exception))
         self.assertNotIn("Deadline Exceeded", str(cm2.exception))
 
         # Name is resolvable but 'service not available' on port 2222.
         with self.assertRaises(ServiceUnavailable) as cm3:
-            uri = "esdb://localhost:2222?Tls=false"
-            client = EventStoreDBClient(uri)
+            uri = "kdb://localhost:2222?Tls=false"
+            client = KurrentDBClient(uri)
             client.read_gossip()
         self.assertIn("Failed to connect to remote host", str(cm3.exception))
 
         with self.assertRaises(DiscoveryFailed) as cm4:
             uri = (
-                "esdb+discover://localhost:2222"
+                "kdb+discover://localhost:2222"
                 "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
             )
-            EventStoreDBClient(uri)
+            KurrentDBClient(uri)
         self.assertIn(":2222", str(cm4.exception))
         self.assertIn("Failed to connect to remote host", str(cm4.exception))
 
         # # Name is resolvable but get no response from example.com:2222.
         # with self.assertRaises(GrpcDeadlineExceeded) as cm:
         #     uri = (
-        #         "esdb://example.com:2222"
+        #         "kdb://example.com:2222"
         #         "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=1"
         #     )
-        #     client = EventStoreDBClient(uri)
+        #     client = KurrentDBClient(uri)
         #     client.read_gossip()
         # self.assertIn("Deadline Exceeded", str(cm.exception))
         # with self.assertRaises(DiscoveryFailed) as cm:
         #     uri = (
-        #         "esdb+discover://example.com:2222"
+        #         "kdb+discover://example.com:2222"
         #         "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=1"
         #     )
-        #     EventStoreDBClient(uri)
+        #     KurrentDBClient(uri)
         # self.assertIn(":2222", str(cm.exception))
         # self.assertIn("Deadline Exceeded", str(cm.exception))
 
         # # Name is resolvable but get no response from example.com:80.
         # with self.assertRaises(ServiceUnavailable) as cm:
         #     uri = (
-        #         "esdb://example.com:80"
+        #         "kdb://example.com:80"
         #         "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=1"
         #     )
-        #     with EventStoreDBClient(uri) as client:
+        #     with KurrentDBClient(uri) as client:
         #         client.read_gossip()
         # self.assertIn("No route to host", str(cm.exception))
         # # self.assertIn("Trying to connect an http1.x server", str(cm.exception))
         # with self.assertRaises(DiscoveryFailed) as cm:
         #     uri = (
-        #         "esdb+discover://example.com:80"
+        #         "kdb+discover://example.com:80"
         #         "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=1"
         #     )
-        #     EventStoreDBClient(uri)
+        #     KurrentDBClient(uri)
         #
         # self.assertIn(":80", str(cm.exception))
         # # self.assertIn("No route to host", str(cm.exception))
@@ -6895,10 +6907,10 @@ class TestESDBDiscoverScheme(TestCase):
 
         # Discover insecure single-node cluster, connect to leader.
         uri = (
-            "esdb+discover://localhost:2113"
+            "kdb+discover://localhost:2113"
             "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
         )
-        client = EventStoreDBClient(uri)
+        client = KurrentDBClient(uri)
         stream_name = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=random_data())
         event2 = NewEvent(type="OrderUpdated", data=random_data())
@@ -6911,15 +6923,15 @@ class TestESDBDiscoverScheme(TestCase):
 
         # Discover insecure single-node cluster, but fail to connect to follower.
         with self.assertRaises(FollowerNotFound):
-            EventStoreDBClient(uri + "&NodePreference=follower")
+            KurrentDBClient(uri + "&NodePreference=follower")
 
         # Discover secure single-node cluster, connect to leader.
         uri = (
-            "esdb+discover://admin:changeit@localhost:2114"
+            "kdb+discover://admin:changeit@localhost:2114"
             "?DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
         )
         root_certificates = get_server_certificate("localhost:2114")
-        client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        client = KurrentDBClient(uri, root_certificates=root_certificates)
         stream_name = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=random_data())
         event2 = NewEvent(type="OrderUpdated", data=random_data())
@@ -6932,7 +6944,7 @@ class TestESDBDiscoverScheme(TestCase):
 
         # Discover secure single-node cluster, but fail to connect to follower.
         with self.assertRaises(FollowerNotFound):
-            EventStoreDBClient(
+            KurrentDBClient(
                 uri + "&NodePreference=follower", root_certificates=root_certificates
             )
 
@@ -6942,10 +6954,10 @@ class TestESDBDiscoverScheme(TestCase):
         with self.assertRaises(NodeIsNotLeader) as cm5:
             for port in ports:
                 uri = (
-                    f"esdb://admin:changeit@localhost:{port}?"
+                    f"kdb://admin:changeit@localhost:{port}?"
                     "DiscoveryInterval=0&MaxDiscoverAttempts=1&NodePreference=leader"
                 )
-                client = EventStoreDBClient(uri, root_certificates=root_certificates)
+                client = KurrentDBClient(uri, root_certificates=root_certificates)
                 stream_name = str(uuid4())
                 event1 = NewEvent(type="OrderCreated", data=random_data())
                 event2 = NewEvent(type="OrderUpdated", data=random_data())
@@ -6963,13 +6975,13 @@ class TestESDBDiscoverScheme(TestCase):
         # and read from the follower. Should work for all nodes.
         for port in ports:
             uri = (
-                f"esdb+discover://admin:changeit@localhost:{port}?"
+                f"kdb+discover://admin:changeit@localhost:{port}?"
                 "DiscoveryInterval=0&MaxDiscoverAttempts=1"
             )
-            leader = EventStoreDBClient(
+            leader = KurrentDBClient(
                 uri + "&NodePreference=leader", root_certificates=root_certificates
             )
-            follower = EventStoreDBClient(
+            follower = KurrentDBClient(
                 uri + "&NodePreference=follower", root_certificates=root_certificates
             )
             # Write to leader.
@@ -6993,10 +7005,10 @@ class TestESDBDiscoverScheme(TestCase):
 class TestGrpcOptions(TestCase):
     def setUp(self) -> None:
         uri = (
-            "esdb://localhost:2113"
+            "kdb://localhost:2113"
             "?Tls=false&KeepAliveInterval=1234&KeepAliveTimeout=5678"
         )
-        self.client = EventStoreDBClient(uri)
+        self.client = KurrentDBClient(uri)
 
     def tearDown(self) -> None:
         self.client.close()
@@ -7014,12 +7026,12 @@ class TestGrpcOptions(TestCase):
 class TestRequiresLeaderHeader(TimedTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.uri = "esdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111,127.0.0.1:2112"
+        self.uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111,127.0.0.1:2112"
         self.ca_cert = get_ca_certificate()
-        self.writer = EventStoreDBClient(
+        self.writer = KurrentDBClient(
             self.uri + "?NodePreference=leader", root_certificates=self.ca_cert
         )
-        self.reader = EventStoreDBClient(
+        self.reader = KurrentDBClient(
             self.uri + "?NodePreference=follower", root_certificates=self.ca_cert
         )
 
@@ -7077,7 +7089,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         old, self.writer._connection = self.writer._connection, self.reader._connection
         # - this is hopeful mitigation for the "Exception was thrown by handler"
         #   which is occasionally a cause of failure of test_append_events()
-        #   with both EventStoreDB 21.10.9 and 22.10.0.
+        #   with both KurrentDB 21.10.9 and 22.10.0.
         old.close()
         # sleep(0.1)
         sleep(1)
@@ -7116,7 +7128,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         self._set_reader_connection_on_writer()
 
         # Todo: Occasionally getting "Exception was thrown by handler." from this. Why?
-        #   esdbclient.exceptions.ExceptionThrownByHandler: <_MultiThreadedRendezvous of
+        #   kurrentclient.exceptions.ExceptionThrownByHandler: <_MultiThreadedRendezvous of
         #   RPC that terminated with:
         #       status = StatusCode.UNKNOWN
         #       details = "Exception was thrown by handler."
@@ -7352,9 +7364,9 @@ class TestRequiresLeaderHeader(TimedTestCase):
 class TestAutoReconnectClosedConnection(TimedTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.uri = "esdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111,127.0.0.1:2112"
+        self.uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111,127.0.0.1:2112"
         self.ca_cert = get_ca_certificate()
-        self.writer = EventStoreDBClient(
+        self.writer = KurrentDBClient(
             self.uri + "?NodePreference=leader", root_certificates=self.ca_cert
         )
         self.writer.close()
@@ -7385,9 +7397,9 @@ class TestAutoReconnectClosedConnection(TimedTestCase):
 class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
     def setUp(self) -> None:
         super().setUp()
-        uri = "esdb://admin:changeit@localhost:2114?MaxDiscoverAttempts=1&DiscoveryInterval=0"
+        uri = "kdb://admin:changeit@localhost:2114?MaxDiscoverAttempts=1&DiscoveryInterval=0"
         server_certificate = get_server_certificate("localhost:2114")
-        self.client = EventStoreDBClient(uri=uri, root_certificates=server_certificate)
+        self.client = KurrentDBClient(uri=uri, root_certificates=server_certificate)
 
         # Reconstruct connection with wrong port (to inspire ServiceUnavailable).
         self.client._connection.close()
@@ -7509,7 +7521,7 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
     #     self.client.read_cluster_gossip()
 
 
-class TestRaisesDiscoveryFailed(EventStoreDBClientTestCase):
+class TestRaisesDiscoveryFailed(KurrentDBClientTestCase):
     ESDB_TARGET = "localhost:2222,localhost:2222"  # make it do discovery
     ESDB_TLS = False
 
@@ -7518,7 +7530,7 @@ class TestRaisesDiscoveryFailed(EventStoreDBClientTestCase):
             self.construct_esdb_client()
 
 
-class TestConnectsDespiteBadTarget(EventStoreDBClientTestCase):
+class TestConnectsDespiteBadTarget(KurrentDBClientTestCase):
     ESDB_TARGET = "localhost:2222,localhost:2113"  # make it do discovery
     ESDB_TLS = False
 
@@ -7528,7 +7540,7 @@ class TestConnectsDespiteBadTarget(EventStoreDBClientTestCase):
         self.assertEqual("localhost:2113", self.client.connection_target)
 
 
-class TestConnectToPreferredNode(EventStoreDBClientTestCase):
+class TestConnectToPreferredNode(KurrentDBClientTestCase):
     ESDB_TARGET = "localhost:2114,localhost:2114"  # make it do discovery
     ESDB_CLUSTER_SIZE = 1
 
@@ -7962,4 +7974,4 @@ def random_data(size: int = 16) -> bytes:
     return os.urandom(size)
 
 
-# del EventStoreDBClientTestCase
+# del KurrentDBClientTestCase

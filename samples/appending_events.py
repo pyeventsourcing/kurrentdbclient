@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 
-from esdbclient import (
-    EventStoreDBClient,
+from kurrentclient import (
+    KurrentDBClient,
     NewEvent,
     StreamState,
     exceptions,
@@ -21,8 +21,8 @@ def print(*args):
 ESDB_TARGET = "localhost:2114"
 qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
-client = EventStoreDBClient(
-    uri=f"esdb://admin:changeit@{ESDB_TARGET}?{qs}",
+client = KurrentDBClient(
+    uri=f"kdb://admin:changeit@{ESDB_TARGET}?{qs}",
     root_certificates=get_server_certificate(ESDB_TARGET),
 )
 

@@ -1,17 +1,17 @@
-# Python gRPC Client for EventStoreDB
+# Python gRPC Client for KurrentDB
 
 This [Python package](https://pypi.org/project/esdbclient/) provides multithreaded and asyncio Python
-clients for the [EventStoreDB](https://www.eventstore.com/) database.
+clients for the [KurrentDB](https://www.eventstore.com/) database.
 
-The multithreaded `EventStoreDBClient` is described in detail below. Please scroll
-down for <a href="#asyncio-client">information</a> about `AsyncEventStoreDBClient`.
+The multithreaded `KurrentDBClient` is described in detail below. Please scroll
+down for <a href="#asyncio-client">information</a> about `AsyncKurrentDBClient`.
 
 These clients have been developed and are being maintained in a collaboration
-with the EventStoreDB team, and are officially support by Event Store Ltd.
-Although not all aspects of the EventStoreDB gRPC API are implemented, most
+with the KurrentDB team, and are officially support by Event Store Ltd.
+Although not all aspects of the KurrentDB gRPC API are implemented, most
 features are presented in an easy-to-use interface.
 
-These clients have been tested to work with EventStoreDB LTS versions 22.10, 23.10,
+These clients have been tested to work with KurrentDB LTS versions 22.10, 23.10,
 and 24.10, without and without SSL/TLS, with both single-server
 and cluster modes, and with Python versions 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
 
@@ -20,8 +20,8 @@ checked strictly with mypy. The code is formatted with black and isort, and chec
 with flake8. Poetry is used for package management during development, and for
 building and publishing distributions to [PyPI](https://pypi.org/project/esdbclient/).
 
-For an example of usage, see the [eventsourcing-eventstoredb](
-https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
+For an example of usage, see the [eventsourcing-kurrentdb](
+https://github.com/pyeventsourcing/eventsourcing-kurrentdb) package.
 
 
 <!-- TOC -->
@@ -29,10 +29,10 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
 * [Install package](#install-package)
   * [From PyPI](#from-pypi)
   * [With Poetry](#with-poetry)
-* [EventStoreDB server](#eventstoredb-server)
+* [KurrentDB server](#kurrentdb-server)
   * [Run container](#run-container)
   * [Stop container](#stop-container)
-* [EventStoreDB client](#eventstoredb-client)
+* [KurrentDB client](#kurrentdb-client)
   * [Import class](#import-class)
   * [Construct client](#construct-client)
 * [Connection strings](#connection-strings)
@@ -48,7 +48,7 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [Idempotent append operations](#idempotent-append-operations)
   * [Read stream events](#read-stream-events)
   * [Get current version](#get-current-version)
-  * [How to implement snapshotting with EventStoreDB](#how-to-implement-snapshotting-with-eventstoredb)
+  * [How to implement snapshotting with KurrentDB](#how-to-implement-snapshotting-with-kurrentdb)
   * [Read all events](#read-all-events)
   * [Get commit position](#get-commit-position)
   * [Get stream metadata](#get-stream-metadata)
@@ -105,9 +105,9 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
 
 ## Synopsis<a id="synopsis"></a>
 
-The `EventStoreDBClient` class can be imported from the `esdbclient` package.
+The `KurrentDBClient` class can be imported from the `kurrentclient` package.
 
-Probably the three most useful methods of `EventStoreDBClient` are:
+Probably the three most useful methods of `KurrentDBClient` are:
 
 * `append_to_stream()` This method can be used to record new events in a particular
 "stream". This is useful, for example, when executing a command in an application
@@ -123,27 +123,25 @@ application that creates new events.
 the database. This is useful, for example, in event-processing components because
 it supports processing events with "exactly-once" semantics.
 
-The example below uses an "insecure" EventStoreDB server running locally on port 2113.
+The example below uses an "insecure" KurrentDB server running locally on port 2113.
 
 ```python
 import uuid
 
-from esdbclient import EventStoreDBClient, NewEvent, StreamState
+from kurrentclient import KurrentDBClient, NewEvent, StreamState
 
-
-# Construct EventStoreDBClient with an EventStoreDB URI. The
+# Construct KurrentDBClient with an KurrentDB URI. The
 # connection string URI specifies that the client should
 # connect to an "insecure" server running on port 2113.
 
-client = EventStoreDBClient(
-    uri="esdb://localhost:2113?Tls=false"
+client = KurrentDBClient(
+    uri="kdb://localhost:2113?Tls=false"
 )
-
 
 # Generate new events. Typically, domain events of different
 # types are generated in a domain model, and then serialized
 # into NewEvent objects. An aggregate ID may be used as the
-# name of a stream in EventStoreDB.
+# name of a stream in KurrentDB.
 
 stream_name1 = str(uuid.uuid4())
 event1 = NewEvent(
@@ -158,7 +156,6 @@ event3 = NewEvent(
     type='OrderCancelled',
     data=b'{}'
 )
-
 
 # Append new events to a new stream. The value returned
 # from the append_to_stream() method is the overall
@@ -191,7 +188,6 @@ commit_position2 = client.append_to_stream(
 # - allocated commit positions increase monotonically
 assert commit_position2 > commit_position1
 
-
 # Get events recorded in a stream. This method returns
 # a sequence of recorded event objects. The recorded
 # event objects may be deserialized to domain event
@@ -223,7 +219,6 @@ assert recorded_events[2].type == "OrderCancelled"
 assert recorded_events[2].data == b'{}'
 assert recorded_events[2].id == event3.id
 
-
 # Start a catch-up subscription from last recorded position.
 # This method returns a "catch-up subscription" object,
 # which can be iterated over to obtain recorded events.
@@ -235,7 +230,6 @@ assert recorded_events[2].id == event3.id
 
 received_events = []
 with client.subscribe_to_all(commit_position=0) as subscription:
-
     # Iterate over the catch-up subscription. Process each recorded
     # event in turn. Within an atomic database transaction, record
     # the event's "commit position" along with any new state generated
@@ -249,7 +243,6 @@ with client.subscribe_to_all(commit_position=0) as subscription:
             # Break so we can continue with the example.
             break
 
-
 # - events are received in the order they were recorded
 assert received_events[-3].type == "OrderCreated"
 assert received_events[-3].data == b'{"order_number": "123456"}'
@@ -262,7 +255,6 @@ assert received_events[-2].id == event2.id
 assert received_events[-1].type == "OrderCancelled"
 assert received_events[-1].data == b'{}'
 assert received_events[-1].id == event3.id
-
 
 # Close the client's gRPC connection.
 
@@ -279,33 +271,33 @@ It is recommended to install Python packages into a Python virtual environment.
 You can use pip to install this package directly from
 [the Python Package Index](https://pypi.org/project/esdbclient/).
 
-    $ pip install esdbclient
+    $ pip install kurrentclient
 
 ### With Poetry<a id="with-poetry"></a>
 
 You can use Poetry to add this package to your pyproject.toml and install it.
 
-    $ poetry add esdbclient
+    $ poetry add kurrentclient
 
-## EventStoreDB server<a id="eventstoredb-server"></a>
+## KurrentDB server<a id="kurrentdb-server"></a>
 
-The EventStoreDB server can be run locally using the official Docker container image.
+The KurrentDB server can be run locally using the official Docker container image.
 
 ### Run container<a id="run-container"></a>
 
-For development, you can run a "secure" EventStoreDB server using the following command.
+For development, you can run a "secure" KurrentDB server using the following command.
 
-    $ docker run -d --name eventstoredb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --dev
+    $ docker run -d --name kurrentdb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/eventstore/kurrentdb-ee:24.10.0-x64-8.0-bookworm-slim --dev
 
-As we will see, your client will need an EventStoreDB connection string URI as the value
-of its `uri` constructor argument. The connection string for this "secure" EventStoreDB
+As we will see, your client will need an KurrentDB connection string URI as the value
+of its `uri` constructor argument. The connection string for this "secure" KurrentDB
 server would be:
 
-    esdb://admin:changeit@localhost:2113
+    kdb://admin:changeit@localhost:2113
 
 To connect to a "secure" server, you will usually need to include a "username"
 and a "password" in the connection string, so that the server can authenticate the
-client. With EventStoreDB, the default username is "admin" and the default password
+client. With KurrentDB, the default username is "admin" and the default password
 is "changeit".
 
 When connecting to a "secure" server, you may also need to provide an SSL/TLS certificate
@@ -325,11 +317,11 @@ server_certificate = ssl.get_server_certificate(addr=('localhost', 2113))
 
 Alternatively, you can start an "insecure" server using the following command.
 
-    $ docker run -d --name eventstoredb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim --insecure
+    $ docker run -d --name kurrentdb-insecure -it -p 2113:2113 docker.eventstore.com/eventstore/kurrentdb-ee:24.10.0-x64-8.0-bookworm-slim --insecure
 
 The connection string URI for this "insecure" server would be:
 
-    esdb://localhost:2113?Tls=false
+    kdb://localhost:2113?Tls=false
 
 As we will see, when connecting to an "insecure" server, there is no need to include
 a "username" and a "password" in the connection string. If you do, these values will
@@ -342,35 +334,35 @@ Please note, the "insecure" connection string uses a query string with the field
 
 To stop and remove the "secure" container, use the following Docker commands.
 
-    $ docker stop eventstoredb-secure
-	$ docker rm eventstoredb-secure
+    $ docker stop kurrentdb-secure
+	$ docker rm kurrentdb-secure
 
 To stop and remove the "insecure" container, use the following Docker commands.
 
-    $ docker stop eventstoredb-insecure
-	$ docker rm eventstoredb-insecure
+    $ docker stop kurrentdb-insecure
+	$ docker rm kurrentdb-insecure
 
 
-## EventStoreDB client<a id="eventstoredb-client"></a>
+## KurrentDB client<a id="kurrentdb-client"></a>
 
-This EventStoreDB client is implemented in the `esdbclient` package with
-the `EventStoreDBClient` class.
+This KurrentDB client is implemented in the `kurrentclient` package with
+the `KurrentDBClient` class.
 
 ### Import class<a id="import-class"></a>
 
-The `EventStoreDBClient` class can be imported from the `esdbclient` package.
+The `KurrentDBClient` class can be imported from the `kurrentclient` package.
 
 ```python
-from esdbclient import EventStoreDBClient
+from kurrentclient import KurrentDBClient
 ```
 
 ### Construct client<a id="construct-client"></a>
 
-The `EventStoreDBClient` class has one required constructor argument, `uri`, and three
+The `KurrentDBClient` class has one required constructor argument, `uri`, and three
 optional constructor argument, `root_certificates`, `private_key`, and `certificate_chain`.
 
-The `uri` argument is expected to be an EventStoreDB connection string URI that
-conforms with the standard EventStoreDB "esdb" or "esdb+discover" URI schemes.
+The `uri` argument is expected to be an KurrentDB connection string URI that
+conforms with the standard KurrentDB "kdb" or "kdb+discover" URI schemes.
 
 The client must be configured to create a "secure" connection to a "secure" server,
 or alternatively an "insecure" connection to an "insecure" server. By default, the
@@ -384,7 +376,7 @@ server to the client. When connecting to an "insecure" service, the value of thi
 argument will be ignored. When connecting to a "secure" server, it may be necessary to
 set this argument. Typically, the value of this argument would be the public certificate
 of the certificate authority that was responsible for generating the certificate used by
-the EventStoreDB server. It is unnecessary to set this value in this case if certificate
+the KurrentDB server. It is unnecessary to set this value in this case if certificate
 authority certificates are installed locally, such that the Python grpc library can pick
 them up from a default location. Alternatively, for development, you can use the server's
 certificate itself. The value of this argument is passed directly to `grpc.ssl_channel_credentials()`.
@@ -394,7 +386,7 @@ An alternative way to supply the `root_certificates` argument is through the `tl
 The optional `private_key` and `certificate_chain` arguments are both either a Python
 `str` or a Python `bytes` object. These arguments may be used to authenticate the client
 to the server. It is necessary to provide correct values for these arguments when connecting
-to a "secure" server that is running the commercial edition of EventStoreDB with the
+to a "secure" server that is running the commercial edition of KurrentDB with the
 User Certificates plugin enabled. The value of `private_key` should be the X.509 user
 certificate's private key in PEM format. The value of `certificate_chain` should be the
 X.509 user certificate itself in PEM format. The values of these arguments are passed
@@ -412,7 +404,7 @@ taken from the operating system environment.
 ```python
 import os
 
-client = EventStoreDBClient(
+client = KurrentDBClient(
     uri=os.getenv("ESDB_URI"),
     root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
 )
@@ -420,24 +412,28 @@ client = EventStoreDBClient(
 
 ## Connection strings<a id="connection-strings"></a>
 
-An EventStoreDB connection string is a URI that conforms with one of two possible
-schemes: either the "esdb" scheme, or the "esdb+discover" scheme.
+An KurrentDB connection string is a URI that conforms with one of two possible
+schemes: either the "kdb" scheme, or the "kdb+discover" scheme.
 
-The syntax and semantics of the EventStoreDB URI schemes are described below. The
+The syntax and semantics of the KurrentDB URI schemes are described below. The
 syntax is defined using [EBNF](https://en.wikipedia.org/wiki/Extended_Backus–Naur_form).
+
+Please note, also supported are "kurrentdb" and "esdb" which are synonyms for the "kdb"
+scheme, and "kurrentdb+discover" and "esdb+disover" which are synonyms for the "kdb+discover"
+scheme.
 
 ### Two schemes<a id="two-schemes"></a>
 
-The "esdb" URI scheme can be defined in the following way.
+The "kdb" URI scheme can be defined in the following way.
 
-    esdb-uri = "esdb://" , [ user-info , "@" ] , grpc-target, { "," , grpc-target } , [ "?" , query-string ] ;
+    kdb-uri = "kdb://" , [ user-info , "@" ] , grpc-target, { "," , grpc-target } , [ "?" , query-string ] ;
 
-In the "esdb" URI scheme, after the optional user info string, there must be at least
+In the "kdb" URI scheme, after the optional user info string, there must be at least
 one gRPC target. If there are several gRPC targets, they must be separated from each
 other with the "," character.
 
-Each gRPC target should indicate an EventStoreDB gRPC server socket, all in the same
-EventStoreDB cluster, by specifying a host and a port number separated with the ":"
+Each gRPC target should indicate an KurrentDB gRPC server socket, all in the same
+KurrentDB cluster, by specifying a host and a port number separated with the ":"
 character. The host may be a hostname that can be resolved to an IP address, or an IP
 address.
 
@@ -456,17 +452,17 @@ and after connecting to a leader, if the leader becomes a follower, the client w
 reconnect to the new leader.
 
 
-The "esdb+discover" URI scheme can be defined in the following way.
+The "kdb+discover" URI scheme can be defined in the following way.
 
-    esdb-discover-uri = "esdb+discover://" , [ user-info, "@" ] , cluster-domainname, [ ":" , port-number ] , [ "?" , query-string ] ;
+    kdb-discover-uri = "kdb+discover://" , [ user-info, "@" ] , cluster-domainname, [ ":" , port-number ] , [ "?" , query-string ] ;
 
-In the "esdb+discover" URI scheme, after the optional user info string, there should be
-a domain name which identifies a cluster of EventStoreDB servers. Individual nodes in
+In the "kdb+discover" URI scheme, after the optional user info string, there should be
+a domain name which identifies a cluster of KurrentDB servers. Individual nodes in
 the cluster should be declared with DNS 'A' records.
 
 The client will use the cluster domain name with the gRPC library's 'round robin' load
 balancing strategy to call the Gossip APIs of addresses discovered from DNS 'A' records.
-Information about the EventStoreDB cluster is obtained from the Gossip API. A member of
+Information about the KurrentDB cluster is obtained from the Gossip API. A member of
 the cluster is then selected by the client according to the "node preference" option.
 The client will then close its connection and connect to the selected node without the
 'round robin' load balancing strategy. If the "node preference" is "leader",
@@ -475,7 +471,7 @@ reconnect to the new leader.
 
 ### User info string<a id="user-info-string"></a>
 
-In both the "esdb" and "esdb+discover" schemes, the URI may include a user info string.
+In both the "kdb" and "kdb+discover" schemes, the URI may include a user info string.
 If it exists in the URI, the user info string must be separated from the rest of the URI
 with the "@" character. The user info string must include a username and a password,
 separated with the ":" character.
@@ -489,7 +485,7 @@ the client. The Python gRPC library does not allow call credentials to be transf
 
 ### Query string<a id="query-string"></a>
 
-In both the "esdb" and "esdb+discover" schemes, the optional query string must be one
+In both the "kdb" and "kdb+discover" schemes, the optional query string must be one
 or many field-value arguments, separated from each other with the "&" character.
 
     query-string = field-value, { "&", field-value } ;
@@ -547,29 +543,29 @@ configured to the value `17 * 1024 * 1024`. This value cannot be configured.
 
 ### Examples<a id="examples"></a>
 
-Here are some examples of EventStoreDB connection string URIs.
+Here are some examples of KurrentDB connection string URIs.
 
 The following URI will cause the client to make an "insecure" connection to
 gRPC target `'localhost:2113'`. Because the client's node preference is "follower",
 methods that can be called on a follower should complete successfully, methods that
 require a leader will raise a `NodeIsNotLeader` exception.
 
-    esdb://127.0.0.1:2113?Tls=false&NodePreference=follower
+    kdb://127.0.0.1:2113?Tls=false&NodePreference=follower
 
 The following URI will cause the client to make an "insecure" connection to
 gRPC target `'localhost:2113'`. Because the client's node preference is "leader",
 if this node is not a leader, then a `NodeIsNotLeader` exception will be raised by
 all methods.
 
-    esdb://127.0.0.1:2113?Tls=false&NodePreference=leader
+    kdb://127.0.0.1:2113?Tls=false&NodePreference=leader
 
 The following URI will cause the client to make a "secure" connection to
 gRPC target `'localhost:2113'` with username `'admin'` and password `'changeit'`
-as the default call credentials when making calls to the EventStoreDB gRPC API.
+as the default call credentials when making calls to the KurrentDB gRPC API.
 Because the client's node preference is "leader", by default, if this node is not
 a leader, then a `NodeIsNotLeader` exception will be raised by all methods.
 
-    esdb://admin:changeit@localhost:2113
+    kdb://admin:changeit@localhost:2113
 
 The following URI will cause the client to make "secure" connections, firstly to
 get cluster info from either `'localhost:2111'`, or `'localhost:2112'`, or `'localhost:2113'`.
@@ -578,7 +574,7 @@ node from the cluster info and reconnect to the leader. If the "leader" node bec
 a "follower" and another node becomes "leader", then the client will reconnect to the
 new leader.
 
-    esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=leader
+    kdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=leader
 
 
 The following URI will cause the client to make "secure" connections, firstly to
@@ -588,15 +584,15 @@ node from the cluster info and reconnect to this follower. Please note, if the "
 node becomes the "leader", the client will not reconnect to a follower -- such behavior
 may be implemented in a future version of the client and server.
 
-    esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=follower
+    kdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=follower
 
 
 The following URI will cause the client to make "secure" connections, firstly to get
 cluster info from addresses in DNS 'A' records for `'cluster1.example.com'`, and then
 to connect to a "leader" node. The client will use a default timeout
-of 5 seconds when making calls to EventStore API "write" methods.
+of 5 seconds when making calls to KurrentDB API "write" methods.
 
-    esdb+discover://admin:changeit@cluster1.example.com?DefaultDeadline=5
+    kdb+discover://admin:changeit@cluster1.example.com?DefaultDeadline=5
 
 
 The following URI will cause the client to make "secure" connections, firstly to get
@@ -604,7 +600,7 @@ cluster info from addresses in DNS 'A' records for `'cluster1.example.com'`, and
 to connect to a "leader" node. It will configure gRPC connections with a "keep alive
 interval" and a "keep alive timeout".
 
-    esdb+discover://admin:changeit@cluster1.example.com?KeepAliveInterval=10000&KeepAliveTimeout=10000
+    kdb+discover://admin:changeit@cluster1.example.com?KeepAliveInterval=10000&KeepAliveTimeout=10000
 
 
 ## Event objects<a id="event-objects"></a>
@@ -615,7 +611,7 @@ This package defines a `NewEvent` class and a `RecordedEvent` class. The
 
 ### New events<a id="new-events"></a>
 
-The `NewEvent` class should be used when writing events to an EventStoreDB database.
+The `NewEvent` class should be used when writing events to an KurrentDB database.
 You will need to construct new event objects before calling `append_to_stream()`.
 
 The `NewEvent` class is a frozen Python dataclass. It has two required constructor
@@ -669,7 +665,7 @@ assert new_event2.id == event_id
 
 ### Recorded events<a id="recorded-events"></a>
 
-The `RecordedEvent` class is used when reading events from an EventStoreDB
+The `RecordedEvent` class is used when reading events from an KurrentDB
 database. The client will return event objects of this type from all methods
 that return recorded events, such as `get_stream()`, `subscribe_to_all()`,
 and `read_subscription_to_all()`. You do not need to construct recorded event objects.
@@ -705,7 +701,7 @@ stream in which an event was recorded.
 The `stream_position` attribute is a Python `int`, used to indicate the position in a
 stream at which an event was recorded.
 
-In EventStoreDB, a "stream position" is an integer representing the position of a
+In KurrentDB, a "stream position" is an integer representing the position of a
 recorded event in a stream. Each recorded event is recorded at a position in a stream.
 Each stream position is occupied by only one recorded event. New events are recorded at the
 next unoccupied position. All sequences of stream positions are zero-based and gapless.
@@ -713,14 +709,14 @@ next unoccupied position. All sequences of stream positions are zero-based and g
 The `commit_position` attribute is a Python `int`, used to indicate the position in the
 database at which an event was recorded.
 
-In EventStoreDB, a "commit position" is an integer representing the position of a
+In KurrentDB, a "commit position" is an integer representing the position of a
 recorded event in the database. Each recorded event is recorded at a position in the
 database. Each commit position is occupied by only one recorded event. Commit positions
 are zero-based and increase monotonically as new events are recorded. But, unlike stream
 positions, the sequence of successive commit positions is not gapless. Indeed, there are
 usually large differences between the commit positions of successively recorded events.
 
-Please note, in EventStoreDB 21.10, the `commit_position` of all `RecordedEvent` objects
+Please note, in KurrentDB 21.10, the `commit_position` of all `RecordedEvent` objects
 obtained from `read_stream()` is `None`, whereas those obtained from `read_all()` have
 the actual commit position of the recorded event. This was changed in version 22.10, so
 that event objects obtained from both `get_stream()` and `read_all()` have the actual
@@ -752,7 +748,7 @@ from datetime import datetime
 @dataclass(frozen=True)
 class RecordedEvent:
     """
-    Encapsulates event data that has been recorded in EventStoreDB.
+    Encapsulates event data that has been recorded in KurrentDB.
     """
 
     type: str
@@ -812,7 +808,7 @@ instances returned when receiving events from `include_checkpoints=True`.
 
 ## Streams<a id="streams"></a>
 
-In EventStoreDB, a "stream" is a sequence of recorded events that all have
+In KurrentDB, a "stream" is a sequence of recorded events that all have
 the same "stream name". There will normally be many streams in a database,
 each with many recorded events. Each recorded event has a position in its stream
 (the "stream position"), and a position in the database (the "commit position").
@@ -859,7 +855,7 @@ argument to the constant `StreamState.EXISTS`.
 The required `events` argument is expected to be a sequence of new event objects. The
 `NewEvent` class should be used to construct new event objects. The `append_to_stream()`
 operation is atomic, so that either all or none of the new events will be recorded. It
-is not possible with EventStoreDB atomically to record new events in more than one stream.
+is not possible with KurrentDB atomically to record new events in more than one stream.
 
 This method has an optional `timeout` argument, which is a Python `float`
 that sets a maximum duration, in seconds, for the completion of the gRPC operation.
@@ -1123,8 +1119,7 @@ The `read_stream()` and `get_stream()` methods will raise a `NotFound` exception
 named stream has never existed or has been deleted.
 
 ```python
-from esdbclient.exceptions import NotFound
-
+from kurrentclient.exceptions import NotFound
 
 try:
     client.get_stream('does-not-exist')
@@ -1195,13 +1190,13 @@ current_version = client.get_current_version(
 assert current_version is StreamState.NO_STREAM
 ```
 
-### How to implement snapshotting with EventStoreDB<a id="how-to-implement-snapshotting-with-eventstoredb"></a>
+### How to implement snapshotting with KurrentDB<a id="how-to-implement-snapshotting-with-kurrentdb"></a>
 
 Snapshots can improve the performance of aggregates that would otherwise be
 reconstructed from very long streams. However, it is generally recommended to design
 aggregates to have a finite lifecycle, and so to have relatively short streams,
 thereby avoiding the need for snapshotting. This "how to" section is intended merely
-to show how snapshotting of aggregates can be implemented with EventStoreDB using
+to show how snapshotting of aggregates can be implemented with KurrentDB using
 this Python client.
 
 Event-sourced aggregates are typically reconstructed from recorded events by calling
@@ -1561,7 +1556,7 @@ be resolved, so that the linked events will be returned instead of the event lin
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -1584,7 +1579,7 @@ maximum duration, in seconds, for the completion of the gRPC operation.
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
-The filtering of events is done on the EventStoreDB server. The
+The filtering of events is done on the KurrentDB server. The
 `limit` argument is applied on the server after filtering.
 
 The example below shows how to get all the events we have recorded in the database
@@ -1778,7 +1773,7 @@ client.set_stream_metadata(
 The `current_version` argument should be the current version of the stream metadata
 obtained from `get_stream_metadata()`.
 
-Please refer to the EventStoreDB documentation for more information about stream
+Please refer to the KurrentDB documentation for more information about stream
 metadata.
 
 ### Delete stream<a id="delete-stream"></a>
@@ -1900,7 +1895,7 @@ be resolved, so that the linked events will be returned instead of the event lin
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -2125,7 +2120,7 @@ to subscribe when processing is resumed. Since this commit position will represe
 position of the last successfully processed event in a downstream component, so it
 will be usual to want the next event after this position, because that is the next
 event that has not yet been processed. For this reason, when subscribing for events
-from a specific commit position using a catch-up subscription in EventStoreDB, the
+from a specific commit position using a catch-up subscription in KurrentDB, the
 recorded event at the specified commit position will NOT be included in the sequence
 of recorded events that are received.
 
@@ -2162,14 +2157,14 @@ unique, so that transactions will be rolled back when there is a conflict, you w
 prevent the results of any duplicate processing of a recorded event being committed.
 
 Recorded events received from a catch-up subscription cannot be acknowledged back
-to the EventStoreDB server. Acknowledging events, however, is an aspect of "persistent
+to the KurrentDB server. Acknowledging events, however, is an aspect of "persistent
 subscriptions". Hoping to rely on acknowledging events to an upstream
 component is an example of dual writing.
 
 
 ## Persistent subscriptions<a id="persistent-subscriptions"></a>
 
-In EventStoreDB, "persistent" subscriptions are similar to catch-up subscriptions,
+In KurrentDB, "persistent" subscriptions are similar to catch-up subscriptions,
 in that reading a persistent subscription will block when there are no more recorded
 events to be received, and then continue when new events are subsequently recorded.
 
@@ -2230,7 +2225,7 @@ be resolved, so that the linked events will be returned instead of the event lin
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -2861,8 +2856,8 @@ client.delete_subscription(
 
 ## Projections<a id="projections"></a>
 
-Please refer to the [EventStoreDB documentation](https://developers.eventstore.com/server/v23.10/projections.html)
-for more information on projections in EventStoreDB.
+Please refer to the [KurrentDB documentation](https://developers.eventstore.com/server/v23.10/projections.html)
+for more information on projections in KurrentDB.
 
 ### Create projection<a id="create-projection"></a>
 
@@ -2966,7 +2961,7 @@ been `True`) can optionally be deleted when the projection is deleted. See
 
 Unlike the "result" and "emitted" streams, the "state" and the "checkpoint" streams
 cannot be read or subscribed to by users, or viewed in the "stream browser" view of
-EventStoreDB's Web interface.
+KurrentDB's Web interface.
 
 ### Get projection state<a id="get-projection-state"></a>
 
@@ -3216,7 +3211,7 @@ argument in other client methods.
 ### Reconnect<a id="reconnect"></a>
 
 The `reconnect()` method can be used to manually reconnect the client to a
-suitable EventStoreDB node. This method uses the same routine for reading the
+suitable KurrentDB node. This method uses the same routine for reading the
 cluster node states and then connecting to a suitable node according to the
 client's node preference that is specified in the connection string URI when
 the client is constructed. This method is thread-safe, in that when it is called
@@ -3248,18 +3243,18 @@ client.close()
 
 ## Asyncio client<a id="asyncio-client"></a>
 
-The `esdbclient` package also provides an asynchronous I/O gRPC Python client for
-EventStoreDB. It is functionally equivalent to the multithreaded client. It uses
+The `kurrentclient` package also provides an asynchronous I/O gRPC Python client for
+KurrentDB. It is functionally equivalent to the multithreaded client. It uses
 the `grpc.aio` package and the `asyncio` module, instead of `grpc` and `threading`.
 
-It supports both the "esdb" and the "esdb+discover" connection string URI schemes,
-and can connect to both "secure" and "insecure" EventStoreDB servers.
+It supports both the "kdb" and the "kdb+discover" connection string URI schemes,
+and can connect to both "secure" and "insecure" KurrentDB servers.
 
-The class `AsyncEventStoreDBClient` can be used to construct an instance of the
-asynchronous I/O gRPC Python client. It can be imported from `esdbclient`. The
+The class `AsyncKurrentDBClient` can be used to construct an instance of the
+asynchronous I/O gRPC Python client. It can be imported from `kurrentclient`. The
 async method `connect()` should be called after constructing the client.
 
-The asyncio client has exactly the same methods as the multithreaded `EventStoreDBClient`.
+The asyncio client has exactly the same methods as the multithreaded `KurrentDBClient`.
 These methods are defined as `async def` methods, and so calls to these methods will
 return Python "awaitables" that must be awaited to obtain the method return values.
 The methods have the same behaviors, the same arguments and the same or equivalent
@@ -3296,18 +3291,17 @@ semantics.
 ```python
 import asyncio
 
-from esdbclient import AsyncEventStoreDBClient
+from kurrentclient import AsyncKurrentDBClient
 
 
 async def demonstrate_async_client():
-
     # Construct client.
-    client = AsyncEventStoreDBClient(
+    client = AsyncKurrentDBClient(
         uri=os.getenv("ESDB_URI"),
         root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
     )
 
-    # Connect to EventStoreDB.
+    # Connect to KurrentDB.
     await client.connect()
 
     # Append events.
@@ -3329,7 +3323,6 @@ async def demonstrate_async_client():
     assert recorded[1] == event2
     assert recorded[2] == event3
 
-
     # Subscribe to all events.
     received = []
     async with await client.subscribe_to_all(commit_position=0) as subscription:
@@ -3340,7 +3333,6 @@ async def demonstrate_async_client():
     assert received[-3] == event1
     assert received[-2] == event2
     assert received[-1] == event3
-
 
     # Close the client.
     await client.close()
@@ -3354,25 +3346,24 @@ asyncio.run(
 
 ### FastAPI example<a id="fastapi"></a>
 
-The example below shows how to use `AsyncEventStoreDBClient` with [FastAPI](https://fastapi.tiangolo.com).
+The example below shows how to use `AsyncKurrentDBClient` with [FastAPI](https://fastapi.tiangolo.com).
 
 ```python
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from esdbclient import AsyncEventStoreDBClient
+from kurrentclient import AsyncKurrentDBClient
 
-
-client: AsyncEventStoreDBClient
+client: AsyncKurrentDBClient
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Construct the client.
     global client
-    client = AsyncEventStoreDBClient(
-        uri="esdb+discover://localhost:2113?Tls=false",
+    client = AsyncKurrentDBClient(
+        uri="kdb+discover://localhost:2113?Tls=false",
     )
     await client.connect()
 
@@ -3416,24 +3407,24 @@ You should use wildcards if you want to match substrings, for example `'.*Snapsh
 to match all strings that end with `'Snapshot`', or `'Order.*'` to match all strings
 that start with `'Order'`.
 
-System events generated by EventStoreDB have `type` strings that start with
+System events generated by KurrentDB have `type` strings that start with
 the `$` sign. Persistence subscription events generated when manipulating
 persistence subscriptions have `type` strings that start with `PersistentConfig`.
 
-For example, to match the type of EventStoreDB system events, use the regular
+For example, to match the type of KurrentDB system events, use the regular
 expression string `r'\$.+'`. Please note, the constant `ESDB_SYSTEM_EVENTS_REGEX` is
-set to this value. You can import this constant from `esdbclient` and use it when
+set to this value. You can import this constant from `kurrentclient` and use it when
 building longer sequences of regular expressions.
 
-Similarly, to match the type of EventStoreDB persistence subscription events, use the
+Similarly, to match the type of KurrentDB persistence subscription events, use the
 regular expression `r'PersistentConfig\d+'`. The constant `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`
-is set to this value. You can import this constant from `esdbclient` and use it when
+is set to this value. You can import this constant from `kurrentclient` and use it when
 building longer sequences of regular expressions.
 
 The constant `DEFAULT_EXCLUDE_FILTER` is a sequence of regular expressions that includes
 both `ESDB_SYSTEM_EVENTS_REGEX` and `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
 as the default value of `filter_exclude` so that the events generated internally by
-EventStoreDB are excluded by default.
+KurrentDB are excluded by default.
 
 In all methods that have a `filter_exclude` argument, the default value of the argument
 is the constant `DEFAULT_EXCLUDE_FILTER`, which is designed to match (and therefore
@@ -3501,7 +3492,7 @@ requests by collecting data such as metrics, events, logs, and traces.
 Instrumentation provides immediate visibility into your application, often using
 charts and graphs to illustrate what is going on “under the hood.”
 
-This package supports instrumenting the EventStoreDB clients with OpenTelemetry.
+This package supports instrumenting the KurrentDB clients with OpenTelemetry.
 
 ### OpenTelemetry<a id="open-telemetry"></a>
 
@@ -3511,44 +3502,44 @@ that can help you analyze your software’s performance and behavior. It is vend
 100% Free and Open Source, and adopted and supported by industry leaders in the
 observability space.
 
-This package provides OpenTelemetry instrumentors for both the `EventStoreDBClient`
-and the `AsyncEventStoreDBClient` clients. These instrumentors depend on various
+This package provides OpenTelemetry instrumentors for both the `KurrentDBClient`
+and the `AsyncKurrentDBClient` clients. These instrumentors depend on various
 OpenTelemetry Python packages, which you will need to install, preferably with this
 project's "opentelemetry" package extra to ensure verified version compatibility.
 
 For example, you can install the "opentelemetry" package extra with pip.
 
-    $ pip install esdbclient[opentelemetry]
+    $ pip install kurrentclient[opentelemetry]
 
 Or you can use Poetry to add it to your pyproject.toml file and install it.
 
-    $ poetry add esdbclient[opentelemetry]
+    $ poetry add kurrentclient[opentelemetry]
 
 
-You can then use the OpenTelemetry instrumentor `EventStoreDBClientInstrumentor` to
-instrument the `EventStoreDBClient`.
+You can then use the OpenTelemetry instrumentor `KurrentDBClientInstrumentor` to
+instrument the `KurrentDBClient`.
 
 ```python
-from esdbclient.instrumentation.opentelemetry import EventStoreDBClientInstrumentor
+from kurrentclient.instrumentation.opentelemetry import KurrentDBClientInstrumentor
 
 # Activate instrumentation.
-EventStoreDBClientInstrumentor().instrument()
+KurrentDBClientInstrumentor().instrument()
 
 # Deactivate instrumentation.
-EventStoreDBClientInstrumentor().uninstrument()
+KurrentDBClientInstrumentor().uninstrument()
 ```
 
-You can also use the OpenTelemetry instrumentor `AsyncEventStoreDBClientInstrumentor`
-to instrument the `AsyncEventStoreDBClient`.
+You can also use the OpenTelemetry instrumentor `AsyncKurrentDBClientInstrumentor`
+to instrument the `AsyncKurrentDBClient`.
 
 ```python
-from esdbclient.instrumentation.opentelemetry import AsyncEventStoreDBClientInstrumentor
+from kurrentclient.instrumentation.opentelemetry import AsyncKurrentDBClientInstrumentor
 
 # Activate instrumentation.
-AsyncEventStoreDBClientInstrumentor().instrument()
+AsyncKurrentDBClientInstrumentor().instrument()
 
 # Deactivate instrumentation.
-AsyncEventStoreDBClientInstrumentor().uninstrument()
+AsyncKurrentDBClientInstrumentor().uninstrument()
 ```
 
 The instrumentors use a global OpenTelemetry "tracer provider", which you will need to
@@ -3566,7 +3557,7 @@ from opentelemetry.trace import set_tracer_provider
 
 resource = Resource.create(
     attributes={
-        SERVICE_NAME: "eventstoredb",
+        SERVICE_NAME: "kurrentdb",
     }
 )
 provider = TracerProvider(resource=resource)
@@ -3589,7 +3580,7 @@ from opentelemetry.trace import set_tracer_provider
 
 resource = Resource.create(
     attributes={
-        SERVICE_NAME: "eventstoredb",
+        SERVICE_NAME: "kurrentdb",
     }
 )
 provider = TracerProvider(resource=resource)
@@ -3713,17 +3704,17 @@ can do this by installing GNU Coreutils with Homebrew.
 
 ### Project Makefile commands<a id="project-makefile-commands"></a>
 
-You can start EventStoreDB using the following command.
+You can start KurrentDB using the following command.
 
-    $ make start-eventstoredb
+    $ make start-kurrentdb
 
-You can run tests using the following command (needs EventStoreDB to be running).
+You can run tests using the following command (needs KurrentDB to be running).
 
     $ make test
 
-You can stop EventStoreDB using the following command.
+You can stop KurrentDB using the following command.
 
-    $ make stop-eventstoredb
+    $ make stop-kurrentdb
 
 You can check the formatting of the code using the following command.
 
@@ -3737,7 +3728,7 @@ You can reformat the code using the following command.
 
 Tests belong in `./tests`.
 
-Code-under-test belongs in `./esdbclient`.
+Code-under-test belongs in `./kurrentclient`.
 
 Edit package dependencies in `pyproject.toml`.
 

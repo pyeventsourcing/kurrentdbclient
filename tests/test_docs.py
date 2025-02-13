@@ -27,7 +27,7 @@ class TestDocs(TestCase):
         os.environ["ESDB_ROOT_CERTIFICATES"] = ssl.get_server_certificate(
             addr=("localhost", 2114)
         )
-        os.environ["ESDB_URI"] = "esdb://admin:changeit@localhost:2114"
+        os.environ["ESDB_URI"] = "kdb://admin:changeit@localhost:2114"
 
     def tearDown(self) -> None:
         del os.environ["ESDB_URI"]
@@ -204,4 +204,4 @@ class TestDocs(TestCase):
 
 class TestDocsInsecure(TestDocs):
     def setup_environ(self) -> None:
-        os.environ["ESDB_URI"] = "esdb://localhost:2113?Tls=false"
+        os.environ["ESDB_URI"] = "kdb://localhost:2113?Tls=false"

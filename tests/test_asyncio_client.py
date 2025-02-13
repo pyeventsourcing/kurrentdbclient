@@ -7,18 +7,15 @@ from typing import Optional, cast
 from unittest import IsolatedAsyncioTestCase, skip, skipIf
 from uuid import uuid4
 
-from esdbclient import (
-    AsyncioEventStoreDBClient,
+from kurrentclient import (
+    AsyncioKurrentDBClient,
     AsyncPersistentSubscription,
     Checkpoint,
     NewEvent,
     StreamState,
 )
-from esdbclient.asyncio_client import (
-    AsyncEventStoreDBClient,
-    _AsyncioEventStoreDBClient,
-)
-from esdbclient.common import (
+from kurrentclient.asyncio_client import AsyncKurrentDBClient, _AsyncioKurrentDBClient
+from kurrentclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
     DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
     DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
@@ -29,8 +26,8 @@ from esdbclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
     DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
 )
-from esdbclient.events import CaughtUp
-from esdbclient.exceptions import (
+from kurrentclient.events import CaughtUp
+from kurrentclient.exceptions import (
     AlreadyExists,
     DeadlineExceeded,
     DiscoveryFailed,
@@ -48,8 +45,8 @@ from esdbclient.exceptions import (
     StreamIsDeleted,
     WrongCurrentVersion,
 )
-from esdbclient.persistent import AsyncSubscriptionReadReqs
-from esdbclient.streams import AsyncCatchupSubscription
+from kurrentclient.persistent import AsyncSubscriptionReadReqs
+from kurrentclient.streams import AsyncCatchupSubscription
 from tests.test_client import (
     EVENTSTORE_DOCKER_IMAGE,
     PROJECTION_QUERY_TEMPLATE1,
@@ -60,36 +57,36 @@ from tests.test_client import (
 )
 
 
-class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
+class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.client = AsyncEventStoreDBClient(
-            uri="esdb://admin:changeit@localhost:2114",
+        self.client = AsyncKurrentDBClient(
+            uri="kdb://admin:changeit@localhost:2114",
             root_certificates=get_server_certificate("localhost:2114"),
         )
         await self.client.connect()
-        self._reader: Optional[AsyncEventStoreDBClient] = None
-        self._writer: Optional[AsyncEventStoreDBClient] = None
+        self._reader: Optional[AsyncKurrentDBClient] = None
+        self._writer: Optional[AsyncKurrentDBClient] = None
 
     @property
-    def reader(self) -> AsyncEventStoreDBClient:
+    def reader(self) -> AsyncKurrentDBClient:
         assert self._reader is not None
         return self._reader
 
     @property
-    def writer(self) -> AsyncEventStoreDBClient:
+    def writer(self) -> AsyncKurrentDBClient:
         assert self._writer is not None
         return self._writer
 
     async def setup_reader(self) -> None:
-        self._reader = AsyncEventStoreDBClient(
-            uri="esdb://admin:changeit@localhost:2110,localhost:2110?NodePreference=follower",
+        self._reader = AsyncKurrentDBClient(
+            uri="kdb://admin:changeit@localhost:2110,localhost:2110?NodePreference=follower",
             root_certificates=get_ca_certificate(),
         )
         await self._reader.connect()
 
     async def setup_writer(self) -> None:
-        self._writer = AsyncEventStoreDBClient(
-            uri="esdb://admin:changeit@localhost:2110,localhost:2110?NodePreference=leader",
+        self._writer = AsyncKurrentDBClient(
+            uri="kdb://admin:changeit@localhost:2110,localhost:2110?NodePreference=leader",
             root_certificates=get_ca_certificate(),
         )
         await self._writer.connect()
@@ -131,16 +128,16 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             await super().asyncTearDown()
 
     async def test_esdb_scheme_discovery_single_node_cluster(self) -> None:
-        client = AsyncEventStoreDBClient(
-            "esdb://localhost:2113,localhost:2113?Tls=False"
+        client = AsyncKurrentDBClient(
+            "kdb://localhost:2113,localhost:2113?Tls=False"
             "&GossipTimeout=1&MaxDiscoverAttempts=1&DiscoveryInterval=0"
         )
         await client.connect()
         self.assertEqual("localhost:2113", client.connection_target)
 
     async def test_esdb_discover_scheme_raises_discovery_failed(self) -> None:
-        client = AsyncEventStoreDBClient(
-            "esdb+discover://example.com?Tls=False"
+        client = AsyncKurrentDBClient(
+            "kdb+discover://example.com?Tls=False"
             "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
         )
         with self.assertRaises(DiscoveryFailed) as cm:
@@ -148,8 +145,8 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertIn(":2113", str(cm.exception))
         self.assertNotIn(":9898", str(cm.exception))
 
-        client = AsyncEventStoreDBClient(
-            "esdb+discover://example.com:9898?Tls=False"
+        client = AsyncKurrentDBClient(
+            "kdb+discover://example.com:9898?Tls=False"
             "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
         )
         with self.assertRaises(DiscoveryFailed) as cm:
@@ -159,38 +156,38 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
     async def test_sometimes_reconnnects_to_selected_node_after_discovery(self) -> None:
         root_certificates = get_ca_certificate()
-        client = AsyncEventStoreDBClient(
-            "esdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2110?NodePreference=leader",
+        client = AsyncKurrentDBClient(
+            "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2110?NodePreference=leader",
             root_certificates=root_certificates,
         )
         await client.connect()
-        client = AsyncEventStoreDBClient(
-            "esdb://admin:changeit@127.0.0.1:2111,127.0.0.1:2111?NodePreference=leader",
+        client = AsyncKurrentDBClient(
+            "kdb://admin:changeit@127.0.0.1:2111,127.0.0.1:2111?NodePreference=leader",
             root_certificates=root_certificates,
         )
         await client.connect()
-        client = AsyncEventStoreDBClient(
-            "esdb://admin:changeit@127.0.0.1:2112,127.0.0.1:2112?NodePreference=leader",
+        client = AsyncKurrentDBClient(
+            "kdb://admin:changeit@127.0.0.1:2112,127.0.0.1:2112?NodePreference=leader",
             root_certificates=root_certificates,
         )
         await client.connect()
 
     async def test_node_preference_random(self) -> None:
-        client = AsyncEventStoreDBClient(
-            "esdb://localhost:2113,localhost:2113?Tls=False&NodePreference=random"
+        client = AsyncKurrentDBClient(
+            "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=random"
         )
         await client.connect()
 
     async def test_raises_follower_not_found(self) -> None:
-        client = AsyncEventStoreDBClient(
-            "esdb://localhost:2113,localhost:2113?Tls=False&NodePreference=follower"
+        client = AsyncKurrentDBClient(
+            "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=follower"
         )
         with self.assertRaises(FollowerNotFound):
             await client.connect()
 
     async def test_raises_read_only_replica_not_found(self) -> None:
-        client = AsyncEventStoreDBClient(
-            "esdb://localhost:2113,localhost:2113?Tls=False&NodePreference=readonlyreplica"
+        client = AsyncKurrentDBClient(
+            "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=readonlyreplica"
         )
         with self.assertRaises(ReadOnlyReplicaNotFound):
             await client.connect()
@@ -201,8 +198,8 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         # NB Client can work with Tls=True without setting 'root_certificates'
         # if grpc lib can verify server cert using locally installed CA certs.
         qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        uri = f"esdb://admin:changeit@localhost:2114?{qs}"
-        client = AsyncEventStoreDBClient(uri)
+        uri = f"kdb://admin:changeit@localhost:2114?{qs}"
+        client = AsyncKurrentDBClient(uri)
         await client.connect()
         with self.assertRaises(SSLError):
             await client.get_commit_position()
@@ -211,8 +208,8 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self,
     ) -> None:
         qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        uri = f"esdb://admin:changeit@localhost:2114?{qs}"
-        client = AsyncEventStoreDBClient(uri, root_certificates="blah")
+        uri = f"kdb://admin:changeit@localhost:2114?{qs}"
+        client = AsyncKurrentDBClient(uri, root_certificates="blah")
         await client.connect()
         with self.assertRaises(SSLError):
             await client.get_commit_position()
@@ -220,16 +217,16 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_raises_discovery_failed_with_tls_true_but_no_root_certificate(
         self,
     ) -> None:
-        uri = "esdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
+        uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
         uri += "?MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
-        client = AsyncEventStoreDBClient(uri, root_certificates="blah")
+        client = AsyncKurrentDBClient(uri, root_certificates="blah")
         with self.assertRaises(DiscoveryFailed):
             await client.connect()
 
     async def test_username_and_password_required_for_secure_connection(self) -> None:
         with self.assertRaises(ValueError) as cm:
-            AsyncEventStoreDBClient("esdb://localhost:2114")
+            AsyncKurrentDBClient("kdb://localhost:2114")
         self.assertIn("Username and password are required", cm.exception.args[0])
 
     async def test_context_manager(self) -> None:
@@ -739,7 +736,7 @@ class TestAsyncEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         class Worker:
-            def __init__(self, client: AsyncEventStoreDBClient) -> None:
+            def __init__(self, client: AsyncKurrentDBClient) -> None:
                 self.client = client
 
             async def run(self) -> None:
@@ -3018,12 +3015,10 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_tls_true_client_auth(self) -> None:
         secure_grpc_target = "localhost:2114"
         root_certificates = get_server_certificate(secure_grpc_target)
-        uri = f"esdb://admin:changeit@{secure_grpc_target}"
+        uri = f"kdb://admin:changeit@{secure_grpc_target}"
 
         # Construct client without client auth.
-        client = await AsyncioEventStoreDBClient(
-            uri, root_certificates=root_certificates
-        )
+        client = await AsyncioKurrentDBClient(uri, root_certificates=root_certificates)
 
         # User key and cert should be None.
         self.assertIsNone(client.private_key)
@@ -3034,9 +3029,7 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Construct client with client auth.
         uri += f"?UserKeyFile={self.user_key_file}&UserCertFile={self.user_cert_file}"
-        client = await AsyncioEventStoreDBClient(
-            uri, root_certificates=root_certificates
-        )
+        client = await AsyncioKurrentDBClient(uri, root_certificates=root_certificates)
 
         # User cert and key should have expected values.
         self.assertEqual(self.user_key, client.private_key)
@@ -3048,7 +3041,7 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Construct client with TlsCaFile (instead of passing root_certificates directly).
         uri += f"&TlsCaFile={self.tls_ca_file}"
-        client_with_tls_ca = await AsyncioEventStoreDBClient(uri)
+        client_with_tls_ca = await AsyncioKurrentDBClient(uri)
 
         # Read the contents of TlsCaFile as bytes, since root_certificates are compared as bytes
         with open(self.tls_ca_file, "rb") as f:
@@ -3059,11 +3052,11 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(tls_ca_file_contents, client_with_tls_ca.root_certificates)
 
 
-class TestAsyncioEventStoreDBClient(TimedTestCase, IsolatedAsyncioTestCase):
+class TestAsyncioKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_deprecated_function(self) -> None:
-        self.client = await AsyncioEventStoreDBClient(
-            uri="esdb://admin:changeit@localhost:2114",
+        self.client = await AsyncioKurrentDBClient(
+            uri="kdb://admin:changeit@localhost:2114",
             root_certificates=get_server_certificate("localhost:2114"),
         )
-        assert isinstance(self.client, _AsyncioEventStoreDBClient)
+        assert isinstance(self.client, _AsyncioKurrentDBClient)
         await self.client.get_commit_position()

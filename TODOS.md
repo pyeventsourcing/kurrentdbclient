@@ -55,7 +55,7 @@ For version 1.0:
   * ClusterMember data class attributes (there are quite a lot of them...)
 
 * Sample
-  * Is the eventsourcing-eventstoredb package sufficient for v1.0?
+  * Is the eventsourcing-kurrentdb package sufficient for v1.0?
   * Should I port Joao's banking app?
   * We now have the website samples, this is probably what was wanted originally
 
@@ -180,7 +180,7 @@ Notes 21 February 2023:
   * To modify, read last, parse as JSON, make changes, serialise as JSON, then append new event
   * See https://developers.eventstore.com/server/v22.10/streams.html#metadata-and-reserved-names
 * Cluster support & connectivity (different connections strings + node pref);
-  * Support the esdb:// and esdb+discover:// URLs
+  * Support the kdb:// and kdb+discover:// URLs
     * which parameters are there to support?
     * See: https://github.com/EventStore/EventStore-Client-Dotnet/blob/master/src/EventStore.Client/EventStoreClientSettings.ConnectionString.cs#L28
 
@@ -198,8 +198,8 @@ Notes 21 February 2023:
 
         * Rule 1: make sure all keys and values are case-insensitive
         * Rule 2: schemas
-            * esdb://host1:port,host2:port,host3:port/  multiple sockets
-            * esdb+discover://host1/ - this means get the list of hosts is listed in DNS records under this name - not sure where the port number goes
+            * kdb://host1:port,host2:port,host3:port/  multiple sockets
+            * kdb+discover://host1/ - this means get the list of hosts is listed in DNS records under this name - not sure where the port number goes
         * Rule 3: node preference controls whether requests are directed to another node
           * NodePreference: leader, follower, random, readonlyreplica
           * need to make a call to the gossip API, either timeout or give response, hence

@@ -2,8 +2,8 @@
 from unittest import TestCase
 from uuid import UUID, uuid4
 
-from esdbclient import Checkpoint, NewEvent, RecordedEvent
-from esdbclient.events import CaughtUp
+from kurrentclient import Checkpoint, NewEvent, RecordedEvent
+from kurrentclient.events import CaughtUp
 from tests.test_client import random_data
 
 

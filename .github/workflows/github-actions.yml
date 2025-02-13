@@ -35,8 +35,8 @@ jobs:
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncSetupError
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncTestError
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncTeardownError
-      - name: Start EventStoreDB
-        run: make start-eventstoredb
+      - name: Start KurrentDB
+        run: make start-kurrentdb
       - name: Run tests
         run: make test
       - name: Docker logs - secure cluster
@@ -44,10 +44,10 @@ jobs:
         run: docker compose logs
       - name: Docker logs - insecure server
         if: success() || failure()
-        run: docker logs my-eventstoredb-insecure
+        run: docker logs my-kurrentdb-insecure
       - name: Docker logs - secure server
         if: success() || failure()
-        run: docker logs my-eventstoredb-secure
+        run: docker logs my-kurrentdb-secure
       - name: Report memory
         if: success() || failure()
         run: top -bn1

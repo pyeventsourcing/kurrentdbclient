@@ -1,6 +1,6 @@
 [run]
-source = esdbclient
+source = kurrentclient
 branch = True
 relative_files = True
 omit =
-    esdbclient/protos/Grpc/*.py
+    kurrentclient/protos/Grpc/*.py

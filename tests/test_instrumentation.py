@@ -54,31 +54,31 @@ from opentelemetry.trace import (
 )
 from opentelemetry.util.types import AttributeValue
 
-from esdbclient import (
-    AsyncEventStoreDBClient,
-    EventStoreDBClient,
+from kurrentclient import (
+    AsyncKurrentDBClient,
+    KurrentDBClient,
     NewEvent,
     RecordedEvent,
     StreamState,
 )
-from esdbclient.client import BaseEventStoreDBClient
-from esdbclient.common import (
+from kurrentclient.client import BaseKurrentDBClient
+from kurrentclient.common import (
     AbstractAsyncCatchupSubscription,
     AbstractAsyncPersistentSubscription,
     AbstractCatchupSubscription,
     AbstractPersistentSubscription,
 )
-from esdbclient.exceptions import DiscoveryFailed, GrpcError, ServiceUnavailable
-from esdbclient.instrumentation.opentelemetry import (
-    AsyncEventStoreDBClientInstrumentor,
-    EventStoreDBClientInstrumentor,
+from kurrentclient.exceptions import DiscoveryFailed, GrpcError, ServiceUnavailable
+from kurrentclient.instrumentation.opentelemetry import (
+    AsyncKurrentDBClientInstrumentor,
+    KurrentDBClientInstrumentor,
 )
-from esdbclient.instrumentation.opentelemetry.spanners import (
+from kurrentclient.instrumentation.opentelemetry.spanners import (
     _enrich_span,
     _extract_context_from_event,
     _set_context_in_events,
 )
-from esdbclient.instrumentation.opentelemetry.utils import (
+from kurrentclient.instrumentation.opentelemetry.utils import (
     AsyncSpannerResponse,
     OverloadedSpannerResponse,
     SpannerResponse,
@@ -99,7 +99,7 @@ def init_tracer_provider(
 ) -> None:
     resource = Resource.create(
         attributes={
-            SERVICE_NAME: "eventstoredb",
+            SERVICE_NAME: "kurrentdb",
         }
     )
     provider = TracerProvider(resource=resource)
@@ -144,7 +144,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
 
     async def test(self) -> None:
 
-        class Example(BaseEventStoreDBClient):
+        class Example(BaseKurrentDBClient):
             def double(self, /, x: int, name: str = "") -> int:
                 if x < 0:
                     raise ValueError(f"Negative value {name}")
@@ -162,7 +162,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         self.check_spans(num_spans=0)
 
         # Check example class.
-        example = Example("esdb://blah?Tls=False")
+        example = Example("kdb://blah?Tls=False")
         self.assertEqual(6, example.double(3, name="test1"))
         self.assertEqual(6, await example.adouble(3, name="test2"))
         with self.assertRaises(ValueError):
@@ -278,7 +278,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         # Mismatched receiver of the spanned func. The spanned_func
         # is defined on Example2, but the patched_class is Example.
 
-        class Example2(BaseEventStoreDBClient):
+        class Example2(BaseKurrentDBClient):
             def double(self, /, x: int, name: str = "") -> int:
                 if x < 0:
                     raise ValueError(f"Negative value {name}")
@@ -595,11 +595,11 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
             tracer=self.tracer,
         )
 
-        # This is okay because instance is "BaseEventStoreDBClient".
+        # This is okay because instance is "BaseKurrentDBClient".
         @overload
         def example7_spanner(
             tracer: Tracer,
-            instance: BaseEventStoreDBClient,
+            instance: BaseKurrentDBClient,
             spanned_func: AsyncDoubleMethod,
             /,
             x: int,
@@ -609,7 +609,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         @overload
         def example7_spanner(
             tracer: Tracer,
-            instance: BaseEventStoreDBClient,
+            instance: BaseKurrentDBClient,
             spanned_func: DoubleMethod,
             /,
             x: int,
@@ -618,7 +618,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
 
         def example7_spanner(
             tracer: Tracer,
-            instance: BaseEventStoreDBClient,
+            instance: BaseKurrentDBClient,
             spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
             /,
             x: int,
@@ -806,7 +806,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         class AsyncDoubleMethod10(Protocol):
             async def __call__(self, /, x: int, name: str = "") -> AsyncInt: ...
 
-        class Example10(EventStoreDBClient):
+        class Example10(KurrentDBClient):
             def double(self, /, x: int, name: str = "") -> SyncInt:
                 return SyncInt(x * 2)
 
@@ -816,7 +816,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         @overload
         def example10_spanner(
             tracer: Tracer,
-            instance: EventStoreDBClient,
+            instance: KurrentDBClient,
             spanned_func: AsyncDoubleMethod10,
             /,
             x: int,
@@ -826,7 +826,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         @overload
         def example10_spanner(
             tracer: Tracer,
-            instance: EventStoreDBClient,
+            instance: KurrentDBClient,
             spanned_func: DoubleMethod10,
             /,
             x: int,
@@ -835,7 +835,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
 
         def example10_spanner(
             tracer: Tracer,
-            instance: EventStoreDBClient,
+            instance: KurrentDBClient,
             spanned_func: Union[DoubleMethod10, AsyncDoubleMethod10],
             /,
             x: int,
@@ -907,7 +907,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
 
         # Check the span's resource attributes.
         resource_attributes = {
-            "service.name": "eventstoredb",
+            "service.name": "kurrentdb",
             "telemetry.sdk.language": "python",
             "telemetry.sdk.name": "opentelemetry",
             "telemetry.sdk.version": sdk_version.__version__,
@@ -977,10 +977,10 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
             self.assertIn("Traceback", str(event_attributes["exception.stacktrace"]))
 
 
-TEventStoreDBClient = TypeVar("TEventStoreDBClient", bound=BaseEventStoreDBClient)
+TKurrentDBClient = TypeVar("TKurrentDBClient", bound=BaseKurrentDBClient)
 
 
-class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]):
+class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
     skip_check_spans = False
 
     def setUp(self) -> None:
@@ -1016,7 +1016,7 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
         user_info: str = "",
         grpc_target: str = "",
         qs: str = "",
-    ) -> TEventStoreDBClient:
+    ) -> TKurrentDBClient:
         pass  # pragma: no cover
 
     def check_spans(
@@ -1026,7 +1026,7 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
         span_name: str = "",
         span_kind: trace_api.SpanKind = trace_api.SpanKind.CLIENT,
         parent_span_index: Optional[int] = None,
-        instrumentation_scope_name: str = "esdbclient.instrumentation.opentelemetry",
+        instrumentation_scope_name: str = "kurrentclient.instrumentation.opentelemetry",
         instrumentation_scope_version: str = "1.1",
         span_attributes: Optional[Dict[str, Any]] = None,
         error: Optional[Exception] = None,
@@ -1044,8 +1044,8 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
         # ):
         #     return
         if (
-            not EventStoreDBClientInstrumentor().is_instrumented_by_opentelemetry
-            and not AsyncEventStoreDBClientInstrumentor().is_instrumented_by_opentelemetry
+            not KurrentDBClientInstrumentor().is_instrumented_by_opentelemetry
+            and not AsyncKurrentDBClientInstrumentor().is_instrumented_by_opentelemetry
         ):
             return
 
@@ -1078,7 +1078,7 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
 
         # Check the span's resource attributes.
         resource_attributes = {
-            "service.name": "eventstoredb",
+            "service.name": "kurrentdb",
             "telemetry.sdk.language": "python",
             "telemetry.sdk.name": "opentelemetry",
             "telemetry.sdk.version": sdk_version.__version__,
@@ -1093,7 +1093,7 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
         if rpc_service == "":
             span_attributes.update(
                 {
-                    "db.system": "eventstoredb",
+                    "db.system": "kurrentdb",
                     "db.user": "admin",
                     "server.address": "localhost",
                     "server.port": server_port or "2113",
@@ -1174,15 +1174,13 @@ class BaseEventStoreDBClientTestCase(TestCase, ABC, Generic[TEventStoreDBClient]
             #     )
 
 
-class EventStoreDBClientInstrumentorTestCase(
-    BaseEventStoreDBClientTestCase[EventStoreDBClient]
-):
+class KurrentDBClientInstrumentorTestCase(BaseKurrentDBClientTestCase[KurrentDBClient]):
     instrument_get_and_read_stream = False
     instrument_grpc = False
 
     @classmethod
     def setUpClass(cls) -> None:
-        EventStoreDBClientInstrumentor().instrument(
+        KurrentDBClientInstrumentor().instrument(
             instrument_get_and_read_stream=cls.instrument_get_and_read_stream
         )
         if cls.instrument_grpc:
@@ -1197,7 +1195,7 @@ class EventStoreDBClientInstrumentorTestCase(
 
     @classmethod
     def tearDownClass(cls) -> None:
-        EventStoreDBClientInstrumentor().uninstrument()
+        KurrentDBClientInstrumentor().uninstrument()
         if cls.instrument_grpc:
             instrumentor = GrpcInstrumentorClient()  # type: ignore[no-untyped-call]
             instrumentor.uninstrument()
@@ -1208,9 +1206,9 @@ class EventStoreDBClientInstrumentorTestCase(
         user_info: str = "",
         grpc_target: str = "",
         qs: str = "",
-    ) -> EventStoreDBClient:
+    ) -> KurrentDBClient:
         uri = self.construct_uri(uri_schema, user_info, grpc_target, qs)
-        return EventStoreDBClient(uri)
+        return KurrentDBClient(uri)
 
     def get_next_and_check_consumer_span(
         self,
@@ -1239,30 +1237,30 @@ class EventStoreDBClientInstrumentorTestCase(
                 span_kind=trace_api.SpanKind.CONSUMER,
                 span_attributes={
                     "db.operation": "streams.subscribe",
-                    "db.eventstoredb.event.id": str(recorded_event.id),
-                    "db.eventstoredb.event.type": recorded_event.type,
-                    "db.eventstoredb.stream": recorded_event.stream_name,
-                    "db.eventstoredb.subscription.id": subscription.subscription_id,
+                    "db.kurrentdb.event.id": str(recorded_event.id),
+                    "db.kurrentdb.event.type": recorded_event.type,
+                    "db.kurrentdb.stream": recorded_event.stream_name,
+                    "db.kurrentdb.subscription.id": subscription.subscription_id,
                 },
             )
         else:
             self.assertEqual(num_spans, len(_get_in_memory_spans()))
 
     @staticmethod
-    def break_client_connection(client: EventStoreDBClient) -> None:
+    def break_client_connection(client: KurrentDBClient) -> None:
         client._connection._grpc_channel.close()
         client.connection_spec._targets = ["localhost:1000"]
 
 
-class AsyncEventStoreDBClientInstrumentorTestCase(
-    BaseEventStoreDBClientTestCase[AsyncEventStoreDBClient], IsolatedAsyncioTestCase
+class AsyncKurrentDBClientInstrumentorTestCase(
+    BaseKurrentDBClientTestCase[AsyncKurrentDBClient], IsolatedAsyncioTestCase
 ):
     instrument_get_and_read_stream = False
     instrument_grpc = False
 
     @classmethod
     def setUpClass(cls) -> None:
-        AsyncEventStoreDBClientInstrumentor().instrument(
+        AsyncKurrentDBClientInstrumentor().instrument(
             instrument_get_and_read_stream=cls.instrument_get_and_read_stream
         )
         if cls.instrument_grpc:
@@ -1277,7 +1275,7 @@ class AsyncEventStoreDBClientInstrumentorTestCase(
 
     @classmethod
     def tearDownClass(cls) -> None:
-        AsyncEventStoreDBClientInstrumentor().uninstrument()
+        AsyncKurrentDBClientInstrumentor().uninstrument()
         if cls.instrument_grpc:
             instrumentor = GrpcAioInstrumentorClient()  # type: ignore[no-untyped-call]
             instrumentor.uninstrument()
@@ -1288,9 +1286,9 @@ class AsyncEventStoreDBClientInstrumentorTestCase(
         user_info: str = "",
         grpc_target: str = "",
         qs: str = "",
-    ) -> AsyncEventStoreDBClient:
+    ) -> AsyncKurrentDBClient:
         uri = self.construct_uri(uri_schema, user_info, grpc_target, qs)
-        return AsyncEventStoreDBClient(uri)
+        return AsyncKurrentDBClient(uri)
 
     async def async_get_next_and_check_consumer_span(
         self,
@@ -1319,30 +1317,30 @@ class AsyncEventStoreDBClientInstrumentorTestCase(
                 span_kind=trace_api.SpanKind.CONSUMER,
                 span_attributes={
                     "db.operation": "streams.subscribe",
-                    "db.eventstoredb.event.id": str(recorded_event.id),
-                    "db.eventstoredb.event.type": recorded_event.type,
-                    "db.eventstoredb.stream": recorded_event.stream_name,
-                    "db.eventstoredb.subscription.id": subscription.subscription_id,
+                    "db.kurrentdb.event.id": str(recorded_event.id),
+                    "db.kurrentdb.event.type": recorded_event.type,
+                    "db.kurrentdb.stream": recorded_event.stream_name,
+                    "db.kurrentdb.subscription.id": subscription.subscription_id,
                 },
             )
         else:
             self.assertEqual(num_spans, len(_get_in_memory_spans()))
 
     @staticmethod
-    async def async_break_client_connection(client: AsyncEventStoreDBClient) -> None:
+    async def async_break_client_connection(client: AsyncKurrentDBClient) -> None:
         await client._connection._grpc_channel.close(grace=None)
         client.connection_spec._targets = ["localhost:1000"]
 
 
-class BaseUtilsTestCase(BaseEventStoreDBClientTestCase[TEventStoreDBClient]):
+class BaseUtilsTestCase(BaseKurrentDBClientTestCase[TKurrentDBClient]):
     pass
 
 
 class TestUtils(
-    EventStoreDBClientInstrumentorTestCase, BaseUtilsTestCase[EventStoreDBClient]
+    KurrentDBClientInstrumentorTestCase, BaseUtilsTestCase[KurrentDBClient]
 ):
     def test_span_helpers(self) -> None:
-        tracer = get_tracer("esdbclient.instrumentation.opentelemetry", "1.1")
+        tracer = get_tracer("kurrentclient.instrumentation.opentelemetry", "1.1")
         client = self.construct_client()
         self.check_spans(num_spans=0)
         with _start_span(tracer, "test_enrich_span1", SpanKind.INTERNAL) as span:
@@ -1372,7 +1370,7 @@ class TestUtils(
             span_index=1,
             span_name="test_enrich_span2",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.eventstoredb.stream": "test1"},
+            span_attributes={"db.kurrentdb.stream": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span3", SpanKind.INTERNAL) as span:
@@ -1387,7 +1385,7 @@ class TestUtils(
             span_index=2,
             span_name="test_enrich_span3",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.eventstoredb.subscription.id": "test1"},
+            span_attributes={"db.kurrentdb.subscription.id": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span4", SpanKind.INTERNAL) as span:
@@ -1402,7 +1400,7 @@ class TestUtils(
             span_index=3,
             span_name="test_enrich_span4",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.eventstoredb.event.id": "test1"},
+            span_attributes={"db.kurrentdb.event.id": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span5", SpanKind.INTERNAL) as span:
@@ -1417,7 +1415,7 @@ class TestUtils(
             span_index=4,
             span_name="test_enrich_span5",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.eventstoredb.event.type": "test1"},
+            span_attributes={"db.kurrentdb.event.type": "test1"},
         )
 
         # Check doesn't enrich when span has ended.
@@ -1638,8 +1636,8 @@ class TestUtils(
 
 
 class AsyncTestUtils(
-    AsyncEventStoreDBClientInstrumentorTestCase,
-    BaseUtilsTestCase[AsyncEventStoreDBClient],
+    AsyncKurrentDBClientInstrumentorTestCase,
+    BaseUtilsTestCase[AsyncKurrentDBClient],
 ):
     def construct_client(
         self,
@@ -1647,13 +1645,13 @@ class AsyncTestUtils(
         user_info: str = "",
         grpc_target: str = "",
         qs: str = "",
-    ) -> AsyncEventStoreDBClient:
+    ) -> AsyncKurrentDBClient:
         client = super().construct_client(uri_schema, user_info, grpc_target, qs)
         asyncio.run(client.connect())
         return client
 
 
-class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
+class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
     def test_append_to_stream(self) -> None:
         # Construct client.
         client = self.construct_client()
@@ -1698,7 +1696,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -1753,7 +1751,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -1773,7 +1771,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
             error=cm.exception,
         )
@@ -1822,7 +1820,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -1877,7 +1875,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -1897,7 +1895,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
             error=cm.exception,
             server_port="1000",
@@ -1961,7 +1959,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2043,7 +2041,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2132,7 +2130,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2222,7 +2220,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2244,7 +2242,7 @@ class TestWhatAlexeyAskedFor(EventStoreDBClientInstrumentorTestCase):
         )
 
 
-class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
+class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
     # instrument_grpc = True
 
     async def test_append_to_stream(self) -> None:
@@ -2292,7 +2290,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2348,7 +2346,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2368,7 +2366,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
             error=cm.exception,
         )
@@ -2436,7 +2434,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2520,7 +2518,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2610,7 +2608,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2702,7 +2700,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CONSUMER,
             span_attributes={
                 "db.operation": "streams.subscribe",
-                "db.eventstoredb.subscription.id": subscription.subscription_id,
+                "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
@@ -2725,7 +2723,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncEventStoreDBClientInstrumentorTestCase):
         )
 
 
-class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
+class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
     instrument_get_and_read_stream = True
 
     def test_read_stream(self) -> None:
@@ -2763,7 +2761,7 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2774,11 +2772,11 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             num_spans=2,
             span_index=1,
             parent_span_index=None,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2793,9 +2791,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -2810,9 +2808,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -2827,9 +2825,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -2888,11 +2886,11 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             num_spans=7,
             span_index=1,
             parent_span_index=6,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2905,9 +2903,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[0].id),
-                "db.eventstoredb.event.type": recorded_events[0].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[0].id),
+                "db.kurrentdb.event.type": recorded_events[0].type,
             },
         )
 
@@ -2920,9 +2918,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[1].id),
-                "db.eventstoredb.event.type": recorded_events[1].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[1].id),
+                "db.kurrentdb.event.type": recorded_events[1].type,
             },
         )
 
@@ -2935,9 +2933,9 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[2].id),
-                "db.eventstoredb.event.type": recorded_events[2].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[2].id),
+                "db.kurrentdb.event.type": recorded_events[2].type,
             },
         )
 
@@ -2958,11 +2956,11 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
             num_spans=7,
             span_index=6,
             parent_span_index=None,
-            span_name="EventStoreDBClient.get_stream",
+            span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.get_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.get_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -2976,7 +2974,7 @@ class TestReadAndGetStream(EventStoreDBClientInstrumentorTestCase):
         )
 
 
-class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
+class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
     instrument_get_and_read_stream = True
 
     async def test_read_stream(self) -> None:
@@ -3015,7 +3013,7 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3026,11 +3024,11 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             num_spans=2,
             span_index=1,
             parent_span_index=None,
-            span_name="AsyncEventStoreDBClient.read_stream",
+            span_name="AsyncKurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "AsyncEventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "AsyncKurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3045,9 +3043,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3062,9 +3060,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3079,9 +3077,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3141,11 +3139,11 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             num_spans=7,
             span_index=1,
             parent_span_index=6,
-            span_name="AsyncEventStoreDBClient.read_stream",
+            span_name="AsyncKurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "AsyncEventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "AsyncKurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3158,9 +3156,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[0].id),
-                "db.eventstoredb.event.type": recorded_events[0].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[0].id),
+                "db.kurrentdb.event.type": recorded_events[0].type,
             },
         )
 
@@ -3173,9 +3171,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[1].id),
-                "db.eventstoredb.event.type": recorded_events[1].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[1].id),
+                "db.kurrentdb.event.type": recorded_events[1].type,
             },
         )
 
@@ -3188,9 +3186,9 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[2].id),
-                "db.eventstoredb.event.type": recorded_events[2].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[2].id),
+                "db.kurrentdb.event.type": recorded_events[2].type,
             },
         )
 
@@ -3211,11 +3209,11 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
             num_spans=7,
             span_index=6,
             parent_span_index=None,
-            span_name="AsyncEventStoreDBClient.get_stream",
+            span_name="AsyncKurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "AsyncEventStoreDBClient.get_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "AsyncKurrentDBClient.get_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3229,7 +3227,7 @@ class AsyncTestReadAndGetStream(AsyncEventStoreDBClientInstrumentorTestCase):
         )
 
 
-class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTestCase):
+class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCase):
     instrument_get_and_read_stream = True
     instrument_grpc = True
 
@@ -3278,7 +3276,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3288,11 +3286,11 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             num_spans=3,
             span_index=2,
             parent_span_index=None,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3306,9 +3304,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3322,9 +3320,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3338,9 +3336,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3398,11 +3396,11 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             num_spans=9,
             span_index=2,
             parent_span_index=8,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3414,9 +3412,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[0].id),
-                "db.eventstoredb.event.type": recorded_events[0].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[0].id),
+                "db.kurrentdb.event.type": recorded_events[0].type,
             },
         )
 
@@ -3428,9 +3426,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[1].id),
-                "db.eventstoredb.event.type": recorded_events[1].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[1].id),
+                "db.kurrentdb.event.type": recorded_events[1].type,
             },
         )
 
@@ -3442,9 +3440,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[2].id),
-                "db.eventstoredb.event.type": recorded_events[2].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[2].id),
+                "db.kurrentdb.event.type": recorded_events[2].type,
             },
         )
 
@@ -3475,11 +3473,11 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             num_spans=9,
             span_index=8,
             parent_span_index=None,
-            span_name="EventStoreDBClient.get_stream",
+            span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.get_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.get_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3493,16 +3491,16 @@ class TestReadAndGetStreamWithGrpcInstrumentor(EventStoreDBClientInstrumentorTes
             num_spans=21,
             # span_index=8,
             # parent_span_index=None,
-            # span_name="EventStoreDBClient.get_stream",
+            # span_name="KurrentDBClient.get_stream",
             # span_kind=trace_api.SpanKind.CLIENT,
             # span_attributes={
-            #     "db.operation": "EventStoreDBClient.get_stream",
+            #     "db.operation": "KurrentDBClient.get_stream",
             # },
         )
 
 
 class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
-    AsyncEventStoreDBClientInstrumentorTestCase
+    AsyncKurrentDBClientInstrumentorTestCase
 ):
     instrument_get_and_read_stream = True
     instrument_grpc = True
@@ -3555,7 +3553,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.PRODUCER,
             span_attributes={
                 "db.operation": "streams.append",
-                "db.eventstoredb.stream": stream_name,
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3565,11 +3563,11 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             num_spans=3,
             span_index=2,
             parent_span_index=None,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3583,9 +3581,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3599,9 +3597,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3615,9 +3613,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_event.id),
-                "db.eventstoredb.event.type": recorded_event.type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_event.id),
+                "db.kurrentdb.event.type": recorded_event.type,
             },
         )
 
@@ -3679,11 +3677,11 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             num_spans=9,
             span_index=2,
             parent_span_index=8,
-            span_name="EventStoreDBClient.read_stream",
+            span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.read_stream",
-                "db.eventstoredb.stream": stream_name,
+                "db.operation": "KurrentDBClient.read_stream",
+                "db.kurrentdb.stream": stream_name,
             },
         )
 
@@ -3696,9 +3694,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[0].id),
-                "db.eventstoredb.event.type": recorded_events[0].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[0].id),
+                "db.kurrentdb.event.type": recorded_events[0].type,
             },
         )
 
@@ -3711,9 +3709,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[1].id),
-                "db.eventstoredb.event.type": recorded_events[1].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[1].id),
+                "db.kurrentdb.event.type": recorded_events[1].type,
             },
         )
 
@@ -3726,9 +3724,9 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
                 "db.operation": "ReadResponse.__next__",
-                "db.eventstoredb.stream": stream_name,
-                "db.eventstoredb.event.id": str(recorded_events[2].id),
-                "db.eventstoredb.event.type": recorded_events[2].type,
+                "db.kurrentdb.stream": stream_name,
+                "db.kurrentdb.event.id": str(recorded_events[2].id),
+                "db.kurrentdb.event.type": recorded_events[2].type,
             },
         )
 
@@ -3761,10 +3759,10 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             num_spans=9,
             span_index=8,
             parent_span_index=None,
-            span_name="EventStoreDBClient.get_stream",
+            span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
             span_attributes={
-                "db.operation": "EventStoreDBClient.get_stream",
+                "db.operation": "KurrentDBClient.get_stream",
             },
         )
 

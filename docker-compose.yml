@@ -99,7 +99,7 @@ services:
 
 networks:
   clusternetwork:
-    name: eventstoredb.local
+    name: kurrentdb.local
     driver: bridge
     ipam:
       driver: default

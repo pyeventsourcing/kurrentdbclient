@@ -119,62 +119,62 @@ grpc-stubs:
 	  --python_out=. \
 	  --grpc_python_out=. \
 	  --mypy_out=. \
-	  protos/esdbclient/protos/Grpc/code.proto     \
-	  protos/esdbclient/protos/Grpc/shared.proto   \
-	  protos/esdbclient/protos/Grpc/status.proto   \
-	  protos/esdbclient/protos/Grpc/streams.proto  \
-	  protos/esdbclient/protos/Grpc/persistent.proto \
-	  protos/esdbclient/protos/Grpc/gossip.proto \
-	  protos/esdbclient/protos/Grpc/cluster.proto \
-	  protos/esdbclient/protos/Grpc/projections.proto
+	  protos/kurrentclient/protos/Grpc/code.proto     \
+	  protos/kurrentclient/protos/Grpc/shared.proto   \
+	  protos/kurrentclient/protos/Grpc/status.proto   \
+	  protos/kurrentclient/protos/Grpc/streams.proto  \
+	  protos/kurrentclient/protos/Grpc/persistent.proto \
+	  protos/kurrentclient/protos/Grpc/gossip.proto \
+	  protos/kurrentclient/protos/Grpc/cluster.proto \
+	  protos/kurrentclient/protos/Grpc/projections.proto
 
-.PHONY: start-eventstoredb-insecure
-start-eventstoredb-insecure:
+.PHONY: start-kurrentdb-insecure
+start-kurrentdb-insecure:
 	@docker run -d -i -t -p 2113:2113 \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
     --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2113" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
     --env "EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true" \
-    --name my-eventstoredb-insecure \
+    --name my-kurrentdb-insecure \
     $(EVENTSTORE_DOCKER_IMAGE) \
     --insecure
 
-.PHONY: start-eventstoredb-secure
-start-eventstoredb-secure:
+.PHONY: start-kurrentdb-secure
+start-kurrentdb-secure:
 	@docker run -d -i -t -p 2114:2113 \
     --env "HOME=/tmp" \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
     --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2114" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
-    --name my-eventstoredb-secure \
+    --name my-kurrentdb-secure \
     $(EVENTSTORE_DOCKER_IMAGE) \
     --dev
 
-.PHONY: attach-eventstoredb-insecure
-attach-eventstoredb-insecure:
-	@docker exec -it my-eventstoredb-insecure /bin/bash
+.PHONY: attach-kurrentdb-insecure
+attach-kurrentdb-insecure:
+	@docker exec -it my-kurrentdb-insecure /bin/bash
 
-.PHONY: attach-eventstoredb-secure
-attach-eventstoredb-secure:
-	@docker exec -it my-eventstoredb-secure /bin/bash
+.PHONY: attach-kurrentdb-secure
+attach-kurrentdb-secure:
+	@docker exec -it my-kurrentdb-secure /bin/bash
 
-.PHONY: stop-eventstoredb-insecure
-stop-eventstoredb-insecure:
-	@docker stop my-eventstoredb-insecure
-	@docker rm my-eventstoredb-insecure
+.PHONY: stop-kurrentdb-insecure
+stop-kurrentdb-insecure:
+	@docker stop my-kurrentdb-insecure
+	@docker rm my-kurrentdb-insecure
 
-.PHONY: stop-eventstoredb-secure
-stop-eventstoredb-secure:
-	@docker stop my-eventstoredb-secure
-	@docker rm my-eventstoredb-secure
+.PHONY: stop-kurrentdb-secure
+stop-kurrentdb-secure:
+	@docker stop my-kurrentdb-secure
+	@docker rm my-kurrentdb-secure
 
-.PHONY: start-eventstoredb
-start-eventstoredb: start-eventstoredb-insecure start-eventstoredb-secure docker-up
+.PHONY: start-kurrentdb
+start-kurrentdb: start-kurrentdb-insecure start-kurrentdb-secure docker-up
 
-.PHONY: stop-eventstoredb
-stop-eventstoredb: stop-eventstoredb-insecure stop-eventstoredb-secure docker-down
+.PHONY: stop-kurrentdb
+stop-kurrentdb: stop-kurrentdb-insecure stop-kurrentdb-secure docker-down
 
 .PHONY: docker-pull
 docker-pull:

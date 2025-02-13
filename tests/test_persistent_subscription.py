@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-import os
 from typing import List
 from unittest import TestCase
 from uuid import UUID, uuid4
 
-from esdbclient import EventStoreDBClient, NewEvent, StreamState
+from kurrentclient import KurrentDBClient, NewEvent, StreamState
 from tests.test_client import get_ca_certificate, get_server_certificate, random_data
 
 
 class TestPersistentSubscriptionACK(TestCase):
-    client: EventStoreDBClient
+    client: KurrentDBClient
 
     ESDB_TARGET = "localhost:2114"
     ESDB_TLS = True
@@ -18,12 +17,12 @@ class TestPersistentSubscriptionACK(TestCase):
     def construct_esdb_client(self) -> None:
         qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
         if self.ESDB_TLS:
-            uri = f"esdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
+            uri = f"kdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
             root_certificates = self.get_root_certificates()
         else:
-            uri = f"esdb://{self.ESDB_TARGET}?Tls=false&{qs}"
+            uri = f"kdb://{self.ESDB_TARGET}?Tls=false&{qs}"
             root_certificates = None
-        self.client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        self.client = KurrentDBClient(uri, root_certificates=root_certificates)
 
     def get_root_certificates(self) -> str:
         if self.ESDB_CLUSTER_SIZE == 1:
