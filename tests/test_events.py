@@ -2,8 +2,8 @@
 from unittest import TestCase
 from uuid import UUID, uuid4
 
-from kurrentclient import Checkpoint, NewEvent, RecordedEvent
-from kurrentclient.events import CaughtUp
+from kurrentdbclient import Checkpoint, NewEvent, RecordedEvent
+from kurrentdbclient.events import CaughtUp
 from tests.test_client import random_data
 
 

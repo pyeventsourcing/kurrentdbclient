@@ -1,6 +1,0 @@
-[run]
-source = kurrentclient
-branch = True
-relative_files = True
-omit =
-    kurrentclient/protos/Grpc/*.py

@@ -7,15 +7,15 @@ from typing import Optional, cast
 from unittest import IsolatedAsyncioTestCase, skip, skipIf
 from uuid import uuid4
 
-from kurrentclient import (
+from kurrentdbclient import (
     AsyncioKurrentDBClient,
     AsyncPersistentSubscription,
     Checkpoint,
     NewEvent,
     StreamState,
 )
-from kurrentclient.asyncio_client import AsyncKurrentDBClient, _AsyncioKurrentDBClient
-from kurrentclient.common import (
+from kurrentdbclient.asyncio_client import AsyncKurrentDBClient, _AsyncioKurrentDBClient
+from kurrentdbclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
     DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
     DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
@@ -26,8 +26,8 @@ from kurrentclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
     DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
 )
-from kurrentclient.events import CaughtUp
-from kurrentclient.exceptions import (
+from kurrentdbclient.events import CaughtUp
+from kurrentdbclient.exceptions import (
     AlreadyExists,
     DeadlineExceeded,
     DiscoveryFailed,
@@ -45,8 +45,8 @@ from kurrentclient.exceptions import (
     StreamIsDeleted,
     WrongCurrentVersion,
 )
-from kurrentclient.persistent import AsyncSubscriptionReadReqs
-from kurrentclient.streams import AsyncCatchupSubscription
+from kurrentdbclient.persistent import AsyncSubscriptionReadReqs
+from kurrentdbclient.streams import AsyncCatchupSubscription
 from tests.test_client import (
     EVENTSTORE_DOCKER_IMAGE,
     PROJECTION_QUERY_TEMPLATE1,

@@ -105,7 +105,7 @@ https://github.com/pyeventsourcing/eventsourcing-kurrentdb) package.
 
 ## Synopsis<a id="synopsis"></a>
 
-The `KurrentDBClient` class can be imported from the `kurrentclient` package.
+The `KurrentDBClient` class can be imported from the `kurrentdbclient` package.
 
 Probably the three most useful methods of `KurrentDBClient` are:
 
@@ -128,7 +128,7 @@ The example below uses an "insecure" KurrentDB server running locally on port 21
 ```python
 import uuid
 
-from kurrentclient import KurrentDBClient, NewEvent, StreamState
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
 
 # Construct KurrentDBClient with an KurrentDB URI. The
 # connection string URI specifies that the client should
@@ -271,13 +271,13 @@ It is recommended to install Python packages into a Python virtual environment.
 You can use pip to install this package directly from
 [the Python Package Index](https://pypi.org/project/esdbclient/).
 
-    $ pip install kurrentclient
+    $ pip install kurrentdbclient
 
 ### With Poetry<a id="with-poetry"></a>
 
 You can use Poetry to add this package to your pyproject.toml and install it.
 
-    $ poetry add kurrentclient
+    $ poetry add kurrentdbclient
 
 ## KurrentDB server<a id="kurrentdb-server"></a>
 
@@ -345,15 +345,15 @@ To stop and remove the "insecure" container, use the following Docker commands.
 
 ## KurrentDB client<a id="kurrentdb-client"></a>
 
-This KurrentDB client is implemented in the `kurrentclient` package with
+This KurrentDB client is implemented in the `kurrentdbclient` package with
 the `KurrentDBClient` class.
 
 ### Import class<a id="import-class"></a>
 
-The `KurrentDBClient` class can be imported from the `kurrentclient` package.
+The `KurrentDBClient` class can be imported from the `kurrentdbclient` package.
 
 ```python
-from kurrentclient import KurrentDBClient
+from kurrentdbclient import KurrentDBClient
 ```
 
 ### Construct client<a id="construct-client"></a>
@@ -1119,7 +1119,7 @@ The `read_stream()` and `get_stream()` methods will raise a `NotFound` exception
 named stream has never existed or has been deleted.
 
 ```python
-from kurrentclient.exceptions import NotFound
+from kurrentdbclient.exceptions import NotFound
 
 try:
     client.get_stream('does-not-exist')
@@ -3243,7 +3243,7 @@ client.close()
 
 ## Asyncio client<a id="asyncio-client"></a>
 
-The `kurrentclient` package also provides an asynchronous I/O gRPC Python client for
+The `kurrentdbclient` package also provides an asynchronous I/O gRPC Python client for
 KurrentDB. It is functionally equivalent to the multithreaded client. It uses
 the `grpc.aio` package and the `asyncio` module, instead of `grpc` and `threading`.
 
@@ -3251,7 +3251,7 @@ It supports both the "kdb" and the "kdb+discover" connection string URI schemes,
 and can connect to both "secure" and "insecure" KurrentDB servers.
 
 The class `AsyncKurrentDBClient` can be used to construct an instance of the
-asynchronous I/O gRPC Python client. It can be imported from `kurrentclient`. The
+asynchronous I/O gRPC Python client. It can be imported from `kurrentdbclient`. The
 async method `connect()` should be called after constructing the client.
 
 The asyncio client has exactly the same methods as the multithreaded `KurrentDBClient`.
@@ -3291,7 +3291,7 @@ semantics.
 ```python
 import asyncio
 
-from kurrentclient import AsyncKurrentDBClient
+from kurrentdbclient import AsyncKurrentDBClient
 
 
 async def demonstrate_async_client():
@@ -3353,7 +3353,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from kurrentclient import AsyncKurrentDBClient
+from kurrentdbclient import AsyncKurrentDBClient
 
 client: AsyncKurrentDBClient
 
@@ -3413,12 +3413,12 @@ persistence subscriptions have `type` strings that start with `PersistentConfig`
 
 For example, to match the type of KurrentDB system events, use the regular
 expression string `r'\$.+'`. Please note, the constant `KDB_SYSTEM_EVENTS_REGEX` is
-set to this value. You can import this constant from `kurrentclient` and use it when
+set to this value. You can import this constant from `kurrentdbclient` and use it when
 building longer sequences of regular expressions.
 
 Similarly, to match the type of KurrentDB persistence subscription events, use the
 regular expression `r'PersistentConfig\d+'`. The constant `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`
-is set to this value. You can import this constant from `kurrentclient` and use it when
+is set to this value. You can import this constant from `kurrentdbclient` and use it when
 building longer sequences of regular expressions.
 
 The constant `DEFAULT_EXCLUDE_FILTER` is a sequence of regular expressions that includes
@@ -3509,18 +3509,18 @@ project's "opentelemetry" package extra to ensure verified version compatibility
 
 For example, you can install the "opentelemetry" package extra with pip.
 
-    $ pip install kurrentclient[opentelemetry]
+    $ pip install kurrentdbclient[opentelemetry]
 
 Or you can use Poetry to add it to your pyproject.toml file and install it.
 
-    $ poetry add kurrentclient[opentelemetry]
+    $ poetry add kurrentdbclient[opentelemetry]
 
 
 You can then use the OpenTelemetry instrumentor `KurrentDBClientInstrumentor` to
 instrument the `KurrentDBClient`.
 
 ```python
-from kurrentclient.instrumentation.opentelemetry import KurrentDBClientInstrumentor
+from kurrentdbclient.instrumentation.opentelemetry import KurrentDBClientInstrumentor
 
 # Activate instrumentation.
 KurrentDBClientInstrumentor().instrument()
@@ -3533,7 +3533,7 @@ You can also use the OpenTelemetry instrumentor `AsyncKurrentDBClientInstrumento
 to instrument the `AsyncKurrentDBClient`.
 
 ```python
-from kurrentclient.instrumentation.opentelemetry import AsyncKurrentDBClientInstrumentor
+from kurrentdbclient.instrumentation.opentelemetry import AsyncKurrentDBClientInstrumentor
 
 # Activate instrumentation.
 AsyncKurrentDBClientInstrumentor().instrument()
@@ -3728,7 +3728,7 @@ You can reformat the code using the following command.
 
 Tests belong in `./tests`.
 
-Code-under-test belongs in `./kurrentclient`.
+Code-under-test belongs in `./kurrentdbclient`.
 
 Edit package dependencies in `pyproject.toml`.
 

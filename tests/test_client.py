@@ -17,10 +17,10 @@ from grpc import RpcError, StatusCode
 from grpc._channel import _MultiThreadedRendezvous, _RPCState
 from grpc._cython.cygrpc import IntegratedCall
 
-import kurrentclient.protos.Grpc.persistent_pb2 as grpc_persistent
-from kurrentclient import KDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
-from kurrentclient.client import KurrentDBClient
-from kurrentclient.common import (
+import kurrentdbclient.protos.Grpc.persistent_pb2 as grpc_persistent
+from kurrentdbclient import KDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
+from kurrentdbclient.client import KurrentDBClient
+from kurrentdbclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
     DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
     DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
@@ -32,13 +32,13 @@ from kurrentclient.common import (
     DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
     handle_rpc_error,
 )
-from kurrentclient.connection_spec import (
+from kurrentdbclient.connection_spec import (
     NODE_PREFERENCE_FOLLOWER,
     NODE_PREFERENCE_LEADER,
     ConnectionSpec,
 )
-from kurrentclient.events import CaughtUp, Checkpoint, NewEvent
-from kurrentclient.exceptions import (
+from kurrentdbclient.events import CaughtUp, Checkpoint, NewEvent
+from kurrentdbclient.exceptions import (
     AbortedByServer,
     AlreadyExists,
     ConsumerTooSlow,
@@ -61,9 +61,9 @@ from kurrentclient.exceptions import (
     UnknownError,
     WrongCurrentVersion,
 )
-from kurrentclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
-from kurrentclient.persistent import SubscriptionReadReqs
-from kurrentclient.protos.Grpc import persistent_pb2
+from kurrentdbclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
+from kurrentdbclient.persistent import SubscriptionReadReqs
+from kurrentdbclient.protos.Grpc import persistent_pb2
 
 started = datetime.datetime.now()
 last = datetime.datetime.now()
@@ -7132,7 +7132,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         self._set_reader_connection_on_writer()
 
         # Todo: Occasionally getting "Exception was thrown by handler." from this. Why?
-        #   kurrentclient.exceptions.ExceptionThrownByHandler: <_MultiThreadedRendezvous of
+        #   kurrentdbclient.exceptions.ExceptionThrownByHandler: <_MultiThreadedRendezvous of
         #   RPC that terminated with:
         #       status = StatusCode.UNKNOWN
         #       details = "Exception was thrown by handler."

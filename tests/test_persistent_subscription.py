@@ -3,7 +3,7 @@ from typing import List
 from unittest import TestCase
 from uuid import UUID, uuid4
 
-from kurrentclient import KurrentDBClient, NewEvent, StreamState
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
 from tests.test_client import get_ca_certificate, get_server_certificate, random_data
 
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from unittest.async_case import IsolatedAsyncioTestCase
 
-from kurrentclient import AsyncKurrentDBClient, NewEvent, StreamState
+from kurrentdbclient import AsyncKurrentDBClient, NewEvent, StreamState
 from tests.test_client import (
     KurrentDBClientTestCase,
     get_server_certificate,

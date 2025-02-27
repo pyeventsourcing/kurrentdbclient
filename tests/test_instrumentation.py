@@ -54,31 +54,31 @@ from opentelemetry.trace import (
 )
 from opentelemetry.util.types import AttributeValue
 
-from kurrentclient import (
+from kurrentdbclient import (
     AsyncKurrentDBClient,
     KurrentDBClient,
     NewEvent,
     RecordedEvent,
     StreamState,
 )
-from kurrentclient.client import BaseKurrentDBClient
-from kurrentclient.common import (
+from kurrentdbclient.client import BaseKurrentDBClient
+from kurrentdbclient.common import (
     AbstractAsyncCatchupSubscription,
     AbstractAsyncPersistentSubscription,
     AbstractCatchupSubscription,
     AbstractPersistentSubscription,
 )
-from kurrentclient.exceptions import DiscoveryFailed, GrpcError, ServiceUnavailable
-from kurrentclient.instrumentation.opentelemetry import (
+from kurrentdbclient.exceptions import DiscoveryFailed, GrpcError, ServiceUnavailable
+from kurrentdbclient.instrumentation.opentelemetry import (
     AsyncKurrentDBClientInstrumentor,
     KurrentDBClientInstrumentor,
 )
-from kurrentclient.instrumentation.opentelemetry.spanners import (
+from kurrentdbclient.instrumentation.opentelemetry.spanners import (
     _enrich_span,
     _extract_context_from_event,
     _set_context_in_events,
 )
-from kurrentclient.instrumentation.opentelemetry.utils import (
+from kurrentdbclient.instrumentation.opentelemetry.utils import (
     AsyncSpannerResponse,
     OverloadedSpannerResponse,
     SpannerResponse,
@@ -1026,7 +1026,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
         span_name: str = "",
         span_kind: trace_api.SpanKind = trace_api.SpanKind.CLIENT,
         parent_span_index: Optional[int] = None,
-        instrumentation_scope_name: str = "kurrentclient.instrumentation.opentelemetry",
+        instrumentation_scope_name: str = "kurrentdbclient.instrumentation.opentelemetry",
         instrumentation_scope_version: str = "1.1",
         span_attributes: Optional[Dict[str, Any]] = None,
         error: Optional[Exception] = None,
@@ -1340,7 +1340,7 @@ class TestUtils(
     KurrentDBClientInstrumentorTestCase, BaseUtilsTestCase[KurrentDBClient]
 ):
     def test_span_helpers(self) -> None:
-        tracer = get_tracer("kurrentclient.instrumentation.opentelemetry", "1.1")
+        tracer = get_tracer("kurrentdbclient.instrumentation.opentelemetry", "1.1")
         client = self.construct_client()
         self.check_spans(num_spans=0)
         with _start_span(tracer, "test_enrich_span1", SpanKind.INTERNAL) as span:

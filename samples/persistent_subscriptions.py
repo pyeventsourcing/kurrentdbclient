@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 
-from kurrentclient import KurrentDBClient, NewEvent, StreamState
-from kurrentclient.exceptions import ConsumerTooSlow
-from kurrentclient.persistent import (
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
+from kurrentdbclient.exceptions import ConsumerTooSlow
+from kurrentdbclient.persistent import (
     PersistentSubscription,
     RecordedEvent,
 )

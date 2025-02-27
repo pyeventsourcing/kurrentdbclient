@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 
-from kurrentclient import (
+from kurrentdbclient import (
     KurrentDBClient,
     NewEvent,
     StreamState,

@@ -119,14 +119,14 @@ grpc-stubs:
 	  --python_out=. \
 	  --grpc_python_out=. \
 	  --mypy_out=. \
-	  protos/kurrentclient/protos/Grpc/code.proto     \
-	  protos/kurrentclient/protos/Grpc/shared.proto   \
-	  protos/kurrentclient/protos/Grpc/status.proto   \
-	  protos/kurrentclient/protos/Grpc/streams.proto  \
-	  protos/kurrentclient/protos/Grpc/persistent.proto \
-	  protos/kurrentclient/protos/Grpc/gossip.proto \
-	  protos/kurrentclient/protos/Grpc/cluster.proto \
-	  protos/kurrentclient/protos/Grpc/projections.proto
+	  protos/kurrentdbclient/protos/Grpc/code.proto     \
+	  protos/kurrentdbclient/protos/Grpc/shared.proto   \
+	  protos/kurrentdbclient/protos/Grpc/status.proto   \
+	  protos/kurrentdbclient/protos/Grpc/streams.proto  \
+	  protos/kurrentdbclient/protos/Grpc/persistent.proto \
+	  protos/kurrentdbclient/protos/Grpc/gossip.proto \
+	  protos/kurrentdbclient/protos/Grpc/cluster.proto \
+	  protos/kurrentdbclient/protos/Grpc/projections.proto
 
 .PHONY: start-kurrentdb-insecure
 start-kurrentdb-insecure:

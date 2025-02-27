@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kurrentclient"
+name = "kurrentdbclient"
 version = "0.3"
 
 description = "Python gRPC Client for KurrentDB"
@@ -24,7 +24,7 @@ classifiers = [
 readme = "README.md"
 homepage = "https://github.com/pyeventsourcing/esdbclient"
 repository = "https://github.com/pyeventsourcing/esdbclient"
-include = ["kurrentclient/py.typed"]
+include = ["kurrentdbclient/py.typed"]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
@@ -85,15 +85,18 @@ exclude = '''
   | buck-out
   | build
   | dist
-  | kurrentclient/protos
+  | kurrentdbclient/protos
 )/
 '''
 
 [tool.coverage.run]
+source = ["kurrentdbclient"]
 branch = true
 omit = [
-    "kurrentclient/protos/*"
+    "kurrentdbclient/protos/*"
 ]
+relative_files = true
+
 
 [tool.coverage.report]
 exclude_lines = [
@@ -122,4 +125,4 @@ exclude_lines = [
 combine_as_imports = true
 profile = "black"
 sections = "FUTURE,STDLIB,THIRDPARTY,FIRSTPARTY,LOCALFOLDER"
-skip = ".eggs,.pip-cache,.poetry,venv,.venv,dist,kurrentclient/protos"
+skip = ".eggs,.pip-cache,.poetry,venv,.venv,dist,kurrentdbclient/protos"

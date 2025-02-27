@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from uuid import uuid4
 
-from kurrentclient import KurrentDBClient, NewEvent, StreamState
-from kurrentclient.streams import CatchupSubscription, RecordedEvent
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
+from kurrentdbclient.streams import CatchupSubscription, RecordedEvent
 from tests.test_client import get_server_certificate
 
 DEBUG = False
