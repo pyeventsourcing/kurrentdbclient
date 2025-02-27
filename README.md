@@ -7,7 +7,7 @@ The multithreaded `KurrentDBClient` is described in detail below. Please scroll
 down for <a href="#asyncio-client">information</a> about `AsyncKurrentDBClient`.
 
 These clients have been developed and are being maintained in a collaboration
-with the KurrentDB team, and are officially support by Event Store Ltd.
+with the KurrentDB team, and are officially support by Kurrent Inc.
 Although not all aspects of the KurrentDB gRPC API are implemented, most
 features are presented in an easy-to-use interface.
 
