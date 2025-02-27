@@ -20,8 +20,8 @@ checked strictly with mypy. The code is formatted with black and isort, and chec
 with flake8. Poetry is used for package management during development, and for
 building and publishing distributions to [PyPI](https://pypi.org/project/esdbclient/).
 
-For an example of usage, see the [eventsourcing-kurrentdb](
-https://github.com/pyeventsourcing/eventsourcing-kurrentdb) package.
+For an example of usage, see the [eventsourcing-eventstoredb](
+https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
 
 
 <!-- TOC -->
