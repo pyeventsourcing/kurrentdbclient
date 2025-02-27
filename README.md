@@ -1,7 +1,7 @@
 # Python gRPC Client for KurrentDB
 
-This [Python package](https://pypi.org/project/esdbclient/) provides multithreaded and asyncio Python
-clients for the [KurrentDB](https://www.eventstore.com/) database.
+This [Python package](https://pypi.org/project/kurrentdbclient/) provides multithreaded and asyncio Python
+clients for the [KurrentDB](https://kurrent.io/) database.
 
 The multithreaded `KurrentDBClient` is described in detail below. Please scroll
 down for <a href="#asyncio-client">information</a> about `AsyncKurrentDBClient`.
@@ -269,7 +269,7 @@ It is recommended to install Python packages into a Python virtual environment.
 ### From PyPI<a id="from-pypi"></a>
 
 You can use pip to install this package directly from
-[the Python Package Index](https://pypi.org/project/esdbclient/).
+[the Python Package Index](https://pypi.org/project/kurrentdbclient/).
 
     $ pip install kurrentdbclient
 
@@ -2856,7 +2856,7 @@ client.delete_subscription(
 
 ## Projections<a id="projections"></a>
 
-Please refer to the [KurrentDB documentation](https://developers.eventstore.com/server/v23.10/projections.html)
+Please refer to the [KurrentDB documentation](https://docs.kurrent.io/server/v24.10/features/projections/)
 for more information on projections in KurrentDB.
 
 ### Create projection<a id="create-projection"></a>
