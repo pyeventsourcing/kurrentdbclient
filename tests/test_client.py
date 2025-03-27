@@ -2671,7 +2671,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             events=[event1, event2, event3],
         )
 
-        def get_event_at_commit_position(commit_position: int) -> RecordedEvent:
+        def get_event_at_commit_position(
+            commit_position: int,
+        ) -> Optional[RecordedEvent]:
             read_response = self.client.read_all(
                 commit_position=commit_position,
                 # backwards=True,
@@ -2679,12 +2681,16 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 limit=1,
             )
             events = tuple(read_response)
-            assert len(events) == 1, len(events)
-            event = events[0]
-            assert event.commit_position == commit_position, event
-            return event
+            if len(events) == 1:
+                event = events[0]
+                assert event.commit_position == commit_position, event
+                return event
+            else:
+                return None
 
         event = get_event_at_commit_position(first_append_commit_position)
+        self.assertIsNotNone(event)
+        assert event is not None  # for mypy
         self.assertEqual(event.id, event3.id)
         self.assertEqual(event.commit_position, first_append_commit_position)
         current_commit_position = self.client.get_commit_position(filter_exclude=[])
@@ -2710,16 +2716,56 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         except GrpcDeadlineExceeded:
             pass
 
+        fail_msg = ""
+
         if (
             checkpoint_commit_position is not None
             and checkpoint_commit_position > current_commit_position
         ):
-            self.fail(
+            fail_msg = (
                 f"Server has 'extra checkpoint' bug ("
                 f"checkpoint commit position: {checkpoint_commit_position}, "
-                f"current commit position: {current_commit_position}. "
-                f"Please use v23.10 or later."
+                f"current commit position: {current_commit_position}."
             )
+
+        if fail_msg:
+            assert checkpoint_commit_position is not None  # for mypy
+            event_at_checkpoint_commit_position = get_event_at_commit_position(
+                checkpoint_commit_position
+            )
+            if event_at_checkpoint_commit_position is None:
+                fail_msg += " No event found at checkpoint commit position."
+            else:
+                fail_msg += (
+                    f" Event at checkpoint commit position:"
+                    f" {event_at_checkpoint_commit_position}."
+                )
+
+            if event_at_checkpoint_commit_position is None:
+                event4 = NewEvent(type="OrderUndeleted", data=random_data())
+                second_append_commit_position = self.client.append_events(
+                    stream_name1,
+                    current_version=2,
+                    events=[event4],
+                )
+                if second_append_commit_position == checkpoint_commit_position:
+                    fail_msg += (
+                        " Checkpoint commit position was used for "
+                        "subsequently recorded event."
+                    )
+                elif second_append_commit_position > checkpoint_commit_position:
+                    fail_msg += (
+                        " Checkpoint commit position was less than "
+                        "commit position of subsequently recorded event."
+                    )
+                else:
+                    fail_msg += (
+                        " Checkpoint commit position was greater than "
+                        "commit position of subsequently recorded event."
+                    )
+
+        if fail_msg:
+            self.fail(fail_msg)
 
     def test_subscribe_to_all_from_commit_position_zero(self) -> None:
         self.construct_esdb_client()
