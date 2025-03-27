@@ -1,3 +1,11 @@
+<a href="https://kurrent.io">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="KurrentLogo-White.png">
+    <source media="(prefers-color-scheme: light)" srcset="KurrentLogo-Black.png">
+    <img alt="Kurrent" src="KurrentLogo-Plum.png" height="50%" width="50%">
+  </picture>
+</a>
+
 # Python gRPC Client for KurrentDB
 
 This [Python package](https://pypi.org/project/kurrentdbclient/) provides multithreaded and asyncio Python
