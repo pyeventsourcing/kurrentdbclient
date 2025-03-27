@@ -69,7 +69,7 @@ from kurrentdbclient.protos.Grpc import persistent_pb2
 started = datetime.datetime.now()
 last = datetime.datetime.now()
 
-EVENTSTORE_DOCKER_IMAGE = os.environ.get("EVENTSTORE_DOCKER_IMAGE", "24.2")
+EVENTSTORE_DOCKER_IMAGE = os.environ.get("EVENTSTORE_DOCKER_IMAGE", "25.0.0")
 
 # os.environ["GRPC_VERBOSITY"] = "debug"
 # os.environ["GRPC_TRACE"] = "all"
@@ -2578,7 +2578,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             events = tuple(read_response)
             return len(events)
 
-        self.assertEqual(1, count_events_from_commit_position(first_append_commit_position))
+        self.assertEqual(
+            1, count_events_from_commit_position(first_append_commit_position)
+        )
 
         # Subscribe to all events, large window to discourage checkpoint generation.
         subscription1 = self.client.subscribe_to_all(
@@ -2650,7 +2652,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # mean that an event is recorded and not received.
 
         # Show there are two events from the checkpoint commit position.
-        self.assertEqual(count_events_from_commit_position(last_checkpoint_commit_position), 2)
+        self.assertEqual(
+            count_events_from_commit_position(last_checkpoint_commit_position), 2
+        )
 
     @skipIf("21.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug not fixed")
     def test_extra_checkpoint_bug_is_fixed(self) -> None:
@@ -2710,7 +2714,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             checkpoint_commit_position is not None
             and checkpoint_commit_position > current_commit_position
         ):
-            self.fail("Server has 'extra checkpoint' bug. Please use v23.10 or later.")
+            self.fail(
+                f"Server has 'extra checkpoint' bug ("
+                f"checkpoint commit position: {checkpoint_commit_position}, "
+                f"current commit position: {current_commit_position}. "
+                f"Please use v23.10 or later."
+            )
 
     def test_subscribe_to_all_from_commit_position_zero(self) -> None:
         self.construct_esdb_client()
