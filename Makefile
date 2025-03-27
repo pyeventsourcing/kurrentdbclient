@@ -5,9 +5,10 @@
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
-EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
+# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:24.2.0-alpha.115-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-staging-ce/eventstoredb-ce:24.6.0-nightly-x64-8.0-jammy
+EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
 
 
 POETRY ?= poetry
@@ -132,7 +133,7 @@ grpc-stubs:
 start-kurrentdb-insecure:
 	@docker run -d -i -t -p 2113:2113 \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
-    --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2113" \
+    --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2113" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
     --env "EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true" \
@@ -145,7 +146,7 @@ start-kurrentdb-secure:
 	@docker run -d -i -t -p 2114:2113 \
     --env "HOME=/tmp" \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
-    --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2114" \
+    --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2114" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
     --name my-kurrentdb-secure \
@@ -205,6 +206,10 @@ docker-down:
 .PHONY: docker-logs
 docker-logs:
 	@docker compose logs --follow --tail=1000
+
+.PHONY: docker-compose-ps
+docker-compose-ps:
+	@docker compose ps
 
 
 # Jaeger natively supports OTLP to receive trace data. You can run Jaeger in a docker container

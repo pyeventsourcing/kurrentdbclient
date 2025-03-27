@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 import grpc
 import grpc.aio
@@ -48,11 +50,6 @@ class ProjectionStatistics:
 
 @dataclass(frozen=True)
 class ProjectionState:
-    value: Any
-
-
-@dataclass(frozen=True)
-class ProjectionResult:
     value: Any
 
 
@@ -115,11 +112,21 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_statistics_req(
-        name: str,
+        *,
+        name: str | None = None,
+        all: bool = False,
     ) -> projections_pb2.StatisticsReq:
-        return projections_pb2.StatisticsReq(
-            options=projections_pb2.StatisticsReq.Options(name=name),
-        )
+        if name is not None:
+            options = projections_pb2.StatisticsReq.Options(name=name)
+        elif all:
+            options = projections_pb2.StatisticsReq.Options(
+                all=shared_pb2.Empty(),
+            )
+        else:
+            options = projections_pb2.StatisticsReq.Options(
+                continuous=shared_pb2.Empty(),
+            )
+        return projections_pb2.StatisticsReq(options=options)
 
     @staticmethod
     def _construct_disable_req(
@@ -348,6 +355,34 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 raise KurrentDBClientException(
                     "Statistics request didn't return any statistics"
                 )
+        except grpc.RpcError as e:
+            raise handle_rpc_error(e) from None
+
+    async def list_statistics(
+        self,
+        all: bool = False,
+        timeout: Optional[float] = None,
+        metadata: Optional[Metadata] = None,
+        credentials: Optional[grpc.CallCredentials] = None,
+    ) -> List[ProjectionStatistics]:  # pragma: no cover
+        statistics_req = self._construct_statistics_req(all=all)
+        try:
+            statistics_resps = self._stub.Statistics(
+                statistics_req,
+                timeout=timeout,
+                metadata=self._metadata(metadata, requires_leader=True),
+                credentials=credentials,
+            )
+            list_of_projection_statistics = []
+            async for statistics_resp in statistics_resps:
+                assert isinstance(
+                    statistics_resp, projections_pb2.StatisticsResp
+                ), statistics_resp
+                projection_statistics = self._construct_projection_statistics(
+                    statistics_resp
+                )
+                list_of_projection_statistics.append(projection_statistics)
+            return list_of_projection_statistics
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
 
@@ -597,6 +632,34 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 raise KurrentDBClientException(
                     "Statistics request didn't return any statistics"
                 )
+        except grpc.RpcError as e:
+            raise handle_rpc_error(e) from None
+
+    def list_statistics(
+        self,
+        all: bool = False,
+        timeout: Optional[float] = None,
+        metadata: Optional[Metadata] = None,
+        credentials: Optional[grpc.CallCredentials] = None,
+    ) -> List[ProjectionStatistics]:  # pragma: no cover
+        statistics_req = self._construct_statistics_req(all=all)
+        try:
+            statistics_resps = self._stub.Statistics(
+                statistics_req,
+                timeout=timeout,
+                metadata=self._metadata(metadata, requires_leader=True),
+                credentials=credentials,
+            )
+            list_of_projection_statistics = []
+            for statistics_resp in statistics_resps:
+                assert isinstance(
+                    statistics_resp, projections_pb2.StatisticsResp
+                ), statistics_resp
+                projection_statistics = self._construct_projection_statistics(
+                    statistics_resp
+                )
+                list_of_projection_statistics.append(projection_statistics)
+            return list_of_projection_statistics
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
 

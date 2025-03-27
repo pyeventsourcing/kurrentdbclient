@@ -46,6 +46,7 @@ from kurrentdbclient.exceptions import (
     WrongCurrentVersion,
 )
 from kurrentdbclient.persistent import AsyncSubscriptionReadReqs
+from kurrentdbclient.projections import ProjectionStatistics
 from kurrentdbclient.streams import AsyncCatchupSubscription
 from tests.test_client import (
     EVENTSTORE_DOCKER_IMAGE,
@@ -2687,6 +2688,36 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         statistics = await self.client.get_projection_statistics(name=projection_name)
         self.assertEqual(projection_name, statistics.name)
 
+    async def test_list_all_projection_statistics(self) -> None:
+        projection_name = str(uuid4())
+
+        # Create named projection.
+        await self.client.create_projection(
+            query=PROJECTION_QUERY_TEMPLATE1 % ("app-" + projection_name),
+            name=projection_name,
+        )
+        await asyncio.sleep(0.5)
+
+        statistics = await self.client.list_all_projection_statistics()
+        self.assertIsInstance(statistics, list)
+        self.assertGreater(len(statistics), 0)
+        self.assertIsInstance(statistics[0], ProjectionStatistics)
+
+    async def test_list_continuous_projection_statistics(self) -> None:
+        projection_name = str(uuid4())
+
+        # Create named projection.
+        await self.client.create_projection(
+            query=PROJECTION_QUERY_TEMPLATE1 % ("app-" + projection_name),
+            name=projection_name,
+        )
+
+        await asyncio.sleep(0.5)
+        statistics = await self.client.list_continuous_projection_statistics()
+        self.assertIsInstance(statistics, list)
+        self.assertGreater(len(statistics), 0)
+        self.assertIsInstance(statistics[0], ProjectionStatistics)
+
     async def test_disable_projection(self) -> None:
         projection_name = str(uuid4())
 
@@ -2699,6 +2730,19 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Disable projection.
         await self.client.disable_projection(name=projection_name)
+
+    async def test_abort_projection(self) -> None:
+        projection_name = str(uuid4())
+
+        # Raises NotFound unless projection exists.
+        with self.assertRaises(NotFound):
+            await self.client.disable_projection(name=projection_name)
+
+        # Create named projection.
+        await self.client.create_projection(query="", name=projection_name)
+
+        # Abort projection.
+        await self.client.abort_projection(name=projection_name)
 
     async def test_enable_projection(self) -> None:
         projection_name = str(uuid4())

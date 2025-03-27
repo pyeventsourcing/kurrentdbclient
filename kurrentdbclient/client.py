@@ -13,6 +13,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -1752,12 +1753,51 @@ class KurrentDBClient(BaseKurrentDBClient):
         credentials: Optional[grpc.CallCredentials] = None,
     ) -> ProjectionStatistics:
         """
-        Gets projection statistics.
+        Gets statistics for named projection.
         """
         timeout = timeout if timeout is not None else self._default_deadline
 
         return self.projections.get_statistics(
             name=name,
+            timeout=timeout,
+            metadata=self._call_metadata,
+            credentials=credentials or self._call_credentials,
+        )
+
+    @retrygrpc
+    @autoreconnect
+    def list_continuous_projection_statistics(
+        self,
+        *,
+        timeout: Optional[float] = None,
+        credentials: Optional[grpc.CallCredentials] = None,
+    ) -> List[ProjectionStatistics]:
+        """
+        Lists statistics for continuous projections.
+        """
+        timeout = timeout if timeout is not None else self._default_deadline
+
+        return self.projections.list_statistics(
+            timeout=timeout,
+            metadata=self._call_metadata,
+            credentials=credentials or self._call_credentials,
+        )
+
+    @retrygrpc
+    @autoreconnect
+    def list_all_projection_statistics(
+        self,
+        *,
+        timeout: Optional[float] = None,
+        credentials: Optional[grpc.CallCredentials] = None,
+    ) -> List[ProjectionStatistics]:
+        """
+        Lists statistics for all projections.
+        """
+        timeout = timeout if timeout is not None else self._default_deadline
+
+        return self.projections.list_statistics(
+            all=True,
             timeout=timeout,
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,
@@ -1787,6 +1827,28 @@ class KurrentDBClient(BaseKurrentDBClient):
 
     @retrygrpc
     @autoreconnect
+    def abort_projection(
+        self,
+        name: str,
+        *,
+        timeout: Optional[float] = None,
+        credentials: Optional[grpc.CallCredentials] = None,
+    ) -> None:
+        """
+        Aborts a projection.
+        """
+        timeout = timeout if timeout is not None else self._default_deadline
+
+        self.projections.disable(
+            name=name,
+            write_checkpoint=False,
+            timeout=timeout,
+            metadata=self._call_metadata,
+            credentials=credentials or self._call_credentials,
+        )
+
+    @retrygrpc
+    @autoreconnect
     def enable_projection(
         self,
         name: str,
@@ -1795,7 +1857,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         credentials: Optional[grpc.CallCredentials] = None,
     ) -> None:
         """
-        Disables a projection.
+        Enables a projection.
         """
         timeout = timeout if timeout is not None else self._default_deadline
 

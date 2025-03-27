@@ -63,6 +63,7 @@ from kurrentdbclient.exceptions import (
 )
 from kurrentdbclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
 from kurrentdbclient.persistent import SubscriptionReadReqs
+from kurrentdbclient.projections import ProjectionStatistics
 from kurrentdbclient.protos.Grpc import persistent_pb2
 
 started = datetime.datetime.now()
@@ -2552,6 +2553,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     @skipIf("24.2" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
     @skipIf("24.6" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
     @skipIf("24.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("25.0.0" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
     def test_demonstrate_extra_checkpoint_bug(self) -> None:
         self.construct_esdb_client()
 
@@ -6376,6 +6378,42 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         statistics = self.client.get_projection_statistics(name=projection_name)
         self.assertEqual(projection_name, statistics.name)
 
+    # @skip("Listing projection statistics is flaky (error thrown by handler)")
+    # # Todo: Figure out why this sometimes works and sometimes doesn't.
+    def test_list_all_projection_statistics(self) -> None:
+        self.construct_esdb_client()
+        projection_name = str(uuid4())
+
+        # Create named projection.
+        self.client.create_projection(
+            query=PROJECTION_QUERY_TEMPLATE1 % ("app-" + projection_name),
+            name=projection_name,
+        )
+        sleep(0.5)
+
+        statistics = self.client.list_all_projection_statistics()
+        self.assertIsInstance(statistics, list)
+        self.assertGreater(len(statistics), 0)
+        self.assertIsInstance(statistics[0], ProjectionStatistics)
+
+    # @skip("Listing projection statistics is flaky (error thrown by handler)")
+    # # Todo: Figure out why this sometimes works and sometimes doesn't.
+    def test_list_continuous_projection_statistics(self) -> None:
+        self.construct_esdb_client()
+        projection_name = str(uuid4())
+
+        # Create named projection.
+        self.client.create_projection(
+            query=PROJECTION_QUERY_TEMPLATE1 % ("app-" + projection_name),
+            name=projection_name,
+        )
+
+        sleep(0.5)
+        statistics = self.client.list_continuous_projection_statistics()
+        self.assertIsInstance(statistics, list)
+        self.assertGreater(len(statistics), 0)
+        self.assertIsInstance(statistics[0], ProjectionStatistics)
+
     def test_disable_projection(self) -> None:
         self.construct_esdb_client()
         projection_name = str(uuid4())
@@ -6389,6 +6427,20 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Disable projection.
         self.client.disable_projection(name=projection_name)
+
+    def test_abort_projection(self) -> None:
+        self.construct_esdb_client()
+        projection_name = str(uuid4())
+
+        # Raises NotFound unless projection exists.
+        with self.assertRaises(NotFound):
+            self.client.disable_projection(name=projection_name)
+
+        # Create named projection.
+        self.client.create_projection(query="", name=projection_name)
+
+        # Abort projection.
+        self.client.abort_projection(name=projection_name)
 
     def test_enable_projection(self) -> None:
         self.construct_esdb_client()
