@@ -2557,6 +2557,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     def test_demonstrate_extra_checkpoint_bug(self) -> None:
         self.construct_esdb_client()
 
+        initial_commit_position = self.client.get_commit_position()
+
         # Append new events.
         event1 = NewEvent(type="OrderCreated", data=random_data())
         event2 = NewEvent(type="OrderUpdated", data=random_data())
@@ -2568,72 +2570,65 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             events=[event1, event2, event3],
         )
 
-        def get_event_at_commit_position(commit_position: int) -> RecordedEvent:
+        def count_events_from_commit_position(commit_position: int) -> int:
             read_response = self.client.read_all(
                 commit_position=commit_position,
-                # backwards=True,
                 filter_exclude=[],
-                limit=1,
             )
             events = tuple(read_response)
-            assert len(events) == 1, len(events)
-            event = events[0]
-            assert event.commit_position == commit_position, event
-            return event
+            return len(events)
 
-        event = get_event_at_commit_position(first_append_commit_position)
-        self.assertEqual(event.id, event3.id)
-        self.assertEqual(event.commit_position, first_append_commit_position)
-        current_commit_position = self.client.get_commit_position(filter_exclude=[])
-        self.assertEqual(event.commit_position, current_commit_position)
+        self.assertEqual(1, count_events_from_commit_position(first_append_commit_position))
 
-        # Subscribe excluding all events, with large window.
+        # Subscribe to all events, large window to discourage checkpoint generation.
         subscription1 = self.client.subscribe_to_all(
-            # filter_exclude=[".*"],
+            commit_position=initial_commit_position,
             include_checkpoints=True,
             window_size=10000,
             checkpoint_interval_multiplier=500,
-            timeout=10,
+            timeout=1,
         )
 
-        # We always get a checkpoint at the end..... why?
+        # Iterate over subscription, remembering last checkpoint commit position.
+        last_checkpoint_commit_position: Optional[int] = None
+        last_event: Optional[RecordedEvent] = None
         try:
-            for event in subscription1:
-                if isinstance(event, Checkpoint):
-                    last_checkpoint_commit_position = event.commit_position
-                    break
-                else:
-                    pass
+            for _event in subscription1:
+                if isinstance(_event, Checkpoint):
+                    last_checkpoint_commit_position = _event.commit_position
+                elif isinstance(_event, RecordedEvent):
+                    last_event = _event
         except DeadlineExceeded:
-            self.fail("We didn't get the extra checkpoint! Hooray!")
+            pass
 
-        # Sadly, the checkpoint commit position doesn't correspond
-        # to an event that has been filtered out.
-        with self.assertRaises(AssertionError):
-            assert event.commit_position is not None
-            get_event_at_commit_position(event.commit_position)
+        # Check we got an event.
+        assert last_event is not None
 
-        # And the checkpoint commit position is greater than the current commit position.
+        # Check the last event is event3.
+        self.assertEqual(last_event.id, event3.id, last_event)
+
+        # Check we got a checkpoint.
         assert last_checkpoint_commit_position is not None
-        self.assertLess(
-            self.client.get_commit_position(filter_exclude=[]),
+
+        # Show the checkpoint commit position is greater than the current commit position.
+        self.assertGreater(
             last_checkpoint_commit_position,
+            self.client.get_commit_position(filter_exclude=[]),
         )
 
-        # And the checkpoint commit position is allocated to the next appended new event.
+        # Append another event.
         event4 = NewEvent(type="OrderCreated", data=random_data())
         stream_name2 = str(uuid4())
-        next_append_commit_position = self.client.append_events(
+        second_append_commit_position = self.client.append_events(
             stream_name2,
             current_version=StreamState.NO_STREAM,
             events=[event4],
         )
-        self.assertEqual(next_append_commit_position, last_checkpoint_commit_position)
 
-        # Which means that if a downstream event-processing component is going to
-        # restart a catch-up subscription from last_checkpoint_commit_position,
-        # it would not receive event4.
+        # Show the checkpoint commit position is allocated to the next appended event.
+        self.assertEqual(second_append_commit_position, last_checkpoint_commit_position)
 
+        # Append another event.
         event5 = NewEvent(type="OrderCreated", data=random_data())
         stream_name3 = str(uuid4())
         self.client.append_events(
@@ -2642,22 +2637,20 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             events=[event5],
         )
 
+        # Subscribe from the last checkpoint commit position.
         subscription2 = self.client.subscribe_to_all(
             commit_position=last_checkpoint_commit_position
         )
-        next_event_from_2 = next(subscription2)
-        assert isinstance(next_event_from_2.commit_position, int)
-        self.assertGreater(
-            next_event_from_2.commit_position, last_checkpoint_commit_position
-        )
-        self.assertNotEqual(next_event_from_2.id, event4.id)
-        self.assertEqual(next_event_from_2.id, event5.id)
+        first_event_from_subscription2 = next(subscription2)
 
-        next_event_from_1 = next(subscription1)
-        self.assertEqual(next_event_from_1.id, event4.id)
-        self.assertEqual(
-            next_event_from_1.commit_position, last_checkpoint_commit_position
-        )
+        # Show the first event from subscription2 is event5, and not event4.
+        self.assertEqual(first_event_from_subscription2.id, event5.id)
+        self.assertNotEqual(first_event_from_subscription2.id, event4.id)
+        # Et voila! Resuming a subscription from the checkpoint commit position would
+        # mean that an event is recorded and not received.
+
+        # Show there are two events from the checkpoint commit position.
+        self.assertEqual(count_events_from_commit_position(last_checkpoint_commit_position), 2)
 
     @skipIf("21.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug not fixed")
     def test_extra_checkpoint_bug_is_fixed(self) -> None:
