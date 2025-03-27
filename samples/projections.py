@@ -125,13 +125,13 @@ except exceptions.ExceptionThrownByHandler:
 
 # region GetState
 state = client.get_projection_state(name=projection_name)
-print(f"Counted {state.value["count"]} events")
+print(f"Counted {state.value['count']} events")
 # endregion GetState
 
 # region GetResult
 # There's no difference between "projection state" and "projection result"
 state = client.get_projection_state(name=projection_name)
-print(f"Counted {state.value["count"]} events")
+print(f"Counted {state.value['count']} events")
 # endregion GetResult
 
 
