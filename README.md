@@ -84,14 +84,14 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [Create projection](#create-projection)
   * [Get projection state](#get-projection-state)
   * [Update projection](#update-projection)
-  * [Enable projection](#enable-projection)
-  * [Disable projection](#disable-projection)
-  * [Abort projection](#abort-projection)
-  * [Reset projection](#reset-projection)
-  * [Delete projection](#delete-projection)
   * [Get projection statistics](#get-projection-statistics)
   * [List all projection statistics](#list-all-projection-statistics)
   * [List continuous projection statistics](#list-continuous-projection-statistics)
+  * [Disable projection](#disable-projection)
+  * [Enable projection](#enable-projection)
+  * [Abort projection](#abort-projection)
+  * [Reset projection](#reset-projection)
+  * [Delete projection](#delete-projection)
   * [Restart projections subsystem](#restart-projections-subsystem)
 * [Call credentials](#call-credentials)
   * [Construct call credentials](#construct-call-credentials)
@@ -3038,15 +3038,14 @@ override call credentials derived from the connection string URI.
 client.update_projection(name=projection_name, query=projection_query)
 ```
 
-### Enable projection<a id="enable-projection"></a>
+### Get projection statistics<a id="get-projection-statistics"></a>
 
 *requires leader*
 
-The `enable_projection()` method can be used to enable (start running) a projection
-that was previously disabled (stopped).
+The `get_projection_statistics()` method can be used to get projection statistics.
 
-This method has a required `name` argument, which is a Python `str` that
-specifies the name of the projection to be enabled.
+This method has a required `name` argument, which is a Python `str` that specifies the
+name of a projection.
 
 This method also has two optional arguments, `timeout` and `credentials`.
 
@@ -3056,8 +3055,57 @@ maximum duration, in seconds, for the completion of the gRPC operation.
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
+This method returns a `ProjectionStatistics` object that represents
+the named projection.
+
 ```python
-client.enable_projection(name=projection_name)
+statistics = client.get_projection_statistics(name=projection_name)
+```
+
+A `ProjectionStatistics` object is returned. The attributes of this object
+have values that represent the progress of the projection.
+
+
+### List all projection statistics<a id="list-all-projection-statistics"></a>
+
+*requires leader*
+
+The `list_all_projection_statistics()` method can be used to get a list of projection statistics for all projections.
+
+This method has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+This method returns a list of `ProjectionStatistics` objects that each represent
+a projection.
+
+```python
+statistics = client.list_all_projection_statistics()
+```
+
+### List continuous projection statistics<a id="list-continuous-projection-statistics"></a>
+
+*requires leader*
+
+The `list_continuous_projection_statistics()` method can be used to get a list of projection statistics for all continuous projections.
+
+This method has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+This method returns a list of `ProjectionStatistics` objects that each represent
+a projection.
+
+```python
+statistics = client.list_continuous_projection_statistics()
 ```
 
 ### Disable projection<a id="disable-projection"></a>
@@ -3080,6 +3128,28 @@ override call credentials derived from the connection string URI.
 
 ```python
 client.disable_projection(name=projection_name)
+```
+
+### Enable projection<a id="enable-projection"></a>
+
+*requires leader*
+
+The `enable_projection()` method can be used to enable (start running) a projection
+that was previously disabled (stopped).
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be enabled.
+
+This method also has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.enable_projection(name=projection_name)
 ```
 
 ### Abort projection<a id="abort-projection"></a>
@@ -3167,75 +3237,6 @@ client.delete_projection(name=projection_name)
 
 Please note, a projection must be disabled before it can be deleted.
 
-### Get projection statistics<a id="get-projection-statistics"></a>
-
-*requires leader*
-
-The `get_projection_statistics()` method can be used to get projection statistics.
-
-This method has a required `name` argument, which is a Python `str` that specifies the
-name of a projection.
-
-This method also has two optional arguments, `timeout` and `credentials`.
-
-The optional `timeout` argument is a Python `float` which sets a
-maximum duration, in seconds, for the completion of the gRPC operation.
-
-The optional `credentials` argument can be used to
-override call credentials derived from the connection string URI.
-
-This method returns a `ProjectionStatistics` object that represents
-the named projection.
-
-```python
-statistics = client.get_projection_statistics(name=projection_name)
-```
-
-A `ProjectionStatistics` object is returned. The attributes of this object
-have values that represent the progress of the projection.
-
-
-### List all projection statistics<a id="list-all-projection-statistics"></a>
-
-*requires leader*
-
-The `list_all_projection_statistics()` method can be used to get a list of projection statistics for all projections.
-
-This method has two optional arguments, `timeout` and `credentials`.
-
-The optional `timeout` argument is a Python `float` which sets a
-maximum duration, in seconds, for the completion of the gRPC operation.
-
-The optional `credentials` argument can be used to
-override call credentials derived from the connection string URI.
-
-This method returns a list of `ProjectionStatistics` objects that each represent
-a projection.
-
-```python
-statistics = client.list_all_projection_statistics()
-```
-
-### List continuous projection statistics<a id="list-continuous-projection-statistics"></a>
-
-*requires leader*
-
-The `list_continuous_projection_statistics()` method can be used to get a list of projection statistics for all continuous projections.
-
-This method has two optional arguments, `timeout` and `credentials`.
-
-The optional `timeout` argument is a Python `float` which sets a
-maximum duration, in seconds, for the completion of the gRPC operation.
-
-The optional `credentials` argument can be used to
-override call credentials derived from the connection string URI.
-
-This method returns a list of `ProjectionStatistics` objects that each represent
-a projection.
-
-```python
-statistics = client.list_continuous_projection_statistics()
-```
 
 ### Restart projections subsystem<a id="restart-projections-subsystem"></a>
 
