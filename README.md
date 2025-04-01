@@ -3302,14 +3302,14 @@ and then they will all return normally.
 client.reconnect()
 ```
 
+Reconnection will happen automatically in many cases, due to the `@autoreconnect`
+decorator.
+
 An example of when it might be desirable to reconnect manually is when (for performance
 reasons) the client's node preference is to be connected to a follower node in the
 cluster, and, after a cluster leader election, the follower becomes the leader.
-Reconnecting to a follower node in this case is currently beyond the capabilities of
-this client, but this behavior might be implemented in a future release.
-
-Reconnection will happen automatically in many cases, due to the `@autoreconnect`
-decorator.
+Automatic reconnection to a follower node in this case is currently beyond the
+capabilities of this client, but this behavior might be implemented in a future release.
 
 ### Close<a id="close"></a>
 
