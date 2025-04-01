@@ -1,8 +1,8 @@
 <a href="https://kurrent.io">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="KurrentLogo-White.png">
-    <source media="(prefers-color-scheme: light)" srcset="KurrentLogo-Black.png">
-    <img alt="Kurrent" src="KurrentLogo-Plum.png" height="50%" width="50%">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-White.png.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-Black.png">
+    <img alt="Kurrent" src="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-Plum.png" height="50%" width="50%">
   </picture>
 </a>
 
