@@ -141,7 +141,7 @@ import uuid
 
 from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
 
-# Construct KurrentDBClient with an KurrentDB URI. The
+# Construct KurrentDBClient with a KurrentDB URI. The
 # connection string URI specifies that the client should
 # connect to an "insecure" server running on port 2113.
 
@@ -300,7 +300,7 @@ For development, you can run a "secure" KurrentDB server using the following com
 
     $ docker run -d --name kurrentdb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim --dev
 
-As we will see, your client will need an KurrentDB connection string URI as the value
+As we will see, your client will need a KurrentDB connection string URI as the value
 of its `uri` constructor argument. The connection string for this "secure" KurrentDB
 server would be:
 
@@ -372,7 +372,7 @@ from kurrentdbclient import KurrentDBClient
 The `KurrentDBClient` class has one required constructor argument, `uri`, and three
 optional constructor argument, `root_certificates`, `private_key`, and `certificate_chain`.
 
-The `uri` argument is expected to be an KurrentDB connection string URI that
+The `uri` argument is expected to be a KurrentDB connection string URI that
 conforms with the standard KurrentDB "kdb" or "kdb+discover" URI schemes.
 
 The client must be configured to create a "secure" connection to a "secure" server,
@@ -423,7 +423,7 @@ client = KurrentDBClient(
 
 ## Connection strings<a id="connection-strings"></a>
 
-An KurrentDB connection string is a URI that conforms with one of two possible
+A KurrentDB connection string is a URI that conforms with one of two possible
 schemes: either the "kdb" scheme, or the "kdb+discover" scheme.
 
 The syntax and semantics of the KurrentDB URI schemes are described below. The
@@ -443,7 +443,7 @@ In the "kdb" URI scheme, after the optional user info string, there must be at l
 one gRPC target. If there are several gRPC targets, they must be separated from each
 other with the "," character.
 
-Each gRPC target should indicate an KurrentDB gRPC server socket, all in the same
+Each gRPC target should indicate a KurrentDB gRPC server socket, all in the same
 KurrentDB cluster, by specifying a host and a port number separated with the ":"
 character. The host may be a hostname that can be resolved to an IP address, or an IP
 address.
@@ -622,7 +622,7 @@ This package defines a `NewEvent` class and a `RecordedEvent` class. The
 
 ### New events<a id="new-events"></a>
 
-The `NewEvent` class should be used when writing events to an KurrentDB database.
+The `NewEvent` class should be used when writing events to a KurrentDB database.
 You will need to construct new event objects before calling `append_to_stream()`.
 
 The `NewEvent` class is a frozen Python dataclass. It has two required constructor
@@ -676,7 +676,7 @@ assert new_event2.id == event_id
 
 ### Recorded events<a id="recorded-events"></a>
 
-The `RecordedEvent` class is used when reading events from an KurrentDB
+The `RecordedEvent` class is used when reading events from a KurrentDB
 database. The client will return event objects of this type from all methods
 that return recorded events, such as `get_stream()`, `subscribe_to_all()`,
 and `read_subscription_to_all()`. You do not need to construct recorded event objects.
