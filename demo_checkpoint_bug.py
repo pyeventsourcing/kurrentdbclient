@@ -61,7 +61,7 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
             return None
 
     event = get_event_at_commit_position(first_append_commit_position)
-    assert event is not None  # for mypy
+    assert event is not None
     assert event.id == event3.id
     assert event.commit_position == first_append_commit_position
     current_commit_position = client.get_commit_position(filter_exclude=[])
@@ -99,7 +99,7 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
         )
 
     if fail_msg:
-        assert checkpoint_commit_position is not None  # for mypy
+        assert checkpoint_commit_position is not None
         event_at_checkpoint_commit_position = get_event_at_commit_position(
             checkpoint_commit_position
         )
@@ -139,17 +139,13 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
 
 def construct_esdb_client(qs: str = "") -> KurrentDBClient:
     uri = f"kdb://admin:changeit@{KDB_TARGET}?{qs}"
-    root_certificates = get_root_certificates()
+    root_certificates = get_server_certificate()
     return KurrentDBClient(uri, root_certificates=root_certificates)
 
 
-def get_root_certificates() -> str:
-    return get_server_certificate(KDB_TARGET.split(",")[0])
-
-
-def get_server_certificate(grpc_target: str) -> str:
+def get_server_certificate() -> str:
     return ssl.get_server_certificate(
-        addr=cast(Tuple[str, int], grpc_target.split(":")),
+        addr=cast(Tuple[str, int], KDB_TARGET.split(":")),
     )
 
 
