@@ -2,6 +2,7 @@
 
 # SHELL = bash
 
+# EVENTSTORE_DOCKER_IMAGE ?= eventstore/eventstore:21.10.9-buster-slim
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy
 # EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
@@ -151,6 +152,18 @@ start-kurrentdb-secure:
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
     --name my-kurrentdb-secure \
     $(EVENTSTORE_DOCKER_IMAGE) \
+    --dev
+
+.PHONY: start-kurrentdb-secure-v21-10-9
+start-kurrentdb-secure-21-10-9:
+	@docker run -d -i -t -p 2114:2113 \
+    --env "HOME=/tmp" \
+    --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
+    --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2114" \
+    --env "EVENTSTORE_RUN_PROJECTIONS=All" \
+    --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
+    --name my-kurrentdb-secure \
+    eventstore/eventstore:21.10.9-buster-slim \
     --dev
 
 .PHONY: attach-kurrentdb-insecure
