@@ -1027,7 +1027,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
         span_kind: trace_api.SpanKind = trace_api.SpanKind.CLIENT,
         parent_span_index: Optional[int] = None,
         instrumentation_scope_name: str = "kurrentdbclient.instrumentation.opentelemetry",
-        instrumentation_scope_version: str = "1.1",
+        instrumentation_scope_version: str = "1.0",
         span_attributes: Optional[Dict[str, Any]] = None,
         error: Optional[Exception] = None,
         server_port: Optional[str] = None,
@@ -1340,7 +1340,7 @@ class TestUtils(
     KurrentDBClientInstrumentorTestCase, BaseUtilsTestCase[KurrentDBClient]
 ):
     def test_span_helpers(self) -> None:
-        tracer = get_tracer("kurrentdbclient.instrumentation.opentelemetry", "1.1")
+        tracer = get_tracer("kurrentdbclient.instrumentation.opentelemetry", "1.0")
         client = self.construct_client()
         self.check_spans(num_spans=0)
         with _start_span(tracer, "test_enrich_span1", SpanKind.INTERNAL) as span:
