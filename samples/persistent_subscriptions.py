@@ -31,7 +31,6 @@ subscription: PersistentSubscription
 
 def handle_event(ev: RecordedEvent):
     print(f"handling event: {ev.stream_position} {ev.type}")
-    global subscription
     subscription.stop()
 
 

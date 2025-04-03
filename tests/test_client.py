@@ -6844,8 +6844,8 @@ class TestRootCertificatesAreOptional(TimedTestCase):
         # NB Client can work with Tls=True without setting 'root_certificates'
         # if grpc lib can verify server cert using locally installed CA certs.
         uri = "kdb://admin:changeit@127.0.0.1:2110"
+        client = KurrentDBClient(uri)
         with self.assertRaises(SSLError):
-            client = KurrentDBClient(uri)
             client.get_commit_position()
 
     def test_one_target_tls_true_invalid_root_certificates(self) -> None:
@@ -6933,39 +6933,39 @@ class TestOptionalClientAuth(TimedTestCase):
 class TestDiscoverScheme(TestCase):
     def test_calls_dns_and_uses_given_port_number_or_default(self) -> None:
         # Cluster name not configured in DNS, default port.
+        uri = (
+            "kdb+discover://my-unresolvable-cluster"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm1:
-            uri = (
-                "kdb+discover://my-unresolvable-cluster"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             KurrentDBClient(uri)
         self.assertIn(":2113", str(cm1.exception))
         self.assertIn("DNS resolution failed", str(cm1.exception))
         self.assertNotIn("Deadline Exceeded", str(cm1.exception))
 
         # Cluster name not configured in DNS, non-default port.
+        uri = (
+            "kdb+discover://my-unresolvable-cluster:9898"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm2:
-            uri = (
-                "kdb+discover://my-unresolvable-cluster:9898"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             KurrentDBClient(uri)
         self.assertIn(":9898", str(cm2.exception))
         self.assertIn("DNS resolution failed", str(cm2.exception))
         self.assertNotIn("Deadline Exceeded", str(cm2.exception))
 
         # Name is resolvable but 'service not available' on port 2222.
+        uri = "kdb://localhost:2222?Tls=false"
+        client = KurrentDBClient(uri)
         with self.assertRaises(ServiceUnavailable) as cm3:
-            uri = "kdb://localhost:2222?Tls=false"
-            client = KurrentDBClient(uri)
             client.read_gossip()
         self.assertIn("Failed to connect to remote host", str(cm3.exception))
 
+        uri = (
+            "kdb+discover://localhost:2222"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm4:
-            uri = (
-                "kdb+discover://localhost:2222"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             KurrentDBClient(uri)
         self.assertIn(":2222", str(cm4.exception))
         self.assertIn("Failed to connect to remote host", str(cm4.exception))

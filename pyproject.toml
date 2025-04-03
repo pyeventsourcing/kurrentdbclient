@@ -17,7 +17,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python",
 ]
@@ -27,8 +26,8 @@ repository = "https://github.com/pyeventsourcing/esdbclient"
 include = ["kurrentdbclient/py.typed"]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4.0"
-grpcio = { version = ">=1.51.0,!=1.52.*,<1.69", extras=["protobuf"] }  # 1.52.0 hangs on fork
+python = ">=3.9,<4.0"
+grpcio = { version = ">=1.71.0,<1.72", extras=["protobuf"] }  # 1.52.0 hangs on fork
 typing_extensions = "*"
 
 opentelemetry-api = { version = "^1.28.0", optional = true }
@@ -55,7 +54,7 @@ grpc-stubs = "*"
 types-protobuf = "*"
 mypy-protobuf = "*"
 coverage = "^7.2.7"
-fastapi = "^0.111.0"
+fastapi = "^0.115.12"
 opentelemetry-exporter-otlp-proto-http = "^1.28.0"
 #opentelemetry-exporter-otlp-proto-grpc = "^1.25.0"
 opentelemetry-instrumentation-grpc = "^0.49b0"

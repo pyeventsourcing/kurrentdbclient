@@ -21,7 +21,7 @@ features are presented in an easy-to-use interface.
 
 These clients have been tested to work with KurrentDB 25.0.0, without and without
 SSL/TLS, with both single-server and cluster modes, and with Python versions
-3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
+3.9, 3.10, 3.11, 3.12, and 3.13.
 
 The test suite has 100% line and branch coverage. The code has typing annotations
 checked strictly with mypy. The code is formatted with black and isort, and checked
