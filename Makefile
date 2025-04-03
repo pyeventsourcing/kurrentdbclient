@@ -2,14 +2,14 @@
 
 # SHELL = bash
 
-# EVENTSTORE_DOCKER_IMAGE ?= eventstore/eventstore:21.10.9-buster-slim
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:24.2.0-alpha.115-jammy
-# EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-staging-ce/eventstoredb-ce:24.6.0-nightly-x64-8.0-jammy
-EVENTSTORE_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
+# KURRENTDB_DOCKER_IMAGE ?= eventstore/eventstore:21.10.9-buster-slim
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:23.10.0-jammy
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-oss:24.6.0-jammy
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:24.2.0-alpha.115-jammy
+# KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-staging-ce/eventstoredb-ce:24.6.0-nightly-x64-8.0-jammy
+KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
 
 
 POETRY ?= poetry
@@ -133,35 +133,35 @@ grpc-stubs:
 .PHONY: start-kurrentdb-insecure
 start-kurrentdb-insecure:
 	@docker run -d -i -t -p 2113:2113 \
-    --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
-    --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2113" \
-    --env "EVENTSTORE_RUN_PROJECTIONS=All" \
-    --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
-    --env "EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true" \
+    --env "KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
+    --env "KURRENTDB_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2113" \
+    --env "KURRENTDB_RUN_PROJECTIONS=All" \
+    --env "KURRENTDB_START_STANDARD_PROJECTIONS=true" \
+    --env "KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP=true" \
     --name my-kurrentdb-insecure \
-    $(EVENTSTORE_DOCKER_IMAGE) \
+    $(KURRENTDB_DOCKER_IMAGE) \
     --insecure
 
 .PHONY: start-kurrentdb-secure
 start-kurrentdb-secure:
 	@docker run -d -i -t -p 2114:2113 \
     --env "HOME=/tmp" \
-    --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
-    --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2114" \
-    --env "EVENTSTORE_RUN_PROJECTIONS=All" \
-    --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
+    --env "KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
+    --env "KURRENTDB_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2114" \
+    --env "KURRENTDB_RUN_PROJECTIONS=All" \
+    --env "KURRENTDB_START_STANDARD_PROJECTIONS=true" \
     --name my-kurrentdb-secure \
-    $(EVENTSTORE_DOCKER_IMAGE) \
+    $(KURRENTDB_DOCKER_IMAGE) \
     --dev
 
 .PHONY: start-kurrentdb-secure-v21-10-9
 start-kurrentdb-secure-21-10-9:
 	@docker run -d -i -t -p 2114:2113 \
     --env "HOME=/tmp" \
-    --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
-    --env "EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2114" \
-    --env "EVENTSTORE_RUN_PROJECTIONS=All" \
-    --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
+    --env "KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
+    --env "KURRENTDB_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2114" \
+    --env "KURRENTDB_RUN_PROJECTIONS=All" \
+    --env "KURRENTDB_START_STANDARD_PROJECTIONS=true" \
     --name my-kurrentdb-secure \
     eventstore/eventstore:21.10.9-buster-slim \
     --dev

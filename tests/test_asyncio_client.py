@@ -49,7 +49,7 @@ from kurrentdbclient.persistent import AsyncSubscriptionReadReqs
 from kurrentdbclient.projections import ProjectionStatistics
 from kurrentdbclient.streams import AsyncCatchupSubscription
 from tests.test_client import (
-    EVENTSTORE_DOCKER_IMAGE,
+    KURRENTDB_DOCKER_IMAGE,
     PROJECTION_QUERY_TEMPLATE1,
     TimedTestCase,
     get_ca_certificate,
@@ -789,11 +789,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 break
 
     @skipIf(
-        "21.10" in EVENTSTORE_DOCKER_IMAGE,
+        "21.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     @skipIf(
-        "22.10" in EVENTSTORE_DOCKER_IMAGE,
+        "22.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     async def test_subscribe_to_all_include_caught_up(self) -> None:
@@ -1434,11 +1434,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.extra_statistics, True)
 
     @skipIf(
-        "21.10" in EVENTSTORE_DOCKER_IMAGE,
+        "21.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     @skipIf(
-        "22.10" in EVENTSTORE_DOCKER_IMAGE,
+        "22.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     async def test_subscribe_to_stream_include_caught_up(self) -> None:
@@ -2660,7 +2660,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         await asyncio.sleep(1)  # give server time to actually delete the projection....
 
-        if "21.10" in EVENTSTORE_DOCKER_IMAGE or "22.10" in EVENTSTORE_DOCKER_IMAGE:
+        if "21.10" in KURRENTDB_DOCKER_IMAGE or "22.10" in KURRENTDB_DOCKER_IMAGE:
             # Can delete a projection that has been deleted ("idempotent").
             await self.client.delete_projection(
                 name=projection_name,

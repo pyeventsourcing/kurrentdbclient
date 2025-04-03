@@ -69,7 +69,7 @@ from kurrentdbclient.protos.Grpc import persistent_pb2
 started = datetime.datetime.now()
 last = datetime.datetime.now()
 
-EVENTSTORE_DOCKER_IMAGE = os.environ.get("EVENTSTORE_DOCKER_IMAGE", "25.0.0")
+KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.0.0")
 
 # os.environ["GRPC_VERBOSITY"] = "debug"
 # os.environ["GRPC_TRACE"] = "all"
@@ -2514,11 +2514,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 break
 
     @skipIf(
-        "21.10" in EVENTSTORE_DOCKER_IMAGE,
+        "21.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     @skipIf(
-        "22.10" in EVENTSTORE_DOCKER_IMAGE,
+        "22.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     def test_subscribe_to_all_include_caught_up(self) -> None:
@@ -2548,12 +2548,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             if isinstance(event, CaughtUp):
                 break
 
-    @skipIf("22.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
-    @skipIf("23.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
-    @skipIf("24.2" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
-    @skipIf("24.6" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
-    @skipIf("24.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
-    @skipIf("25.0.0" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("22.10" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("23.10" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("24.2" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("24.6" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("24.10" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
+    @skipIf("25.0.0" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug was fixed")
     def test_demonstrate_extra_checkpoint_bug(self) -> None:
         self.construct_esdb_client()
 
@@ -2656,7 +2656,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             count_events_from_commit_position(last_checkpoint_commit_position), 2
         )
 
-    @skipIf("21.10" in EVENTSTORE_DOCKER_IMAGE, "'Extra checkpoint' bug not fixed")
+    @skipIf("21.10" in KURRENTDB_DOCKER_IMAGE, "'Extra checkpoint' bug not fixed")
     def _test_extra_checkpoint_bug_is_fixed(self) -> None:
         self.construct_esdb_client()
 
@@ -3158,11 +3158,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         list(subscription)
 
     @skipIf(
-        "21.10" in EVENTSTORE_DOCKER_IMAGE,
+        "21.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     @skipIf(
-        "22.10" in EVENTSTORE_DOCKER_IMAGE,
+        "22.10" in KURRENTDB_DOCKER_IMAGE,
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
     def test_subscribe_to_stream_include_caught_up(self) -> None:
@@ -4901,7 +4901,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.extra_statistics, True)
 
     @skipIf(
-        "21.10" in EVENTSTORE_DOCKER_IMAGE,
+        "21.10" in KURRENTDB_DOCKER_IMAGE,
         "v21.10 server becomes unresponsive with this test",
     )
     def test_subscription_to_all_wrong_history_buffer_size_raises_internal_error(
@@ -6397,7 +6397,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         sleep(1)  # give server time to actually delete the projection....
 
-        if "21.10" in EVENTSTORE_DOCKER_IMAGE or "22.10" in EVENTSTORE_DOCKER_IMAGE:
+        if "21.10" in KURRENTDB_DOCKER_IMAGE or "22.10" in KURRENTDB_DOCKER_IMAGE:
             # Can delete a projection that has been deleted ("idempotent").
             self.client.delete_projection(
                 name=projection_name,
