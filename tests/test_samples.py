@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import sys
 import traceback
@@ -17,7 +16,7 @@ class TestSamples(TestCase):
         sample_files = []
         for dirpath, _, filenames in os.walk(samples_dir):
             for filename in filenames:
-                if filename.endswith(".py"):
+                if filename.endswith(".py") and not filename.startswith("_"):
                     sample_file = samples_dir / dirpath / filename
                     sample_files.append(sample_file)
 
@@ -54,7 +53,7 @@ class TestSamples(TestCase):
                     sys.stderr.write(f" [@{get_elapsed_time()}]")
                     sys.stderr.flush()
                 sample_globals = {"__name__": "__main__"}
-                exec(compiled, sample_globals, sample_globals)
+                exec(compiled, sample_globals, sample_globals)  # noqa: S102
                 tb = None
             except Exception:
                 # Remove this call from the traceback (so it's just clearer).

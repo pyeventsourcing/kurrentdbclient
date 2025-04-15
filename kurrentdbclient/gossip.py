@@ -1,6 +1,7 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional, Sequence, Union
+from typing import TYPE_CHECKING
 
 import grpc
 import grpc.aio
@@ -13,8 +14,12 @@ from kurrentdbclient.common import (
     TGrpcStreamers,
     handle_rpc_error,
 )
-from kurrentdbclient.connection_spec import ConnectionSpec
 from kurrentdbclient.protos.Grpc import gossip_pb2, gossip_pb2_grpc, shared_pb2
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from kurrentdbclient.connection_spec import ConnectionSpec
 
 
 @dataclass
@@ -38,7 +43,7 @@ GOSSIP_API_NODE_STATES_MAPPING = {
 class BaseGossipService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
-        channel: Union[grpc.Channel, grpc.aio.Channel],
+        channel: grpc.Channel | grpc.aio.Channel,
         connection_spec: ConnectionSpec,
         grpc_streamers: TGrpcStreamers,
     ):
@@ -63,9 +68,9 @@ class BaseGossipService(KurrentDBService[TGrpcStreamers]):
 class AsyncGossipService(BaseGossipService[AsyncGrpcStreamers]):
     async def read(
         self,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[ClusterMember]:
         try:
             read_resp = await self._stub.Read(
@@ -87,9 +92,9 @@ class GossipService(BaseGossipService[GrpcStreamers]):
 
     def read(
         self,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[ClusterMember]:
         try:
             read_resp = self._stub.Read(

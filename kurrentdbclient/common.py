@@ -1,23 +1,19 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import os
 import threading
 from abc import ABC, abstractmethod
 from base64 import b64encode
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncIterator,
     Generic,
-    Iterator,
     Literal,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
     Union,
 )
@@ -28,24 +24,23 @@ import grpc
 import grpc.aio
 from typing_extensions import Self
 
-from kurrentdbclient.connection_spec import ConnectionSpec
 from kurrentdbclient.events import RecordedEvent
 from kurrentdbclient.exceptions import (
-    AbortedByServer,
-    AlreadyExists,
-    CancelledByClient,
-    ConsumerTooSlow,
-    ExceptionThrownByHandler,
-    FailedPrecondition,
-    GrpcDeadlineExceeded,
+    AbortedByServerError,
+    AlreadyExistsError,
+    CancelledByClientError,
+    ConsumerTooSlowError,
+    ExceptionThrownByHandlerError,
+    FailedPreconditionError,
+    GrpcDeadlineExceededError,
     GrpcError,
     InternalError,
-    KurrentDBClientException,
-    MaximumSubscriptionsReached,
-    NodeIsNotLeader,
-    NotFound,
-    OperationFailed,
-    ServiceUnavailable,
+    KurrentDBClientError,
+    MaximumSubscriptionsReachedError,
+    NodeIsNotLeaderError,
+    NotFoundError,
+    OperationFailedError,
+    ServiceUnavailableError,
     SSLError,
     UnknownError,
 )
@@ -59,8 +54,10 @@ if "GRPC_DNS_RESOLVER" not in os.environ:
 if TYPE_CHECKING:  # pragma: no cover
     from grpc import Metadata
 
+    from kurrentdbclient.connection_spec import ConnectionSpec
+
 else:
-    Metadata = Tuple[Tuple[str, str], ...]
+    Metadata = tuple[tuple[str, str], ...]
 
 __all__ = [
     "handle_rpc_error",
@@ -73,30 +70,30 @@ __all__ = [
 PROTOBUF_MAX_DEADLINE_SECONDS = 315576000000
 DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER = 5
 DEFAULT_WINDOW_SIZE = 30
-DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT = 30.0
-DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT = 10
-DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT = 10
-DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT = 1000
-DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER = 2.0
-DEFAULT_PERSISTENT_SUBSCRIPTION_EVENT_BUFFER_SIZE = 150
-DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_BATCH_SIZE = 50
-DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_DELAY = 0.2
-DEFAULT_PERSISTENT_SUBSCRIPTION_STOPPING_GRACE = 0.2
-DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT = 5
-DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE = 500
-DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE = 200
-DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE = 500
+DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT = 30.0
+DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT = 10
+DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT = 10
+DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT = 1000
+DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER = 2.0
+DEFAULT_PERSISTENT_SUB_EVENT_BUFFER_SIZE = 150
+DEFAULT_PERSISTENT_SUB_MAX_ACK_BATCH_SIZE = 50
+DEFAULT_PERSISTENT_SUB_MAX_ACK_DELAY = 0.2
+DEFAULT_PERSISTENT_SUB_STOPPING_GRACE = 0.2
+DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT = 5
+DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE = 500
+DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE = 200
+DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE = 500
 
 
-GrpcOption = Tuple[str, Union[str, int]]
-GrpcOptions = Tuple[GrpcOption, ...]
+GrpcOption = tuple[str, Union[str, int]]
+GrpcOptions = tuple[GrpcOption, ...]
 
 
-class BaseGrpcStreamer(ABC):
+class BaseGrpcStreamer:
     pass
 
 
-class GrpcStreamer(BaseGrpcStreamer):
+class GrpcStreamer(BaseGrpcStreamer, ABC):
     def __init__(self, grpc_streamers: GrpcStreamers) -> None:
         self._grpc_streamers = grpc_streamers
         self._grpc_streamers.add(self)
@@ -121,7 +118,7 @@ class GrpcStreamer(BaseGrpcStreamer):
         return is_stopped
 
 
-class AsyncGrpcStreamer(BaseGrpcStreamer):
+class AsyncGrpcStreamer(BaseGrpcStreamer, ABC):
     def __init__(self, grpc_streamers: AsyncGrpcStreamers) -> None:
         self._grpc_streamers = grpc_streamers
         self._grpc_streamers.add(self)
@@ -163,11 +160,8 @@ class BaseGrpcStreamers(Generic[TGrpcStreamer]):
             return iter(tuple(self.map.values()))
 
     def remove(self, streamer: TGrpcStreamer) -> None:
-        with self.lock:
-            try:
-                self.map.pop(id(streamer))
-            except KeyError:  # pragma: no cover
-                pass
+        with self.lock, contextlib.suppress(KeyError):
+            self.map.pop(id(streamer))
 
 
 class GrpcStreamers(BaseGrpcStreamers[GrpcStreamer]):
@@ -202,67 +196,66 @@ class BasicAuthCallCredentials(grpc.AuthMetadataPlugin):
         callback(self._metadata, None)
 
 
-def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientException:  # noqa: C901
+def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
     """
     Converts gRPC errors to client exceptions.
     """
     if isinstance(e, (grpc.Call, grpc.aio.AioRpcError)):
         if e.code() == grpc.StatusCode.UNKNOWN:
-            details = str(e.details())
+            details = e.details() or ""
             if "Exception was thrown by handler" in details:
-                return ExceptionThrownByHandler(e)
-            elif (
+                return ExceptionThrownByHandlerError(e)
+            if (
                 "Envelope callback expected Updated, received Conflict instead"
                 in details
             ):
                 # Projections.Create does this....
-                return AlreadyExists(e)
-            elif (
+                return AlreadyExistsError(e)
+            if (
                 "Envelope callback expected Updated, received NotFound instead"
                 in details
             ):
                 # Projections.Update and Projections.Delete does this in < v24.6
-                return NotFound(e)  # pragma: no cover
-            elif (
+                return NotFoundError(e)  # pragma: no cover
+            if (
                 "Envelope callback expected Statistics, received NotFound instead"
                 in details
             ):
                 # Projections.Statistics does this in < v24.6
-                return NotFound(e)  # pragma: no cover
-            elif (
+                return NotFoundError(e)  # pragma: no cover
+            if (
                 "Envelope callback expected ProjectionState, received NotFound instead"
                 in details
             ):
                 # Projections.State does this in < v24.6
-                return NotFound(e)  # pragma: no cover
-            elif (
+                return NotFoundError(e)  # pragma: no cover
+            if (
                 "Envelope callback expected ProjectionResult, received NotFound instead"
                 in details
             ):
                 # Projections.Result does this in < v24.6
-                return NotFound(e)  # pragma: no cover
-            elif (
+                return NotFoundError(e)  # pragma: no cover
+            if (
                 "Envelope callback expected Updated, received OperationFailed instead"
                 in details
             ):
                 # Projections.Delete does this....
-                return OperationFailed(e)
-            else:  # pragma: no cover
-                return UnknownError(e)
-        elif e.code() == grpc.StatusCode.ABORTED:
-            details = str(e.details())
+                return OperationFailedError(e)
+            return UnknownError(e)  # pragma: no cover
+
+        if e.code() == grpc.StatusCode.ABORTED:
+            details = e.details() or ""
             if isinstance(details, str) and "Consumer too slow" in details:
-                return ConsumerTooSlow()
-            else:
-                return AbortedByServer()
-        elif (
+                return ConsumerTooSlowError()
+            return AbortedByServerError()
+        if (
             e.code() == grpc.StatusCode.CANCELLED
             and e.details() == "Locally cancelled by application!"
         ):
-            return CancelledByClient(e)
-        elif e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-            return GrpcDeadlineExceeded(e)
-        elif e.code() == grpc.StatusCode.UNAVAILABLE:
+            return CancelledByClientError(e)
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            return GrpcDeadlineExceededError(e)
+        if e.code() == grpc.StatusCode.UNAVAILABLE:
             details = e.details() or ""
             if "SSL_ERROR" in details:
                 # root_certificates is None and CA cert not installed
@@ -270,22 +263,23 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientException:  # noqa: C90
             if "empty address list" in details:
                 # given root_certificates is invalid
                 return SSLError(e)
-            return ServiceUnavailable(details)
-        elif e.code() == grpc.StatusCode.ALREADY_EXISTS:
-            return AlreadyExists(e.details())
-        elif e.code() == grpc.StatusCode.NOT_FOUND:
+            return ServiceUnavailableError(details)
+        if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+            return AlreadyExistsError(e.details())
+        if e.code() == grpc.StatusCode.NOT_FOUND:
             if e.details() == "Leader info available":
-                return NodeIsNotLeader(e)
-            return NotFound()
-        elif e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-            details = str(e.details())
+                return NodeIsNotLeaderError(e)
+            return NotFoundError()
+        if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
+            details = e.details() or ""
             if details is not None and details.startswith(
                 "Maximum subscriptions reached"
             ):
-                return MaximumSubscriptionsReached(details)
-            else:  # pragma: no cover
-                return FailedPrecondition(details)
-        elif e.code() == grpc.StatusCode.INTERNAL:  # pragma: no cover
+                return MaximumSubscriptionsReachedError(details)
+            # no cover: start
+            return FailedPreconditionError(details)
+            # no cover: stop
+        if e.code() == grpc.StatusCode.INTERNAL:  # pragma: no cover
             return InternalError(e.details())
     return GrpcError(e)
 
@@ -300,17 +294,17 @@ class KurrentDBService(Generic[TGrpcStreamers]):
         self._grpc_streamers = grpc_streamers
 
     def _metadata(
-        self, metadata: Optional[Metadata], requires_leader: bool = False
+        self, metadata: Metadata | None, *, requires_leader: bool = False
     ) -> Metadata:
         default = (
             "true"
-            if self._connection_spec.options.NodePreference == "leader"
+            if self._connection_spec.options.node_preference == "leader"
             else "false"
         )
         requires_leader_metadata: Metadata = (
             ("requires-leader", "true" if requires_leader else default),
         )
-        metadata = tuple() if metadata is None else metadata
+        metadata = () if metadata is None else metadata
         return metadata + requires_leader_metadata
 
 
@@ -325,10 +319,8 @@ def construct_filter_exclude_regex(patterns: Sequence[str]) -> str:
 
 
 def construct_recorded_event(
-    read_event: Union[
-        streams_pb2.ReadResp.ReadEvent, persistent_pb2.ReadResp.ReadEvent
-    ],
-) -> Optional[RecordedEvent]:
+    read_event: streams_pb2.ReadResp.ReadEvent | persistent_pb2.ReadResp.ReadEvent,
+) -> RecordedEvent | None:
     assert isinstance(
         read_event, (streams_pb2.ReadResp.ReadEvent, persistent_pb2.ReadResp.ReadEvent)
     )
@@ -365,12 +357,12 @@ def construct_recorded_event(
         ignore_commit_position = True
 
     if isinstance(read_event, persistent_pb2.ReadResp.ReadEvent):
-        retry_count: Optional[int] = read_event.retry_count
+        retry_count: int | None = read_event.retry_count
     else:
         retry_count = None
 
     if link.id.string == "":
-        recorded_event_link: Optional[RecordedEvent] = None
+        recorded_event_link: RecordedEvent | None = None
     else:
         try:
             recorded_at = datetime.datetime.fromtimestamp(
@@ -402,7 +394,7 @@ def construct_recorded_event(
     except (TypeError, ValueError):  # pragma: no cover
         recorded_at = None
 
-    recorded_event = RecordedEvent(
+    return RecordedEvent(
         id=UUID(event.id.string),
         type=event.metadata.get("type", ""),
         data=event.data,
@@ -416,7 +408,23 @@ def construct_recorded_event(
         link=recorded_event_link,
         recorded_at=recorded_at,
     )
-    return recorded_event
+    # if (
+    #     recorded_event.commit_position
+    #     and recorded_event.commit_position != recorded_event.prepare_position
+    # ):
+    #     raise Exception(
+    #         f"Commit and prepare positions of recorded event are not equal:"
+    #         f" {recorded_event}"
+    #     )
+    # if (
+    #     recorded_event.link
+    #     and recorded_event.link.commit_position
+    #     and recorded_event.link.commit_position != recorded_event.link.prepare_position  # noqa: E501
+    # ):
+    #     raise Exception(
+    #         f"Commit and prepare positions of recorded event link are not equal:"
+    #         f" {recorded_event.link}"
+    #     )
 
 
 try:  # pragma: no cover
@@ -433,7 +441,7 @@ class RecordedEventIterator(Iterator[RecordedEvent], _ContextManager):
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args: Any, **kwargs: Any) -> None:
+    def __exit__(self, *args: object, **kwargs: Any) -> None:
         self.stop()
 
     def __del__(self) -> None:
@@ -461,13 +469,13 @@ class AbstractCatchupSubscription(RecordedEventSubscription, AbstractReadRespons
 
 class AbstractPersistentSubscription(RecordedEventSubscription):
     @abstractmethod
-    def ack(self, item: Union[UUID, RecordedEvent]) -> None:
+    def ack(self, item: UUID | RecordedEvent) -> None:
         pass  # pragma: no cover
 
     @abstractmethod
     def nack(
         self,
-        item: Union[UUID, RecordedEvent],
+        item: UUID | RecordedEvent,
         action: Literal["unknown", "park", "retry", "skip", "stop"],
     ) -> None:
         pass  # pragma: no cover
@@ -491,7 +499,7 @@ class AsyncRecordedEventIterator(AsyncIterator[RecordedEvent], _AsyncContextMana
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
+    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
         await self.stop()
 
     def _set_iter_error_for_testing(self) -> None:
@@ -523,13 +531,13 @@ class AbstractAsyncCatchupSubscription(AsyncRecordedEventSubscription):
 
 class AbstractAsyncPersistentSubscription(AsyncRecordedEventSubscription):
     @abstractmethod
-    async def ack(self, item: Union[UUID, RecordedEvent]) -> None:
+    async def ack(self, item: UUID | RecordedEvent) -> None:
         pass  # pragma: no cover
 
     @abstractmethod
     async def nack(
         self,
-        item: Union[UUID, RecordedEvent],
+        item: UUID | RecordedEvent,
         action: Literal["unknown", "park", "retry", "skip", "stop"],
     ) -> None:
         pass  # pragma: no cover

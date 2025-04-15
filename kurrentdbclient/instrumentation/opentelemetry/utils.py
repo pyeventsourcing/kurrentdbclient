@@ -1,31 +1,29 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import inspect
 import re
 import traceback
+from collections.abc import Coroutine, Iterator, MutableMapping
 from contextlib import contextmanager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    Coroutine,
-    Iterator,
-    MutableMapping,
-    Optional,
     Protocol,
-    Type,
     TypeVar,
     Union,
     cast,
 )
 
 import wrapt
-from opentelemetry.context import Context
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode, Tracer
-from opentelemetry.util.types import AttributeValue
 from typing_extensions import Concatenate, ParamSpec
 
 from kurrentdbclient.instrumentation.opentelemetry.attributes import Attributes
+
+if TYPE_CHECKING:
+    from opentelemetry.context import Context
+    from opentelemetry.util.types import AttributeValue
 
 # Define type variables and type aliases for spanner functions.
 T = TypeVar("T")
@@ -58,7 +56,7 @@ UnboundFunc = Callable[Concatenate[T, P], R]
 # Define type-safe function to apply an instrumenting
 # spanner function to the method of an object class.
 def apply_spanner(
-    patched_class: Type[T],
+    patched_class: type[T],
     spanned_func: UnboundFunc[T, P, R],
     spanner_func: SpannerFunc[T, P, R],
     tracer: Tracer,
@@ -113,7 +111,7 @@ def apply_spanner(
 
 
 def _patch_class(
-    patched_class: Type[T],
+    patched_class: type[T],
     spanned_func: UnboundFunc[T, P, R],
     instrumentation_wrapper_func: WraptWrapperFunc[T, P, R],
 ) -> UnboundFunc[T, P, R]:
@@ -140,7 +138,8 @@ def _start_span(
     tracer: Tracer,
     span_name: str,
     span_kind: SpanKind = SpanKind.CLIENT,
-    context: Optional[Context] = None,
+    context: Context | None = None,
+    *,
     end_on_exit: bool = True,
 ) -> Iterator[Span]:
     with tracer.start_as_current_span(

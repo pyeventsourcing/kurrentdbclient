@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import grpc.aio
 
 from kurrentdbclient.common import AsyncGrpcStreamers, GrpcStreamers

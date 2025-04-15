@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-from typing import List
 from unittest import TestCase
 from uuid import UUID, uuid4
 
@@ -27,12 +25,10 @@ class TestPersistentSubscriptionACK(TestCase):
     def get_root_certificates(self) -> str:
         if self.KDB_CLUSTER_SIZE == 1:
             return get_server_certificate(self.KDB_TARGET)
-        elif self.KDB_CLUSTER_SIZE == 3:
+        if self.KDB_CLUSTER_SIZE == 3:
             return get_ca_certificate()
-        else:
-            raise ValueError(
-                f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
-            )
+        msg = f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
+        raise ValueError(msg)
 
     def setUp(self) -> None:
         self.construct_esdb_client()
@@ -48,20 +44,19 @@ class TestPersistentSubscriptionACK(TestCase):
         self.client.create_subscription_to_all(group_name=group_name, from_end=True)
         return group_name
 
-    def when_append_new_events(self, *data: bytes) -> List[UUID]:
+    def when_append_new_events(self, *data: bytes) -> list[UUID]:
         events = [NewEvent(type="AnEvent", data=d, metadata=b"{}") for d in data]
         self.client.append_events(
             str(uuid4()),
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        ids = [e.id for e in events]
+        return [e.id for e in events]
         # print(f"  When appending events:\n    {', '.join(str(id) for id in ids)}")
-        return ids
 
     def then_consumer_receives_and_acks(
         self,
-        expected_ids: List[UUID],
+        expected_ids: list[UUID],
         on: str,
     ) -> None:
         # print(

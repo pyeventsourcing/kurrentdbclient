@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from unittest import TestCase
 from uuid import UUID, uuid4
 
@@ -9,13 +8,13 @@ from tests.test_client import random_data
 
 class TestNewEvent(TestCase):
     def test_construct_with_required_args_only(self) -> None:
-        data = random_data()
-        type = "OrderCreated"
+        event_data = random_data()
+        event_type = "OrderCreated"
 
-        event = NewEvent(type=type, data=data)
+        event = NewEvent(type=event_type, data=event_data)
 
-        self.assertEqual(event.type, type)
-        self.assertEqual(event.data, event.data)
+        self.assertEqual(event.type, event_type)
+        self.assertEqual(event.data, event_data)
         self.assertEqual(event.metadata, b"")
         self.assertEqual(event.content_type, "application/json")
         self.assertIsInstance(event.id, UUID)

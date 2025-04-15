@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# ruff: noqa: EM101
 # https://github.com/EventStore/EventStore-Client-NodeJS/blob/master/packages/test/src/samples/projection-management.ts
 import sys
 import traceback
@@ -17,7 +17,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -58,7 +58,7 @@ try:
         name=projection_name,
         query=projection_query,
     )
-except exceptions.AlreadyExists:
+except exceptions.AlreadyExistsError:
     pass
 else:
     raise Exception("Projection didn't already exist")
@@ -72,7 +72,7 @@ client.enable_projection(name=projection_name)
 # region EnableNotFound
 try:
     client.enable_projection(name="does-not-exist")
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")
@@ -99,13 +99,12 @@ try:
     list_of_statistics = client.list_all_projection_statistics()
     # endregion ListAll
     print(list_of_statistics)
-except exceptions.ExceptionThrownByHandler:
+except exceptions.ExceptionThrownByHandlerError:
     sys.stderr.write(
         f"Exception thrown by list_all_projection_statistics() handler:"
         f" {traceback.format_exc()}\n"
     )
     sys.stderr.flush()
-    pass
 
 try:
     # region ListContinuous
@@ -114,13 +113,12 @@ try:
     )
     # endregion ListContinuous
     print(list_of_statistics)
-except exceptions.ExceptionThrownByHandler:
+except exceptions.ExceptionThrownByHandlerError:
     sys.stderr.write(
         f"Exception thrown by list_continuous_projection_statistics() handler: "
         f"{traceback.format_exc()}\n"
     )
     sys.stderr.flush()
-    pass
 
 
 # region GetState
@@ -142,7 +140,7 @@ client.disable_projection(name=projection_name)
 # region DisableNotFound
 try:
     client.disable_projection(name="does-not-exist")
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")
@@ -155,7 +153,7 @@ client.abort_projection(name=projection_name)
 # region Abort_NotFound
 try:
     client.abort_projection(name="does-not-exist")
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")
@@ -168,7 +166,7 @@ client.reset_projection(name=projection_name)
 # region Reset_NotFound
 try:
     client.reset_projection(name="does-not-exist")
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")
@@ -201,7 +199,7 @@ try:
         name="does-not-exist",
         query=projection_query,
     )
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")
@@ -218,7 +216,7 @@ client.delete_projection(name=projection_name)
 # region DeleteNotFound
 try:
     client.delete_projection(name="does-not-exist")
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     pass
 else:
     raise Exception("Projection exists")

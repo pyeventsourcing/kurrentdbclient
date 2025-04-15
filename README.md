@@ -187,7 +187,7 @@ commit_position1 = client.append_to_stream(
 # Append events to an existing stream. The "current version"
 # is the "stream position" of the last recorded event in a
 # stream. We have recorded two new events, so the "current
-# version" is 1. The exception 'WrongCurrentVersion' will be
+# version" is 1. The exception 'WrongCurrentVersionError' will be
 # raised if an incorrect value is given.
 
 commit_position2 = client.append_to_stream(
@@ -559,13 +559,13 @@ Here are some examples of KurrentDB connection string URIs.
 The following URI will cause the client to make an "insecure" connection to
 gRPC target `'localhost:2113'`. Because the client's node preference is "follower",
 methods that can be called on a follower should complete successfully, methods that
-require a leader will raise a `NodeIsNotLeader` exception.
+require a leader will raise a `NodeIsNotLeaderError` exception.
 
     kdb://127.0.0.1:2113?Tls=false&NodePreference=follower
 
 The following URI will cause the client to make an "insecure" connection to
 gRPC target `'localhost:2113'`. Because the client's node preference is "leader",
-if this node is not a leader, then a `NodeIsNotLeader` exception will be raised by
+if this node is not a leader, then a `NodeIsNotLeaderError` exception will be raised by
 all methods.
 
     kdb://127.0.0.1:2113?Tls=false&NodePreference=leader
@@ -574,7 +574,7 @@ The following URI will cause the client to make a "secure" connection to
 gRPC target `'localhost:2113'` with username `'admin'` and password `'changeit'`
 as the default call credentials when making calls to the KurrentDB gRPC API.
 Because the client's node preference is "leader", by default, if this node is not
-a leader, then a `NodeIsNotLeader` exception will be raised by all methods.
+a leader, then a `NodeIsNotLeaderError` exception will be raised by all methods.
 
     kdb://admin:changeit@localhost:2113
 
@@ -848,7 +848,7 @@ that indicates the stream position of the last recorded event in the stream, or
 `StreamState.NO_STREAM` if the stream does not yet exist or has been deleted. The
 stream positions are zero-based and gapless, so that if a stream has two events, the
 `current_version` should be 1. If an incorrect value is given, this method will raise a
-`WrongCurrentVersion` exception. This behavior is designed to provide concurrency
+`WrongCurrentVersionError` exception. This behavior is designed to provide concurrency
 control when recording new events. The correct value of `current_version` for any stream
 can be obtained by calling `get_current_version()`. However, the typical approach is to
 reconstruct an aggregate from the recorded events, so that the version of the aggregate
@@ -857,7 +857,7 @@ events, and then use the current version of the aggregate as the value of the
 `current_version` argument when appending the new aggregate events. This ensures
 the consistency of the recorded aggregate events, because operations that generate
 new aggregate events can be retried with a freshly reconstructed aggregate if
-a `WrongCurrentVersion` exception is encountered when recording new events. This
+a `WrongCurrentVersionError` exception is encountered when recording new events. This
 controlling behavior can be entirely disabled by setting the value of the `current_version`
 argument to the constant `StreamState.ANY`. More selectively, this behaviour can be
 disabled for existing streams by setting the value of the `current_version`
@@ -944,7 +944,7 @@ If the method call initially failed and the new events were not in fact recorded
 makes good sense, when the method call is retried, that the new events are recorded
 and that the method call returns successfully. If the concurrency controls have not been disabled,
 that is if the `current version` is either `StreamState.NO_STREAM` or an integer value, and
-if a `WrongCurrentVersion` exception is raised when retrying the method call, then we can assume
+if a `WrongCurrentVersionError` exception is raised when retrying the method call, then we can assume
 both that the initial method call did not in fact successfully record the events, and also
 that subsequent events have in the meantime been recorded by somebody else. In this case,
 an application command which generated the new events may need to be executed again. And
@@ -958,7 +958,7 @@ can be sure the events have been recorded.
 
 The example below shows the `append_to_stream()` method being called again with events
 `event2` and `event3`, and with `current_version=0`. We can see that repeating the call
-to `append_to_stream()` returns successfully without raising a `WrongCurrentVersion`
+to `append_to_stream()` returns successfully without raising a `WrongCurrentVersionError`
 exception, as it would if the `append_to_stream()` operation were not idempotent.
 
 ```python
@@ -1126,15 +1126,15 @@ assert events[0] == event1
 assert events[1] == event2
 ```
 
-The `read_stream()` and `get_stream()` methods will raise a `NotFound` exception if the
+The `read_stream()` and `get_stream()` methods will raise a `NotFoundError` exception if the
 named stream has never existed or has been deleted.
 
 ```python
-from kurrentdbclient.exceptions import NotFound
+from kurrentdbclient.exceptions import NotFoundError
 
 try:
     client.get_stream('does-not-exist')
-except NotFound:
+except NotFoundError:
     pass  # The stream does not exist.
 else:
     raise Exception("Shouldn't get here")
@@ -1149,7 +1149,7 @@ when iterating over the "read response" starts, which means that the method retu
 before the streaming starts, and so there is no chance for any decorators to catch
 any connection issues.
 
-For the same reason, `read_stream()` will not raise a `NotFound` exception when
+For the same reason, `read_stream()` will not raise a `NotFoundError` exception when
 the stream does not exist, until iterating over the "read response" object begins.
 
 If you are reading a very large stream, then you might prefer to call `read_stream()`,
@@ -1214,10 +1214,10 @@ Event-sourced aggregates are typically reconstructed from recorded events by cal
 a mutator function for each recorded event, evolving from an initial state
 `None` to the current state of the aggregate. The function `get_aggregate()` shows
 how this can be done. The aggregate ID is used as a stream name. The exception
-`AggregateNotFound` is raised if the aggregate stream is not found.
+`AggregateNotFoundError` is raised if the aggregate stream is not found.
 
 ```python
-class AggregateNotFound(Exception):
+class AggregateNotFoundError(Exception):
     """Raised when an aggregate is not found."""
 
 
@@ -1230,8 +1230,8 @@ def get_aggregate(aggregate_id, mutator_func):
             stream_name=stream_name,
             stream_position=None
         )
-    except NotFound as e:
-        raise AggregateNotFound(aggregate_id) from e
+    except NotFoundError as e:
+        raise AggregateNotFoundError(aggregate_id) from e
     else:
         # Reconstruct aggregate from recorded events.
         aggregate = None
@@ -1290,7 +1290,7 @@ def get_aggregate(aggregate_id, mutator_func):
             backwards=True,
             limit=1
         )
-    except NotFound:
+    except NotFoundError:
         stream_position = None
     else:
         assert len(snapshots) == 1
@@ -1304,8 +1304,8 @@ def get_aggregate(aggregate_id, mutator_func):
             stream_name=stream_name,
             stream_position=stream_position
         )
-    except NotFound as e:
-        raise AggregateNotFound(aggregate_id) from e
+    except NotFoundError as e:
+        raise AggregateNotFoundError(aggregate_id) from e
     else:
         recorded_events += events
 
@@ -2278,7 +2278,7 @@ duration in seconds between recording "acknowledgements" (acks). The default val
 
 The optional `max_subscriber_count` argument is a Python `int` which sets the maximum
 number of concurrent readers of the persistent subscription, beyond which attempts to
-read the persistent subscription will raise a `MaximumSubscriptionsReached` error.
+read the persistent subscription will raise a `MaximumSubscriptionsReachedError` exception.
 
 The optional `live_buffer_size` argument is a Python `int` which sets the size of the
 buffer (in-memory) holding newly recorded events. The default value of `live_buffer_size`
@@ -2570,7 +2570,7 @@ duration in seconds between recording "acknowledgements" (acks). The default val
 
 The optional `max_subscriber_count` argument is a Python `int` which sets the maximum
 number of concurrent readers of the persistent subscription, beyond which attempts to
-read the persistent subscription will raise a `MaximumSubscriptionsReached` error.
+read the persistent subscription will raise a `MaximumSubscriptionsReachedError` exception.
 
 The optional `live_buffer_size` argument is a Python `int` which sets the size of the
 buffer (in-memory) holding newly recorded events. The default value of `live_buffer_size`

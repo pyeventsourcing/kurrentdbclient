@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from opentelemetry.semconv._incubating.attributes import db_attributes
 from opentelemetry.semconv.attributes import exception_attributes, server_attributes
 

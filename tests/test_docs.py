@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import contextlib
 import os
 import ssl
 from pathlib import Path
@@ -31,10 +31,8 @@ class TestDocs(TestCase):
 
     def tearDown(self) -> None:
         del os.environ["KDB_URI"]
-        try:
+        with contextlib.suppress(KeyError):
             del os.environ["KDB_ROOT_CERTIFICATES"]
-        except KeyError:
-            pass
 
     def test_readme(self) -> None:
         self._out = ""
@@ -44,14 +42,11 @@ class TestDocs(TestCase):
             self.fail(f"README file not found: {path}")
         self.check_code_snippets_in_file(path)
 
-    def check_code_snippets_in_file(self, doc_path: Path) -> None:  # noqa: C901
+    def check_code_snippets_in_file(self, doc_path: Path) -> None:
         # Extract lines of Python code from the README.md file.
 
-        PRINT_BLOCK_LINE_NUMBERS = True
-        if PRINT_BLOCK_LINE_NUMBERS:
-            lines = ["import sys"]
-        else:
-            lines = []
+        print_block_line_numbers = True
+        lines = ["import sys"] if print_block_line_numbers else []
         num_code_lines = 0
         num_code_lines_in_block = 0
         is_code = False
@@ -71,7 +66,7 @@ class TestDocs(TestCase):
                         )
                     is_code = True
                     is_md = True
-                    if PRINT_BLOCK_LINE_NUMBERS:
+                    if print_block_line_numbers:
                         line = (
                             f"sys.stderr.write('Block on line: {line_index}\\n') and"
                             " sys.stderr.flush()"
@@ -130,16 +125,15 @@ class TestDocs(TestCase):
                     line = ""
                 elif is_code:
                     # Process line in code block.
-                    if is_rst:
-                        # Restructured code block normally indented with four spaces.
-                        if len(line.strip()):
-                            if not line.startswith("    "):
-                                self.fail(
-                                    f"Code line needs 4-char indent: {repr(line)}: "
-                                    f"{doc_path}"
-                                )
-                            # Strip four chars of indentation.
-                            line = line[4:]
+                    # Restructured code block normally indented with four spaces.
+                    if is_rst and len(line.strip()):
+                        if not line.startswith("    "):
+                            self.fail(
+                                f"Code line needs 4-char indent: {line!r}: "
+                                f"{doc_path}"
+                            )
+                        # Strip four chars of indentation.
+                        line = line[4:]
 
                     if len(line.strip()):
                         num_code_lines_in_block += 1
@@ -170,10 +164,9 @@ class TestDocs(TestCase):
         # tempfile.writelines(source)
         # tempfile.flush()
 
-        exec(
+        exec(  # noqa: S102
             compile(source=source, filename=doc_path, mode="exec"), globals(), globals()
         )
-        return
 
         # print(Path.cwd())
         # print("\n".join(lines) + "\n")

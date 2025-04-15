@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import unittest
 import uuid
 from datetime import datetime
@@ -73,7 +72,6 @@ class Benchmark(KurrentDBClientTestCase):
         i = 0
         for _ in self.client.read_stream(stream_name):
             i += 1
-            pass
         assert i == num_events
         end = datetime.now()
         duration = (end - start).total_seconds()
@@ -145,7 +143,6 @@ class AsyncBenchmark(IsolatedAsyncioTestCase):
         i = 0
         async for _ in await self.client.read_stream(stream_name):
             i += 1
-            pass
         assert i == num_events
         end = datetime.now()
         duration = (end - start).total_seconds()

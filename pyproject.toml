@@ -39,12 +39,13 @@ opentelemetry = ["opentelemetry-api", "opentelemetry-instrumentation", "opentele
 
 [tool.poetry.group.dev.dependencies]
 black = { version = "*", allow-prereleases = true }
-flake8 = "*"
-flake8-broken-line = "*"
-flake8-bugbear = "*"
-flake8-coding = "*"
-flake8-isort = "*"
-flake8-tidy-imports = "*"
+ruff = "^0.1.14"
+#flake8 = "*"
+#flake8-broken-line = "*"
+#flake8-bugbear = "*"
+#flake8-coding = "*"
+#flake8-isort = "*"
+#flake8-tidy-imports = "*"
 isort = "*"
 mypy = "*"
 #pre-commit = "*"
@@ -53,7 +54,7 @@ grpcio-tools = "*"
 grpc-stubs = "*"
 types-protobuf = "*"
 mypy-protobuf = "*"
-coverage = "^7.2.7"
+coverage = "^7.8.0"
 fastapi = "^0.115.12"
 opentelemetry-exporter-otlp-proto-http = "^1.28.0"
 #opentelemetry-exporter-otlp-proto-grpc = "^1.25.0"
@@ -85,6 +86,116 @@ exclude = '''
 )/
 '''
 
+[tool.ruff]
+exclude = [
+    "kurrentdbclient/protos",
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+# Same as Black.
+line-length = 88
+#indent-width = 4
+
+# Assume Python 3.9
+target-version = "py39"
+
+[tool.ruff.lint]
+# Todo: "D"
+#select = ["E", "F", "W", "I", "N", "UP"]
+select = [
+    "ALL",
+#    "RUF012",
+]
+ignore = [
+     "PD011", # Use `.to_numpy()` instead of `.values`  <- this is for pandas
+#    "UP006",  # [*] Use `type` instead of `Type` for type annotation / Use `tuple` instead of `tuple` for type annotation / etc  <- ignore while supporting Python3.8
+    "A003",  # "Class attribute `id/type` is shadowing a Python builtin
+    "ANN",
+    "D",
+    "PT",
+    "ERA",
+    "COM812",
+    "T201",
+    "FIX",
+    "S608",
+    "B027",
+    "ARG002",
+    "I001",
+
+    "TRY",
+    "BLE",
+    "SLF",
+    "C901",
+    "SLF",
+    "TD",
+    "PTH",
+    "PTH",
+    "DTZ005",
+    "PLR0915",
+    "PLR0912",
+    "SLOT",
+    "S101",
+    "FBT002",
+    "PLR0913",
+    "PGH003",  # Use specific rule codes when ignoring type issues
+    "PLR2004", # Magic value used in comparison
+
+]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+#docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+#docstring-code-line-length = "dynamic"
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
 [tool.coverage.run]
 source = ["kurrentdbclient"]
 branch = true
@@ -98,6 +209,8 @@ relative_files = true
 exclude_lines = [
   # Have to re-enable the standard pragma
   "pragma: no cover",
+  # Comments to turn coverage on and off:
+  "no cover: start(?s:.)*?no cover: stop",
 #  # Don't complain about missing debug-only code:
 #  "def __repr__",
 #  "if self.debug",
@@ -113,6 +226,8 @@ exclude_lines = [
 #  "pass",
 #  # Don't complain about abstract methods
 #  "@abc.abstractmethod"
+  # Don't complain about type checking import blocks.
+  "if TYPE_CHECKING:",
 ]
 #ignore_errors = true
 #precision = 2

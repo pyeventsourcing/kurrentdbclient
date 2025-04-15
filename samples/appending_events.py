@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# ruff: noqa: EM101, S106
 from uuid import uuid4
 
 from kurrentdbclient import (
@@ -13,7 +13,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -92,7 +92,7 @@ try:
         current_version=StreamState.NO_STREAM,
         events=event2,
     )
-except exceptions.WrongCurrentVersion:
+except exceptions.WrongCurrentVersionError:
     print("Error appending second event")
     # endregion append-with-no-stream
 else:
@@ -139,7 +139,7 @@ try:
         current_version=original_version,
         events=event2,
     )
-except exceptions.WrongCurrentVersion:
+except exceptions.WrongCurrentVersionError:
     print("Error appending event2")
     # endregion append-with-concurrency-check
 else:

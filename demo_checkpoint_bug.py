@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import os
 import ssl
 import sys
-from typing import Optional, Tuple, cast
+from typing import cast
 from uuid import uuid4
 
 from kurrentdbclient import (
@@ -12,7 +13,7 @@ from kurrentdbclient import (
     RecordedEvent,
     StreamState,
 )
-from kurrentdbclient.exceptions import GrpcDeadlineExceeded
+from kurrentdbclient.exceptions import GrpcDeadlineExceededError
 
 KDB_TARGET = "localhost:2114"
 KDB_TLS = True
@@ -45,7 +46,7 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
 
     def get_event_at_commit_position(
         commit_position: int,
-    ) -> Optional[RecordedEvent]:
+    ) -> RecordedEvent | None:
         read_response = client.read_all(
             commit_position=commit_position,
             # backwards=True,
@@ -57,8 +58,7 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
             event = events[0]
             assert event.commit_position == commit_position, event
             return event
-        else:
-            return None
+        return None
 
     event = get_event_at_commit_position(first_append_commit_position)
     assert event is not None
@@ -78,13 +78,13 @@ def append_and_subscribe(client: KurrentDBClient) -> str:
 
     # We shouldn't get an extra checkpoint at the end (bug with <v23.10),
     # that has a commit position greater than the current commit position (v24.2).
-    checkpoint_commit_position: Optional[int] = None
+    checkpoint_commit_position: int | None = None
     try:
         for event in subscription1:
             if isinstance(event, Checkpoint):
                 checkpoint_commit_position = event.commit_position
                 # break
-    except GrpcDeadlineExceeded:
+    except GrpcDeadlineExceededError:
         pass
 
     fail_msg = ""
@@ -145,7 +145,7 @@ def construct_esdb_client(qs: str = "") -> KurrentDBClient:
 
 def get_server_certificate() -> str:
     return ssl.get_server_certificate(
-        addr=cast(Tuple[str, int], KDB_TARGET.split(":")),
+        addr=cast(tuple[str, int], KDB_TARGET.split(":")),
     )
 
 

@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import contextlib
 import math
 import sys
 from abc import abstractmethod
 from asyncio import CancelledError
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable, Iterator, Optional, Sequence, Union, overload
+from typing import TYPE_CHECKING, Any, overload, runtime_checkable
 from uuid import UUID, uuid4
 
 import grpc
 import grpc.aio
 from google.protobuf import duration_pb2, empty_pb2
 from grpc.aio import AioRpcError, UsageError
-from typing_extensions import Literal, Protocol, runtime_checkable
+from typing_extensions import Literal, Protocol
 
 from kurrentdbclient.common import (
     DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
@@ -36,21 +37,20 @@ from kurrentdbclient.common import (
     construct_recorded_event,
     handle_rpc_error,
 )
-from kurrentdbclient.connection_spec import ConnectionSpec
 from kurrentdbclient.events import CaughtUp, Checkpoint, NewEvent, RecordedEvent
 from kurrentdbclient.exceptions import (
     AccessDeniedError,
-    AppendDeadlineExceeded,
+    AppendDeadlineExceededError,
     BadRequestError,
-    CancelledByClient,
+    CancelledByClientError,
     InvalidTransactionError,
-    KurrentDBClientException,
+    KurrentDBClientError,
     MaximumAppendSizeExceededError,
-    NotFound,
-    StreamIsDeleted,
+    NotFoundError,
+    StreamIsDeletedError,
     SubscriptionConfirmationError,
     UnknownError,
-    WrongCurrentVersion,
+    WrongCurrentVersionError,
 )
 from kurrentdbclient.protos.Grpc import (
     shared_pb2,
@@ -58,6 +58,9 @@ from kurrentdbclient.protos.Grpc import (
     streams_pb2,
     streams_pb2_grpc,
 )
+
+if TYPE_CHECKING:
+    from kurrentdbclient.connection_spec import ConnectionSpec
 
 
 @runtime_checkable
@@ -83,56 +86,43 @@ class StreamState(Enum):
 class BaseReadResponse:
     def __init__(
         self,
-        stream_name: Optional[str],
+        stream_name: str | None,
     ):
         self._stream_name = stream_name
         self._include_checkpoints = False
         self._include_caught_up = False
 
-    def _handle_stream_read_rpc_error(
-        self, e: grpc.RpcError
-    ) -> KurrentDBClientException:
-        if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-            details = e.details() or ""
-            if self._stream_name and details and "is deleted" in details:
-                return StreamIsDeleted()
-            else:  # pragma: no cover
-                return handle_rpc_error(e)
-        else:
-            return handle_rpc_error(e)
-
     def _convert_read_resp(
         self, read_resp: streams_pb2.ReadResp
-    ) -> Optional[RecordedEvent]:
+    ) -> RecordedEvent | None:
         content_oneof = read_resp.WhichOneof("content")
         if content_oneof == "stream_not_found":
             msg = f"Stream {self._stream_name!r} not found"
-            raise NotFound(msg)
-        elif content_oneof == "event":
+            raise NotFoundError(msg)
+        if content_oneof == "event":
             return construct_recorded_event(read_resp.event)
-        elif content_oneof == "checkpoint":
+        if content_oneof == "checkpoint":
             checkpoint = read_resp.checkpoint
             return Checkpoint(
                 commit_position=checkpoint.commit_position,
                 prepare_position=checkpoint.prepare_position,
             )
-        elif content_oneof == "caught_up":  # pragma: no cover
+        if content_oneof == "caught_up":  # pragma: no cover
             return CaughtUp()
-        # elif content_oneof == "fell_behind":  # pragma: no cover
+        # if content_oneof == "fell_behind":  # pragma: no cover
         #     return FellBehind()
-        else:  # pragma: no cover
-            return None
-            # Todo: Maybe support other content_oneof values:
-            # 		uint64 first_stream_position = 5;
-            # 		uint64 last_stream_position = 6;
-            # 		AllStreamPosition last_all_stream_position = 7;
-            #
-            # Todo: Not sure how to request to get first_stream_position,
-            #   last_stream_position, first_all_stream_position.
+        return None  # pragma: no cover
+        # Todo: Maybe support other content_oneof values:
+        # 		uint64 first_stream_position = 5;
+        # 		uint64 last_stream_position = 6;
+        # 		AllStreamPosition last_all_stream_position = 7;
+        #
+        # Todo: Not sure how to request to get first_stream_position,
+        #   last_stream_position, first_all_stream_position.
 
     def _filter_recorded_event(
-        self, recorded_event: Optional[RecordedEvent]
-    ) -> Optional[RecordedEvent]:
+        self, recorded_event: RecordedEvent | None
+    ) -> RecordedEvent | None:
         recorded_event_type = type(recorded_event)
         if (
             (recorded_event_type is RecordedEvent)
@@ -147,7 +137,7 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
     def __init__(
         self,
         aio_call: grpc.aio.UnaryStreamCall[streams_pb2.ReadReq, streams_pb2.ReadResp],
-        stream_name: Optional[str],
+        stream_name: str | None,
         grpc_streamers: AsyncGrpcStreamers,
     ):
         BaseReadResponse.__init__(self, stream_name=stream_name)
@@ -156,21 +146,20 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
         self.read_resp_iter = aio_call.__aiter__()
 
     async def __anext__(self) -> RecordedEvent:
-        while True:
-            try:
-                try:
-                    read_resp = await self._get_next_read_resp()
-                except CancelledByClient:
-                    raise StopAsyncIteration() from None
-                else:
-                    recorded_event = self._filter_recorded_event(
-                        self._convert_read_resp(read_resp)
-                    )
-                    if recorded_event is not None:
-                        return recorded_event
-            except Exception:
-                await self.stop()
-                raise
+        try:
+            while True:
+                read_resp = await self._get_next_read_resp()
+                recorded_event = self._filter_recorded_event(
+                    self._convert_read_resp(read_resp)
+                )
+                if recorded_event is not None:
+                    return recorded_event
+        except CancelledByClientError:
+            await self.stop()
+            raise StopAsyncIteration from None
+        except:
+            await self.stop()
+            raise
 
     async def _get_next_read_resp(self) -> streams_pb2.ReadResp:
         try:
@@ -184,32 +173,31 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                     "",
                 )
         except grpc.RpcError as e:
-            raise self._handle_stream_read_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         except CancelledError:
-            raise CancelledByClient() from None
+            raise CancelledByClientError from None
         else:
             assert isinstance(read_resp, streams_pb2.ReadResp)
             return read_resp
 
     async def stop(self) -> None:
         if not await self._set_is_stopped():
-            try:
+            # Get a UsageError (when testing) by closing
+            # channel and then canceling a call.
+            with contextlib.suppress(UsageError):
                 self.aio_call.cancel()
-            except UsageError:  # pragma: no cover
-                # Get here (when testing) by closing
-                # channel and then canceling a call.
-                pass
             self._grpc_streamers.remove(self)
 
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
+    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
         await self.stop()
 
 
 class AsyncCatchupSubscription(AsyncReadResponse, AbstractAsyncCatchupSubscription):
     def __init__(
         self,
+        *,
         aio_call: grpc.aio.UnaryStreamCall[streams_pb2.ReadReq, streams_pb2.ReadResp],
-        stream_name: Optional[str],
+        stream_name: str | None,
         grpc_streamers: AsyncGrpcStreamers,
         include_checkpoints: bool = False,
         include_caught_up: bool = False,
@@ -226,8 +214,7 @@ class AsyncCatchupSubscription(AsyncReadResponse, AbstractAsyncCatchupSubscripti
         if content_oneof != "confirmation":  # pragma: no cover
             msg = f"Expected subscription confirmation, got: {read_resp}"
             raise SubscriptionConfirmationError(msg)
-        else:
-            self._subscription_id = read_resp.confirmation.subscription_id
+        self._subscription_id = read_resp.confirmation.subscription_id
 
     @property
     def subscription_id(self) -> str:
@@ -238,7 +225,7 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
     def __init__(
         self,
         read_resps: _ReadResps,
-        stream_name: Optional[str],
+        stream_name: str | None,
         grpc_streamers: GrpcStreamers,
     ):
         GrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
@@ -246,27 +233,26 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
         self._read_resps = read_resps
 
     def __next__(self) -> RecordedEvent:
-        while True:
-            try:
-                try:
-                    read_resp = self._get_next_read_resp()
-                except CancelledByClient:
-                    raise StopIteration() from None
-                else:
-                    recorded_event = self._filter_recorded_event(
-                        self._convert_read_resp(read_resp)
-                    )
-                    if recorded_event is not None:
-                        return recorded_event
-            except Exception:
-                self.stop()
-                raise
+        try:
+            while True:
+                read_resp = self._get_next_read_resp()
+                recorded_event = self._filter_recorded_event(
+                    self._convert_read_resp(read_resp)
+                )
+                if recorded_event is not None:
+                    return recorded_event
+        except CancelledByClientError:
+            self.stop()
+            raise StopIteration from None
+        except:
+            self.stop()
+            raise
 
     def _get_next_read_resp(self) -> streams_pb2.ReadResp:
         try:
             read_resp = next(self._read_resps)
         except grpc.RpcError as e:
-            raise self._handle_stream_read_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         else:
             assert isinstance(read_resp, streams_pb2.ReadResp)
             return read_resp
@@ -280,8 +266,9 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
 class CatchupSubscription(ReadResponse, AbstractCatchupSubscription):
     def __init__(
         self,
+        *,
         read_resps: _ReadResps,
-        stream_name: Optional[str],
+        stream_name: str | None,
         grpc_streamers: GrpcStreamers,
         include_checkpoints: bool = False,
         include_caught_up: bool = False,
@@ -372,7 +359,9 @@ class BatchAppendResponse:
 #
 #
 # class BatchAppendResps(GrpcStreamer):
-#     def __init__(self, batch_append_resps: _BatchAppendResps, grpc_streamers: GrpcStreamers):
+#     def __init__(
+#         self, batch_append_resps: _BatchAppendResps, grpc_streamers: GrpcStreamers
+#     ):
 #         grpc_streamers[id(self)] = self
 #         self._batch_append_resps = batch_append_resps
 #         self._grpc_streamers = grpc_streamers
@@ -405,7 +394,7 @@ class BatchAppendResponse:
 class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
-        grpc_channel: Union[grpc.Channel, grpc.aio.Channel],
+        grpc_channel: grpc.Channel | grpc.aio.Channel,
         connection_spec: ConnectionSpec,
         grpc_streamers: TGrpcStreamers,
     ):
@@ -415,7 +404,7 @@ class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
     @staticmethod
     def _generate_append_reqs(
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
     ) -> Iterator[streams_pb2.AppendReq]:
         # First, define append request that has 'content' as 'options'.
@@ -453,10 +442,10 @@ class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
     @staticmethod
     def _construct_batch_append_req(
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
         correlation_id: UUID,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> streams_pb2.BatchAppendReq:
         # Construct batch request 'options'.
         stream_identifier = shared_pb2.StreamIdentifier(
@@ -513,78 +502,75 @@ class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
     def _convert_batch_append_resp(
         response: streams_pb2.BatchAppendResp,
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
     ) -> int:
         # Response 'result' is either 'success' or 'error'.
         result_oneof = response.WhichOneof("result")
         if result_oneof == "success":
             # Return commit position.
             return response.success.position.commit_position
-        else:
-            # Construct exception object.
-            assert result_oneof == "error", result_oneof
-            assert isinstance(response.error, status_pb2.Status)
 
-            error_details = response.error.details
-            if error_details.Is(shared_pb2.WrongExpectedVersion.DESCRIPTOR):
-                wrong_version = shared_pb2.WrongExpectedVersion()
-                error_details.Unpack(wrong_version)
+        # Construct exception object.
+        assert result_oneof == "error", result_oneof
+        assert isinstance(response.error, status_pb2.Status)
 
-                csro_oneof = wrong_version.WhichOneof("current_stream_revision_option")
-                if csro_oneof == "current_no_stream":
-                    msg = f"Stream {stream_name!r} does not exist"
-                    raise WrongCurrentVersion(msg)
-                else:
-                    assert csro_oneof == "current_stream_revision"
-                    msg = (
-                        f"Stream position of last event is"
-                        f" {wrong_version.current_stream_revision}"
-                        f" not {current_version}"
-                    )
-                    raise WrongCurrentVersion(msg)
+        error_details = response.error.details
+        if error_details.Is(shared_pb2.WrongExpectedVersion.DESCRIPTOR):
+            wrong_version = shared_pb2.WrongExpectedVersion()
+            error_details.Unpack(wrong_version)
 
-            # Todo: Write tests to cover all of this:
-            elif error_details.Is(
-                shared_pb2.AccessDenied.DESCRIPTOR
-            ):  # pragma: no cover
-                raise AccessDeniedError()
-            elif error_details.Is(shared_pb2.StreamDeleted.DESCRIPTOR):
-                stream_deleted = shared_pb2.StreamDeleted()
-                error_details.Unpack(stream_deleted)
-                # Todo: Ask DB team if this is ever different from request value.
-                # stream_name = stream_deleted.stream_identifier.stream_name
-                msg = f"Stream {stream_name !r} is deleted"
-                raise StreamIsDeleted(msg)
-            elif error_details.Is(shared_pb2.Timeout.DESCRIPTOR):  # pragma: no cover
-                raise AppendDeadlineExceeded()
-            elif error_details.Is(shared_pb2.Unknown.DESCRIPTOR):  # pragma: no cover
-                raise UnknownError()
-            elif error_details.Is(
-                shared_pb2.InvalidTransaction.DESCRIPTOR
-            ):  # pragma: no cover
-                raise InvalidTransactionError()
-            elif error_details.Is(
-                shared_pb2.MaximumAppendSizeExceeded.DESCRIPTOR
-            ):  # pragma: no cover
-                size_exceeded = shared_pb2.MaximumAppendSizeExceeded()
-                error_details.Unpack(size_exceeded)
-                size = size_exceeded.maxAppendSize
-                msg = f"Max size is {size}"
-                raise MaximumAppendSizeExceededError(msg)
-            elif error_details.Is(shared_pb2.BadRequest.DESCRIPTOR):  # pragma: no cover
-                bad_request = shared_pb2.BadRequest()
-                error_details.Unpack(bad_request)
-                msg = f"Bad request: {bad_request.message}"
-                raise BadRequestError(msg)
-            else:
-                # Unexpected error details type.
-                raise KurrentDBClientException(error_details)  # pragma: no cover
+            csro_oneof = wrong_version.WhichOneof("current_stream_revision_option")
+            if csro_oneof == "current_no_stream":
+                msg = f"Stream {stream_name!r} does not exist"
+                raise WrongCurrentVersionError(msg)
+            assert csro_oneof == "current_stream_revision"
+            msg = (
+                f"Stream position of last event is"
+                f" {wrong_version.current_stream_revision}"
+                f" not {current_version}"
+            )
+            raise WrongCurrentVersionError(msg)
+
+        # Todo: Write tests to cover all of this:
+        if error_details.Is(shared_pb2.AccessDenied.DESCRIPTOR):  # pragma: no cover
+            raise AccessDeniedError
+        if error_details.Is(shared_pb2.StreamDeleted.DESCRIPTOR):
+            stream_deleted = shared_pb2.StreamDeleted()
+            error_details.Unpack(stream_deleted)
+            # Todo: Ask DB team if this is ever different from request value.
+            # stream_name = stream_deleted.stream_identifier.stream_name
+            msg = f"Stream {stream_name !r} is deleted"
+            raise StreamIsDeletedError(msg)
+        if error_details.Is(shared_pb2.Timeout.DESCRIPTOR):  # pragma: no cover
+            raise AppendDeadlineExceededError
+        if error_details.Is(shared_pb2.Unknown.DESCRIPTOR):  # pragma: no cover
+            raise UnknownError
+        if error_details.Is(
+            shared_pb2.InvalidTransaction.DESCRIPTOR
+        ):  # pragma: no cover
+            raise InvalidTransactionError
+        if error_details.Is(
+            shared_pb2.MaximumAppendSizeExceeded.DESCRIPTOR
+        ):  # pragma: no cover
+            size_exceeded = shared_pb2.MaximumAppendSizeExceeded()
+            error_details.Unpack(size_exceeded)
+            size = size_exceeded.maxAppendSize
+            msg = f"Max size is {size}"
+            raise MaximumAppendSizeExceededError(msg)
+        if error_details.Is(shared_pb2.BadRequest.DESCRIPTOR):  # pragma: no cover
+            bad_request = shared_pb2.BadRequest()
+            error_details.Unpack(bad_request)
+            msg = f"Bad request: {bad_request.message}"
+            raise BadRequestError(msg)
+        # Unexpected error details type.
+        raise KurrentDBClientError(error_details)  # pragma: no cover
 
     @staticmethod
     def _construct_read_request(
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
-        commit_position: Optional[int] = None,
+        *,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         backwards: bool = False,
         resolve_links: bool = False,
@@ -695,7 +681,7 @@ class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_delete_req(
-        stream_name: str, current_version: Union[int, StreamState]
+        stream_name: str, current_version: int | StreamState
     ) -> streams_pb2.DeleteReq:
         options = streams_pb2.DeleteReq.Options(
             stream_identifier=shared_pb2.StreamIdentifier(
@@ -720,7 +706,7 @@ class BaseStreamsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_tombstone_req(
-        stream_name: str, current_version: Union[int, StreamState]
+        stream_name: str, current_version: int | StreamState
     ) -> streams_pb2.TombstoneReq:
         options = streams_pb2.TombstoneReq.Options(
             stream_identifier=shared_pb2.StreamIdentifier(
@@ -748,11 +734,11 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def batch_append(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         # Call the gRPC method.
         try:
@@ -778,9 +764,10 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 batch_append_call.cancel()
                 return batch_append_response
 
-            else:  # pragma: no cover
-                msg = "Batch append response not received"
-                raise KurrentDBClientException(msg)
+            # no cover: start
+            msg = "Batch append response not received"
+            raise KurrentDBClientError(msg)
+            # no cover: stop
 
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
@@ -789,14 +776,14 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AsyncReadResponse:
         """
         Signature for reading events from a stream.
@@ -806,15 +793,15 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         subscribe: Literal[True],
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AsyncCatchupSubscription:
         """
         Signature for reading events from a stream with a catch-up subscription.
@@ -824,16 +811,16 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def read(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = (),
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AsyncReadResponse:
         """
         Signature for reading all events.
@@ -843,7 +830,7 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def read(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = (),
@@ -854,9 +841,9 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AsyncCatchupSubscription:
         """
         Signature for reading all events with a catch-up subscription.
@@ -865,9 +852,9 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
-        commit_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         backwards: bool = False,
         resolve_links: bool = False,
@@ -880,10 +867,10 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> Union[AsyncReadResponse, AsyncCatchupSubscription]:
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AsyncReadResponse | AsyncCatchupSubscription:
         """
         Constructs and sends a gRPC 'ReadReq' to the 'Read' rpc.
 
@@ -937,10 +924,10 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
     async def delete(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         delete_req = self._construct_delete_req(stream_name, current_version)
 
@@ -952,29 +939,17 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                details = e.details() or ""
-                if "WrongExpectedVersion" in details:
-                    if "Actual version: -1" in details:
-                        raise NotFound() from None
-                    else:
-                        raise WrongCurrentVersion(details) from None
-                elif "is deleted" in details:
-                    raise StreamIsDeleted(details) from None
-                else:  # pragma: no cover
-                    raise handle_rpc_error(e) from None
-            else:
-                raise handle_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         else:
             assert isinstance(delete_resp, streams_pb2.DeleteResp), delete_resp
 
     async def tombstone(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         tombstone_req = self._construct_tombstone_req(stream_name, current_version)
 
@@ -986,19 +961,7 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                details = e.details() or ""
-                if "WrongExpectedVersion" in details:
-                    if "Actual version: -1" in details:
-                        raise NotFound(details) from None
-                    else:
-                        raise WrongCurrentVersion(details) from None
-                elif "is deleted" in details:
-                    raise StreamIsDeleted(details) from None
-                else:  # pragma: no cover
-                    raise handle_rpc_error(e) from None
-            else:
-                raise handle_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         else:
             assert isinstance(tombstone_resp, streams_pb2.TombstoneResp)
 
@@ -1012,14 +975,14 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ReadResponse:
         """
         Signature for reading events from a stream.
@@ -1029,15 +992,15 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         subscribe: Literal[True],
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> CatchupSubscription:
         """
         Signature for reading events from a stream with a catch-up subscription.
@@ -1047,16 +1010,16 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def read(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = (),
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ReadResponse:
         """
         Signature for reading all events.
@@ -1066,7 +1029,7 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def read(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = (),
@@ -1077,9 +1040,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> CatchupSubscription:
         """
         Signature for reading all events with a catch-up subscription.
@@ -1088,9 +1051,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def read(
         self,
         *,
-        stream_name: Optional[str] = None,
-        stream_position: Optional[int] = None,
-        commit_position: Optional[int] = None,
+        stream_name: str | None = None,
+        stream_position: int | None = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         backwards: bool = False,
         resolve_links: bool = False,
@@ -1103,10 +1066,10 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> Union[ReadResponse, CatchupSubscription]:
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> ReadResponse | CatchupSubscription:
         """
         Constructs and sends a gRPC 'ReadReq' to the 'Read' rpc.
 
@@ -1145,23 +1108,22 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 stream_name=stream_name,
                 grpc_streamers=self._grpc_streamers,
             )
-        else:
-            return CatchupSubscription(
-                read_resps=read_resps,
-                stream_name=stream_name,
-                include_checkpoints=include_checkpoints,
-                include_caught_up=include_caught_up,
-                grpc_streamers=self._grpc_streamers,
-            )
+        return CatchupSubscription(
+            read_resps=read_resps,
+            stream_name=stream_name,
+            include_checkpoints=include_checkpoints,
+            include_caught_up=include_caught_up,
+            grpc_streamers=self._grpc_streamers,
+        )
 
     def append(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         """
         Constructs and sends a stream of gRPC 'AppendReq' to the 'Append' rpc.
@@ -1191,28 +1153,26 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
             if result_oneof == "success":
                 # Return commit position.
                 return append_resp.success.position.commit_position
-            else:
-                assert result_oneof == "wrong_expected_version", result_oneof
-                wev = append_resp.wrong_expected_version
-                cro_oneof = wev.WhichOneof("current_revision_option")
-                if cro_oneof == "current_no_stream":
-                    msg = f"Stream {stream_name!r} does not exist"
-                    raise WrongCurrentVersion(msg)
-                else:
-                    assert cro_oneof == "current_revision", cro_oneof
-                    msg = (
-                        f"Stream position of last event is"
-                        f" {wev.current_revision}"
-                        f" not {current_version}"
-                    )
-                    raise WrongCurrentVersion(msg)
-                # if cro_oneof == "current_revision":
-                #     msg = f"Current version is {wev.current_revision}"
-                #     raise WrongCurrentVersion(msg)
-                # else:
-                #     assert cro_oneof == "current_no_stream", cro_oneof
-                #     msg = f"Stream {stream_name!r} does not exist"
-                #     raise WrongCurrentVersion(msg)
+            assert result_oneof == "wrong_expected_version", result_oneof
+            wev = append_resp.wrong_expected_version
+            cro_oneof = wev.WhichOneof("current_revision_option")
+            if cro_oneof == "current_no_stream":
+                msg = f"Stream {stream_name!r} does not exist"
+                raise WrongCurrentVersionError(msg)
+            assert cro_oneof == "current_revision", cro_oneof
+            msg = (
+                f"Stream position of last event is"
+                f" {wev.current_revision}"
+                f" not {current_version}"
+            )
+            raise WrongCurrentVersionError(msg)
+            # if cro_oneof == "current_revision":
+            #     msg = f"Current version is {wev.current_revision}"
+            #     raise WrongCurrentVersion(msg)
+            # else:
+            #     assert cro_oneof == "current_no_stream", cro_oneof
+            #     msg = f"Stream {stream_name!r} does not exist"
+            #     raise WrongCurrentVersion(msg)
 
     # def batch_append_multiplexed(
     #     self,
@@ -1290,11 +1250,11 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def batch_append(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         # Call the gRPC method.
         try:
@@ -1315,8 +1275,10 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 return self._convert_batch_append_resp(
                     response, stream_name, current_version
                 )
-            else:  # pragma: no cover
-                raise KurrentDBClientException("Batch append response not received")
+            # no cover: start
+            msg = "Batch append response not received"
+            raise KurrentDBClientError(msg)
+            # no cover: stop
 
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
@@ -1324,10 +1286,10 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def delete(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         delete_req = self._construct_delete_req(stream_name, current_version)
 
@@ -1339,19 +1301,7 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                details = e.details() or ""
-                if "WrongExpectedVersion" in details:
-                    if "Actual version: -1" in details:
-                        raise NotFound(details) from None
-                    else:
-                        raise WrongCurrentVersion(details) from None
-                elif "is deleted" in details:
-                    raise StreamIsDeleted(details) from None
-                else:  # pragma: no cover
-                    raise handle_rpc_error(e) from None
-            else:
-                raise handle_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         else:
             assert isinstance(delete_resp, streams_pb2.DeleteResp)
             # position_option_oneof = delete_resp.WhichOneof("position_option")
@@ -1363,10 +1313,10 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
     def tombstone(
         self,
         stream_name: str,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         tombstone_req = self._construct_tombstone_req(stream_name, current_version)
 
@@ -1378,19 +1328,7 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
-                details = e.details() or ""
-                if "WrongExpectedVersion" in details:
-                    if "Actual version: -1" in details:
-                        raise NotFound(details) from None
-                    else:
-                        raise WrongCurrentVersion(details) from None
-                elif "is deleted" in details:
-                    raise StreamIsDeleted(details) from None
-                else:  # pragma: no cover
-                    raise handle_rpc_error(e) from None
-            else:
-                raise handle_rpc_error(e) from None
+            raise handle_streams_rpc_error(e) from None
         else:
             assert isinstance(tombstone_resp, streams_pb2.TombstoneResp)
             # position_option_oneof = tombstone_resp.WhichOneof("position_option")
@@ -1398,3 +1336,15 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
             #     return tombstone_resp.position
             # else:
             #     return tombstone_resp.no_position
+
+
+def handle_streams_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:
+    if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
+        details = e.details() or ""
+        if "WrongExpectedVersion" in details:
+            if "Actual version: -1" in details:
+                return NotFoundError(details)
+            return WrongCurrentVersionError(details)
+        if "is deleted" in details:
+            return StreamIsDeletedError(details)
+    return handle_rpc_error(e)

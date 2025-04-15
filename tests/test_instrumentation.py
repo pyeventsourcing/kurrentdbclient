@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
@@ -6,21 +5,15 @@ import json
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Dict,
     Generic,
-    Optional,
     Protocol,
-    Sequence,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
 from unittest import IsolatedAsyncioTestCase, TestCase
-from unittest.case import _AssertRaisesContext
 from uuid import uuid4
 
 # import opentelemetry.instrumentation.version as instrumentation_version
@@ -52,7 +45,6 @@ from opentelemetry.trace import (
     get_tracer,
     set_tracer_provider,
 )
-from opentelemetry.util.types import AttributeValue
 
 from kurrentdbclient import (
     AsyncKurrentDBClient,
@@ -62,13 +54,11 @@ from kurrentdbclient import (
     StreamState,
 )
 from kurrentdbclient.client import BaseKurrentDBClient
-from kurrentdbclient.common import (
-    AbstractAsyncCatchupSubscription,
-    AbstractAsyncPersistentSubscription,
-    AbstractCatchupSubscription,
-    AbstractPersistentSubscription,
+from kurrentdbclient.exceptions import (
+    DiscoveryFailedError,
+    GrpcError,
+    ServiceUnavailableError,
 )
-from kurrentdbclient.exceptions import DiscoveryFailed, GrpcError, ServiceUnavailable
 from kurrentdbclient.instrumentation.opentelemetry import (
     AsyncKurrentDBClientInstrumentor,
     KurrentDBClientInstrumentor,
@@ -88,13 +78,26 @@ from kurrentdbclient.instrumentation.opentelemetry.utils import (
     apply_spanner,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from unittest.case import _AssertRaisesContext
+
+    from opentelemetry.util.types import AttributeValue
+
+    from kurrentdbclient.common import (
+        AbstractAsyncCatchupSubscription,
+        AbstractAsyncPersistentSubscription,
+        AbstractCatchupSubscription,
+        AbstractPersistentSubscription,
+    )
+
 _in_memory_span_exporter = InMemorySpanExporter()
 
 
 def init_tracer_provider(
     span_exporters: Sequence[SpanExporter] = (),
-    span_processor_cls: Union[
-        Type[BatchSpanProcessor], Type[SimpleSpanProcessor]
+    span_processor_cls: type[
+        BatchSpanProcessor | SimpleSpanProcessor
     ] = BatchSpanProcessor,
 ) -> None:
     resource = Resource.create(
@@ -122,7 +125,7 @@ def _clear_in_memory_spans() -> None:
     _in_memory_span_exporter.clear()
 
 
-def _get_in_memory_spans() -> Tuple[trace_sdk.ReadableSpan, ...]:
+def _get_in_memory_spans() -> tuple[trace_sdk.ReadableSpan, ...]:
     _force_flush_spans()
     return _in_memory_span_exporter.get_finished_spans()
 
@@ -147,12 +150,14 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         class Example(BaseKurrentDBClient):
             def double(self, /, x: int, name: str = "") -> int:
                 if x < 0:
-                    raise ValueError(f"Negative value {name}")
+                    msg = f"Negative value {name}"
+                    raise ValueError(msg)
                 return 2 * x
 
             async def adouble(self, /, x: int, name: str = "") -> int:
                 if x < 0:
-                    raise ValueError(f"Negative value {name}")
+                    msg = f"Negative value {name}"
+                    raise ValueError(msg)
                 return 2 * x
 
             @property
@@ -202,7 +207,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example_spanner(
             tracer: Tracer,
             instance: Example,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -281,12 +286,14 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         class Example2(BaseKurrentDBClient):
             def double(self, /, x: int, name: str = "") -> int:
                 if x < 0:
-                    raise ValueError(f"Negative value {name}")
+                    msg = f"Negative value {name}"
+                    raise ValueError(msg)
                 return 2 * x
 
             async def adouble(self, /, x: int, name: str = "") -> int:
                 if x < 0:
-                    raise ValueError(f"Negative value {name}")
+                    msg = f"Negative value {name}"
+                    raise ValueError(msg)
                 return 2 * x
 
             @property
@@ -375,7 +382,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example3_spanner(
             tracer: Tracer,
             instance: Example,
-            spanned_func: Union[DoubleMethod3, AsyncDoubleMethod3],
+            spanned_func: DoubleMethod3 | AsyncDoubleMethod3,
             /,
             x: int,
             y: int,
@@ -439,7 +446,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example4_spanner(
             tracer: int,
             instance: Example,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -501,7 +508,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example5_spanner(
             tracer: Tracer,
             instance: int,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -560,7 +567,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example6_spanner(
             tracer: Tracer,
             instance: object,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -619,7 +626,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example7_spanner(
             tracer: Tracer,
             instance: BaseKurrentDBClient,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -654,7 +661,8 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
             tracer=self.tracer,
         )
 
-        # This is not okay because spanner func instance arg is type "SubExample" - a subclass.
+        # This is not okay because spanner func
+        # instance arg is type "SubExample" - a subclass.
         class SubExample(Example):
             pass
 
@@ -681,7 +689,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example8_spanner(
             tracer: Tracer,
             instance: SubExample,
-            spanned_func: Union[DoubleMethod, AsyncDoubleMethod],
+            spanned_func: DoubleMethod | AsyncDoubleMethod,
             /,
             x: int,
             name: str = "",
@@ -761,7 +769,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example9_spanner(
             tracer: Tracer,
             instance: Example9,
-            spanned_func: Union[DoubleMethod9, AsyncDoubleMethod9],
+            spanned_func: DoubleMethod9 | AsyncDoubleMethod9,
             /,
             x: int,
             name: str = "",
@@ -836,7 +844,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         def example10_spanner(
             tracer: Tracer,
             instance: KurrentDBClient,
-            spanned_func: Union[DoubleMethod10, AsyncDoubleMethod10],
+            spanned_func: DoubleMethod10 | AsyncDoubleMethod10,
             /,
             x: int,
             name: str = "",
@@ -874,12 +882,12 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
 
     def check_spans(
         self,
-        num_spans: Optional[int] = None,
-        span_index: Optional[int] = None,
+        num_spans: int | None = None,
+        span_index: int | None = None,
         span_name: str = "",
         span_kind: trace_api.SpanKind = trace_api.SpanKind.CLIENT,
-        parent_span_index: Optional[int] = None,
-        error: Optional[Exception] = None,
+        parent_span_index: int | None = None,
+        error: Exception | None = None,
     ) -> None:
         # Get all finished spans.
         spans = _get_in_memory_spans()
@@ -921,23 +929,20 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
             parent_span = spans[parent_span_index]
             self.assertIsNotNone(parent_span.context)
             assert parent_span.context is not None  # for mypy
-            # Check "streams.subscribe" parent span ID is the "streams.append" span ID.
+            # Check "streams.subscribe" parent span ID is "streams.append" span ID.
             self.assertEqual(parent_span.context.span_id, span.parent.span_id)
-            # Check "streams.subscribe" parent trace ID is the "streams.append" trace ID.
+            # Check "streams.subscribe" parent trace ID is "streams.append" trace ID.
             self.assertEqual(parent_span.context.trace_id, span.parent.trace_id)
-        else:
-            if span.parent is not None:
-                current_span = cast(trace_sdk.Span, trace_api.get_current_span())
-                self.assertTrue(
-                    current_span.name.startswith("test_"), current_span.name
-                )
-                context: Optional[SpanContext] = current_span.get_span_context()  # type: ignore[no-untyped-call]
-                self.assertIsNotNone(context)
-                assert context is not None  # for mypy
-                self.assertEqual(context.span_id, span.parent.span_id)
+        elif span.parent is not None:
+            current_span = cast(trace_sdk.Span, trace_api.get_current_span())
+            self.assertTrue(current_span.name.startswith("test_"), current_span.name)
+            context: SpanContext | None = current_span.get_span_context()  # type: ignore[no-untyped-call]
+            self.assertIsNotNone(context)
+            assert context is not None  # for mypy
+            self.assertEqual(context.span_id, span.parent.span_id)
 
         # Check the span attributes.
-        span_attributes: Dict[str, AttributeValue] = {}
+        span_attributes: dict[str, AttributeValue] = {}
         self.assertIsNotNone(span.attributes)
         assert span.attributes is not None  # for mypy
         self.assertEqual(span_attributes, dict(span.attributes))
@@ -1021,16 +1026,18 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
 
     def check_spans(
         self,
-        num_spans: Optional[int] = None,
-        span_index: Optional[int] = None,
+        num_spans: int | None = None,
+        span_index: int | None = None,
         span_name: str = "",
         span_kind: trace_api.SpanKind = trace_api.SpanKind.CLIENT,
-        parent_span_index: Optional[int] = None,
-        instrumentation_scope_name: str = "kurrentdbclient.instrumentation.opentelemetry",
+        parent_span_index: int | None = None,
+        instrumentation_scope_name: str = (
+            "kurrentdbclient.instrumentation.opentelemetry"
+        ),
         instrumentation_scope_version: str = "1.0",
-        span_attributes: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
-        server_port: Optional[str] = None,
+        span_attributes: dict[str, Any] | None = None,
+        error: Exception | None = None,
+        server_port: str | None = None,
         rpc_service: str = "",
         rpc_status_code: int = 0,
         rpc_method: str = "",
@@ -1086,10 +1093,8 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
         self.assertEqual(resource_attributes, span.resource.attributes)
 
         # Check the span attributes.
-        if span_attributes is None:
-            span_attributes = {}
-        else:
-            span_attributes = deepcopy(span_attributes)
+
+        span_attributes = {} if span_attributes is None else deepcopy(span_attributes)
         if rpc_service == "":
             span_attributes.update(
                 {
@@ -1158,9 +1163,9 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
             parent_span = spans[parent_span_index]
             self.assertIsNotNone(parent_span.context)
             assert parent_span.context is not None  # for mypy
-            # Check "streams.subscribe" parent span ID is the "streams.append" span ID.
+            # Check "streams.subscribe" parent span ID is "streams.append" span ID.
             self.assertEqual(parent_span.context.span_id, span.parent.span_id)
-            # Check "streams.subscribe" parent trace ID is the "streams.append" trace ID.
+            # Check "streams.subscribe" parent trace ID is "streams.append" trace ID.
             self.assertEqual(parent_span.context.trace_id, span.parent.trace_id)
         else:
             self.assertIsNone(span.parent)
@@ -1212,11 +1217,10 @@ class KurrentDBClientInstrumentorTestCase(BaseKurrentDBClientTestCase[KurrentDBC
 
     def get_next_and_check_consumer_span(
         self,
-        subscription: Union[
-            AbstractCatchupSubscription, AbstractPersistentSubscription
-        ],
+        subscription: AbstractCatchupSubscription | AbstractPersistentSubscription,
         new_event: NewEvent,
-        parent_span_index: Optional[int] = 0,
+        parent_span_index: int | None = 0,
+        *,
         expect_new_span: bool = True,
     ) -> None:
         # Count the number of spans.
@@ -1292,11 +1296,12 @@ class AsyncKurrentDBClientInstrumentorTestCase(
 
     async def async_get_next_and_check_consumer_span(
         self,
-        subscription: Union[
-            AbstractAsyncCatchupSubscription, AbstractAsyncPersistentSubscription
-        ],
+        subscription: (
+            AbstractAsyncCatchupSubscription | AbstractAsyncPersistentSubscription
+        ),
         new_event: NewEvent,
-        parent_span_index: Optional[int] = 0,
+        parent_span_index: int | None = 0,
+        *,
         expect_new_span: bool = True,
     ) -> None:
         # Count the number of spans.
@@ -1473,14 +1478,14 @@ class TestUtils(
         )
 
         # Check _set_span_error.
-        error: Optional[Exception] = None
+        error: Exception | None = None
         with _start_span(tracer, "test_enrich_span8", SpanKind.INTERNAL) as span:
             _enrich_span(
                 span=span,
                 client=client,
             )
             try:
-                raise ValueError()
+                raise ValueError
             except ValueError as e:
                 error = e
                 _set_span_error(span, e)
@@ -1757,7 +1762,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
 
         # Check span after error.
         self.break_client_connection(client)
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             client.append_to_stream(
                 stream_name=stream_name,
                 events=NewEvent("SomethingHappened", b""),
@@ -1881,7 +1886,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
 
         # Check span after error.
         self.break_client_connection(client)
-        with self.assertRaises(DiscoveryFailed) as cm:
+        with self.assertRaises(DiscoveryFailedError) as cm:
             client.append_to_stream(
                 stream_name=stream_name,
                 events=NewEvent("SomethingHappened", b""),
@@ -1965,7 +1970,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
         )
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             client.subscribe_to_stream(stream_name)
 
         self.check_spans(
@@ -2047,7 +2052,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
         )
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             client.subscribe_to_all(from_end=True)
 
         self.check_spans(
@@ -2137,7 +2142,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
         subscription.stop()
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             client.read_subscription_to_stream(group_name, stream_name)
 
         self.check_spans(
@@ -2226,7 +2231,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
         )
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             client.read_subscription_to_all(group_name)
 
         self.check_spans(
@@ -2352,7 +2357,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
 
         # Check span after error.
         await self.async_break_client_connection(client)
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             await client.append_to_stream(
                 stream_name=stream_name,
                 events=NewEvent("SomethingHappened", b""),
@@ -2440,7 +2445,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         )
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             await client.subscribe_to_stream(stream_name)
 
         self.check_spans(
@@ -2524,7 +2529,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         )
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             await client.subscribe_to_all(from_end=True)
 
         self.check_spans(
@@ -2617,7 +2622,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         await self.async_break_client_connection(client)
 
         # Check span after error during method call.
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             await client.read_subscription_to_stream(group_name, stream_name)
 
         self.check_spans(
@@ -2707,7 +2712,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
 
         # Check span after error during method call.
         await self.async_break_client_connection(client)
-        with self.assertRaises(ServiceUnavailable) as cm:
+        with self.assertRaises(ServiceUnavailableError) as cm:
             await client.read_subscription_to_all(group_name)
 
         self.check_spans(
@@ -2966,7 +2971,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
 
         # Check span after error during method call.
         self.break_client_connection(client)
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             client.get_stream(stream_name)
 
         self.check_spans(
@@ -3219,7 +3224,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
 
         # Check span after error during method call.
         await self.async_break_client_connection(client)
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             await client.get_stream(stream_name)
 
         self.check_spans(
@@ -3484,7 +3489,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
         # Close channel and check we get an error.
         self.break_client_connection(client)
 
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             client.get_stream(stream_name)
 
         self.check_spans(

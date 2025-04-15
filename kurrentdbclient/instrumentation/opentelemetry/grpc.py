@@ -1,19 +1,25 @@
-# -*- coding: utf-8 -*-
 # Can't cancel streaming response when grpc is being instrumented.
 # https://github.com/open-telemetry/opentelemetry-python-contrib/issues/2014
 from __future__ import annotations
 
 from collections import OrderedDict
-from types import FunctionType
-from typing import Any, Callable, Mapping, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable
 
 import grpc
 import opentelemetry.trace as trace_api
-from grpc._channel import _Rendezvous
 from opentelemetry.instrumentation.utils import unwrap
 from opentelemetry.propagate import inject
 from opentelemetry.semconv.trace import SpanAttributes
 from wrapt import wrap_function_wrapper
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from types import FunctionType
+
+    from grpc._channel import _Rendezvous
+    from opentelemetry.instrumentation.grpc.grpcext._interceptor import (
+        _StreamClientInfo,
+    )
 
 try:
     from opentelemetry.instrumentation.grpc._client import (
@@ -21,9 +27,6 @@ try:
         _carrier_setter,
     )
     from opentelemetry.instrumentation.grpc._utilities import RpcInfo
-    from opentelemetry.instrumentation.grpc.grpcext._interceptor import (
-        _StreamClientInfo,
-    )
 
 except ImportError:  # pragma: no cover
     OpenTelemetryClientInterceptor = None  # type: ignore
@@ -63,14 +66,11 @@ def _wrap_grpc_intercept_server_stream() -> Callable[..., InterceptServerStream]
 def _replacement_intercept_server_stream(
     self: OpenTelemetryClientInterceptor,
     request_or_iterator: Any,
-    metadata: Tuple[Tuple[str, str], ...],
+    metadata: tuple[tuple[str, str], ...],
     client_info: _StreamClientInfo,
     invoker: Callable[..., _Rendezvous],
 ) -> InterceptServerStream:
-    if not metadata:
-        mutable_metadata = OrderedDict()  # pragma: no cover
-    else:
-        mutable_metadata = OrderedDict(metadata)
+    mutable_metadata = OrderedDict(metadata) if metadata else OrderedDict()
 
     with self._start_span(  # type: ignore[no-untyped-call]
         client_info.full_method,

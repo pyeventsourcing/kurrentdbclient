@@ -1,49 +1,49 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast
+from typing import cast
 from unittest import IsolatedAsyncioTestCase, skip, skipIf
 from uuid import uuid4
 
 from kurrentdbclient import (
-    AsyncioKurrentDBClient,
     AsyncPersistentSubscription,
     Checkpoint,
     NewEvent,
     StreamState,
 )
-from kurrentdbclient.asyncio_client import AsyncKurrentDBClient, _AsyncioKurrentDBClient
+from kurrentdbclient.asyncio_client import AsyncKurrentDBClient
 from kurrentdbclient.common import (
-    DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
+    DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+    DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+    DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+    DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
 )
 from kurrentdbclient.events import CaughtUp
 from kurrentdbclient.exceptions import (
-    AlreadyExists,
-    DeadlineExceeded,
-    DiscoveryFailed,
-    ExceptionIteratingRequests,
-    ExceptionThrownByHandler,
-    FollowerNotFound,
-    GrpcDeadlineExceeded,
-    NodeIsNotLeader,
-    NotFound,
-    OperationFailed,
+    AlreadyExistsError,
+    DeadlineExceededError,
+    DiscoveryFailedError,
+    ExceptionIteratingRequestsError,
+    ExceptionThrownByHandlerError,
+    FollowerNotFoundError,
+    GrpcDeadlineExceededError,
+    NodeIsNotLeaderError,
+    NotFoundError,
+    OperationFailedError,
     ProgrammingError,
-    ReadOnlyReplicaNotFound,
-    ServiceUnavailable,
+    ReadOnlyReplicaNotFoundError,
+    ServiceUnavailableError,
     SSLError,
-    StreamIsDeleted,
-    WrongCurrentVersion,
+    StreamIsDeletedError,
+    WrongCurrentVersionError,
 )
 from kurrentdbclient.persistent import AsyncSubscriptionReadReqs
 from kurrentdbclient.projections import ProjectionStatistics
@@ -65,8 +65,8 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             root_certificates=get_server_certificate("localhost:2114"),
         )
         await self.client.connect()
-        self._reader: Optional[AsyncKurrentDBClient] = None
-        self._writer: Optional[AsyncKurrentDBClient] = None
+        self._reader: AsyncKurrentDBClient | None = None
+        self._writer: AsyncKurrentDBClient | None = None
 
     @property
     def reader(self) -> AsyncKurrentDBClient:
@@ -123,7 +123,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                     )
                 await self._writer.close()
                 del self._writer
-        except (ServiceUnavailable, DiscoveryFailed):
+        except (ServiceUnavailableError, DiscoveryFailedError):
             pass
         finally:
             await super().asyncTearDown()
@@ -141,7 +141,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             "kdb+discover://example.com?Tls=False"
             "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
         )
-        with self.assertRaises(DiscoveryFailed) as cm:
+        with self.assertRaises(DiscoveryFailedError) as cm:
             await client.connect()
         self.assertIn(":2113", str(cm.exception))
         self.assertNotIn(":9898", str(cm.exception))
@@ -150,7 +150,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             "kdb+discover://example.com:9898?Tls=False"
             "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
         )
-        with self.assertRaises(DiscoveryFailed) as cm:
+        with self.assertRaises(DiscoveryFailedError) as cm:
             await client.connect()
         self.assertNotIn(":2113", str(cm.exception))
         self.assertIn(":9898", str(cm.exception))
@@ -183,14 +183,14 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         client = AsyncKurrentDBClient(
             "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=follower"
         )
-        with self.assertRaises(FollowerNotFound):
+        with self.assertRaises(FollowerNotFoundError):
             await client.connect()
 
     async def test_raises_read_only_replica_not_found(self) -> None:
         client = AsyncKurrentDBClient(
             "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=readonlyreplica"
         )
-        with self.assertRaises(ReadOnlyReplicaNotFound):
+        with self.assertRaises(ReadOnlyReplicaNotFoundError):
             await client.connect()
 
     async def test_raises_ssl_error_with_tls_true_but_no_root_certificates(
@@ -222,7 +222,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         uri += "?MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
         client = AsyncKurrentDBClient(uri, root_certificates="blah")
-        with self.assertRaises(DiscoveryFailed):
+        with self.assertRaises(DiscoveryFailedError):
             await client.connect()
 
     async def test_username_and_password_required_for_secure_connection(self) -> None:
@@ -327,7 +327,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Delete stream.
         await self.client.delete_stream(stream_name, current_version=StreamState.EXISTS)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_stream(stream_name)
 
         # Get stream metadata (should have "$tb").
@@ -381,7 +381,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         metadata, version = await self.client.get_stream_metadata(stream_name)
         self.assertEqual(metadata["$acl"], acl)
 
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             await self.client.set_stream_metadata(
                 stream_name=stream_name,
                 metadata=metadata,
@@ -391,7 +391,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         await self.client.tombstone_stream(stream_name, current_version=StreamState.ANY)
 
         # Can't get metadata after tombstoning stream, because stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.get_stream_metadata(stream_name)
 
         # For some reason, we can set stream metadata, even though the stream
@@ -409,13 +409,13 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=StreamState.ANY,
         )
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.get_stream_metadata(stream_name)
 
     async def test_append_events_raises_wrong_current_version(self) -> None:
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             await self.client.append_events(
                 stream_name=stream_name1, events=[event1], current_version=10
             )
@@ -427,7 +427,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         event2 = NewEvent(type="OrderUpdated", data=b"{}")
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             await self.client.append_events(
                 stream_name=stream_name1, events=[event2], current_version=10
             )
@@ -448,7 +448,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.client.connection_spec._targets = ["localhost:2222"]
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             await self.client.append_events(
                 stream_name=stream_name1,
                 events=[event1],
@@ -460,7 +460,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.client.connection_spec._targets = ["localhost:2222", "localhost:2222"]
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(DiscoveryFailed):
+        with self.assertRaises(DiscoveryFailedError):
             await self.client.append_events(
                 stream_name=stream_name1,
                 events=[event1],
@@ -471,7 +471,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         await self.setup_reader()
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.append_events(
                 stream_name=stream_name1,
                 events=[event1],
@@ -491,7 +491,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         await self.client.tombstone_stream(stream_name1, current_version=0)
 
         event2 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.append_events(
                 stream_name=stream_name1,
                 events=[event2],
@@ -541,12 +541,12 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         await self.client.tombstone_stream(stream_name1, current_version=0)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.get_stream(stream_name=stream_name1)
 
     async def test_append_events_reconnects_to_leader(self) -> None:
         await self.setup_reader()
-        self.reader.connection_spec.options._NodePreference = "leader"
+        self.reader.connection_spec.options._node_preference = "leader"
 
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
@@ -559,11 +559,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     @skip("Flaky test since upgrading grpcio past v1.62")
     async def test_append_events_raises_deadline_exceeded(self) -> None:
         await self.setup_reader()
-        self.reader.connection_spec.options._NodePreference = "leader"
+        self.reader.connection_spec.options._node_preference = "leader"
 
         stream_name1 = str(uuid4())
         events = [NewEvent(type="SomethingHappened", data=b"{}") for _ in range(1000)]
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.reader.append_events(
                 stream_name=stream_name1,
                 events=events,
@@ -572,12 +572,12 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             )
 
     async def test_get_stream_raises_not_found(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_stream(str(uuid4()))
 
     async def test_get_stream_reconnects(self) -> None:
         await self.client._connection.close()
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_stream(str(uuid4()))
 
     async def test_get_stream_raises_service_unavailable(self) -> None:
@@ -585,7 +585,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.client.connection_spec._targets = ["localhost:2222"]
         stream_name1 = str(uuid4())
         event1 = NewEvent(type="OrderCreated", data=b"{}")
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             await self.client.append_events(
                 stream_name=stream_name1,
                 events=[event1],
@@ -595,7 +595,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_delete_stream_raises_stream_not_found(self) -> None:
         stream_name1 = str(uuid4())
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.delete_stream(
                 stream_name1, current_version=StreamState.EXISTS
             )
@@ -609,7 +609,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=StreamState.NO_STREAM,
         )
 
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             await self.client.delete_stream(stream_name1, current_version=10)
 
     async def test_delete_stream_raises_stream_is_deleted(self) -> None:
@@ -622,7 +622,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
         await self.client.tombstone_stream(stream_name1, current_version=0)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.delete_stream(stream_name1, current_version=0)
 
     async def test_delete_stream_reconnects_to_leader(self) -> None:
@@ -637,14 +637,14 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         await self.setup_reader()
-        self.reader.connection_spec.options._NodePreference = "leader"
+        self.reader.connection_spec.options._node_preference = "leader"
 
         await self.reader.delete_stream(stream_name1, current_version=0)
 
     async def test_tombstone_stream_raises_stream_not_found(self) -> None:
         stream_name1 = str(uuid4())
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.tombstone_stream(
                 stream_name1, current_version=StreamState.EXISTS
             )
@@ -658,7 +658,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=StreamState.NO_STREAM,
         )
 
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             await self.client.tombstone_stream(stream_name1, current_version=10)
 
     async def test_tombstone_stream_raises_stream_is_deleted(self) -> None:
@@ -671,7 +671,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
         await self.client.tombstone_stream(stream_name1, current_version=0)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             await self.client.tombstone_stream(stream_name1, current_version=0)
 
     async def test_tombstone_stream_reconnects_to_leader(self) -> None:
@@ -686,7 +686,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         await self.setup_reader()
-        self.reader.connection_spec.options._NodePreference = "leader"
+        self.reader.connection_spec.options._node_preference = "leader"
 
         await self.reader.tombstone_stream(stream_name1, current_version=0)
 
@@ -862,7 +862,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         stream_name = f"my-stream-{uuid4().hex}"
 
         # Can't update subscription that doesn't exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.update_subscription_to_stream(
                 group_name=group_name,
                 stream_name=stream_name,
@@ -889,36 +889,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, False)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -933,36 +923,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -979,36 +959,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1024,33 +994,25 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
         self.assertEqual(info.message_timeout, 15.0)
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1069,28 +1031,22 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1110,24 +1066,18 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1146,22 +1096,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(info.max_checkpoint_count, 12)
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1182,17 +1126,13 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1212,15 +1152,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_checkpoint_count, 12)
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1241,12 +1177,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
         self.assertEqual(info.live_buffer_size, 300)
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1270,7 +1204,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.read_batch_size, 250)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1465,7 +1399,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_persistent_subscription_to_all(self) -> None:
         # Check subscription does not exist.
         group_name = str(uuid4())
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_subscription_info(group_name)
 
         # Create subscription.
@@ -1490,7 +1424,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Read subscription - error iterating requests is propagated.
         persistent_subscription = await self.client.read_subscription_to_all(group_name)
-        with self.assertRaises(ExceptionIteratingRequests):
+        with self.assertRaises(ExceptionIteratingRequestsError):
             async for _ in persistent_subscription:
                 await persistent_subscription.ack("a")  # type: ignore[arg-type]
 
@@ -1592,7 +1526,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Delete subscription.
         await self.client.delete_subscription(group_name=group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.read_subscription_to_all(group_name)
 
         subscription_infos = await self.client.list_subscriptions()
@@ -1601,23 +1535,23 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 self.fail("Subscription found in list")
 
         # - raises NotFound
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.read_subscription_to_all(group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.update_subscription_to_all(group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_subscription_info(group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.replay_parked_events(group_name)
 
     async def test_subscription_to_all_update(self) -> None:
         group_name = f"my-subscription-{uuid4().hex}"
 
         # Can't update subscription that doesn't exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             # raises in get_info()
             await self.client.update_subscription_to_all(group_name=group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             # raises in update()
             await self.client._connection.persistent_subscriptions.update(
                 group_name=group_name,
@@ -1634,36 +1568,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, False)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1676,36 +1600,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1718,36 +1632,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1759,36 +1663,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "Pinned")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1802,33 +1696,25 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "Pinned")
         self.assertEqual(info.message_timeout, 15.0)
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1845,28 +1731,22 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1884,24 +1764,18 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1918,22 +1792,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(info.max_checkpoint_count, 12)
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1952,17 +1820,13 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -1980,15 +1844,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.max_checkpoint_count, 12)
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -2007,12 +1867,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
         self.assertEqual(info.live_buffer_size, 300)
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -2034,7 +1892,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(info.read_batch_size, 250)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -2182,7 +2040,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         group_name = str(uuid4())
         stream_name1 = str(uuid4())
         stream_name2 = str(uuid4())
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_subscription_info(group_name, stream_name1)
 
         # Create subscription.
@@ -2208,7 +2066,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         subscription = await self.client.read_subscription_to_stream(
             group_name, stream_name1
         )
-        with self.assertRaises(ExceptionIteratingRequests):
+        with self.assertRaises(ExceptionIteratingRequestsError):
             async for _ in subscription:
                 await subscription.ack("a")  # type: ignore[arg-type]
 
@@ -2337,13 +2195,13 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 self.fail("Subscription found in list")
 
         # - raises NotFound
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.read_subscription_to_stream(group_name, stream_name1)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.update_subscription_to_stream(group_name, stream_name1)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_subscription_info(group_name, stream_name1)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.replay_parked_events(group_name, stream_name1)
         subscription_infos = await self.client.list_subscriptions_to_stream(
             str(uuid4())
@@ -2356,31 +2214,31 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         group_name = str(uuid4())
         stream_name1 = str(uuid4())
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.get_subscription_info(group_name, stream_name1)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.list_subscriptions()
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.list_subscriptions_to_stream(stream_name1)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.create_subscription_to_stream(group_name, stream_name1)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.create_subscription_to_all(group_name)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.update_subscription_to_stream(group_name, stream_name1)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.read_subscription_to_all(group_name)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.read_subscription_to_stream(group_name, stream_name1)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.update_subscription_to_all(group_name)
 
         # Todo: This doesn't hang...
@@ -2390,7 +2248,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         # with self.assertRaises(NodeIsNotLeader):
         #     await self.reader.replay_parked_events(group_name)
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             await self.reader.delete_subscription(group_name)
 
     @skip("Flaky test since upgrading grpcio past v1.62")
@@ -2401,24 +2259,24 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         await self.client.create_subscription_to_all(group_name)
         await self.client.create_subscription_to_stream(group_name, stream_name1)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.get_subscription_info(group_name, stream_name1, timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.list_subscriptions(timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.list_subscriptions_to_stream(stream_name1, timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.create_subscription_to_stream(
                 group_name, stream_name1, timeout=0
             )
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.create_subscription_to_all(group_name, timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.update_subscription_to_stream(
                 group_name, stream_name1, timeout=0
             )
@@ -2429,15 +2287,17 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         #
         # Todo: This hangs....
         # with self.assertRaises(GrpcDeadlineExceeded):
-        #     await self.client.read_subscription_to_stream(group_name, stream_name1, timeout=0)
+        #     await self.client.read_subscription_to_stream(
+        #         group_name, stream_name1, timeout=0
+        #     )
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.update_subscription_to_all(group_name, timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.replay_parked_events(group_name, timeout=0)
 
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             await self.client.delete_subscription(group_name, timeout=0)
 
     async def test_persistent_subscription_reconnects_closed_connection(self) -> None:
@@ -2576,7 +2436,9 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     #     await self.client._connection.close()
     #     # Reconstruct connection with wrong port (to inspire ServiceUnavailble).
     #     await self.client._connection.close()
-    #     self.client._connection = self.client._construct_esdb_connection("localhost:2222")
+    #     self.client._connection = self.client._construct_esdb_connection(
+    #         "localhost:2222"
+    #     )
     #
     #     await self.client.subscribe_to_all()
     #     # with self.assertRaises(ServiceUnavailable):
@@ -2604,7 +2466,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Raises error if projection already exists.
-        with self.assertRaises(AlreadyExists):
+        with self.assertRaises(AlreadyExistsError):
             await self.client.create_projection(
                 query="",
                 name=projection_name,
@@ -2613,7 +2475,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             )
 
         # Raises error if track_emitted=True but emit_enabled=False...
-        with self.assertRaises(ExceptionThrownByHandler):
+        with self.assertRaises(ExceptionThrownByHandlerError):
             await self.client.create_projection(
                 query="",
                 name=projection_name,
@@ -2625,7 +2487,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.update_projection(name=projection_name, query="")
 
         # Create named projection.
@@ -2644,7 +2506,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.delete_projection(projection_name)
 
         # Create named projection.
@@ -2667,7 +2529,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             )
         else:
             # Can't delete a projection that has been deleted.
-            with self.assertRaises(NotFound):
+            with self.assertRaises(NotFoundError):
                 await self.client.delete_projection(
                     name=projection_name,
                 )
@@ -2676,7 +2538,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_projection_statistics(name=projection_name)
 
         # Create named projection.
@@ -2722,7 +2584,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.disable_projection(name=projection_name)
 
         # Create named projection.
@@ -2735,7 +2597,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.disable_projection(name=projection_name)
 
         # Create named projection.
@@ -2748,7 +2610,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.enable_projection(name=projection_name)
 
         # Create named projection.
@@ -2761,7 +2623,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.reset_projection(name=projection_name)
 
         # Create named projection.
@@ -2774,7 +2636,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_projection_state(name=projection_name)
 
         # Create named projection (query is an empty string).
@@ -2782,7 +2644,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Try to get projection state.
         # Todo: Why does this just hang?
-        with self.assertRaises(DeadlineExceeded):
+        with self.assertRaises(DeadlineExceededError):
             await self.client.get_projection_state(name=projection_name, timeout=1)
 
         # Create named projection.
@@ -2950,7 +2812,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertLess(0, statistics.events_processed_after_restart)
 
         # Can't delete whilst running.
-        with self.assertRaises(OperationFailed):
+        with self.assertRaises(OperationFailedError):
             await self.client.delete_projection(
                 projection_name,
                 delete_emitted_streams=True,
@@ -3001,25 +2863,25 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 name=projection_name
             )
             self.assertEqual("Deleting/Stopped", statistics.status)
-        except NotFound:
+        except NotFoundError:
             pass
 
         await asyncio.sleep(1)
 
         # After deleting, projection methods raise NotFound.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_projection_statistics(name=projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_projection_state(projection_name)
 
         # with self.assertRaises(NotFound):
         #     await self.client.get_projection_result(projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.enable_projection(projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.disable_projection(projection_name)
 
         # Result stream still exists.
@@ -3027,7 +2889,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertEqual(2, len(result_events))
 
         # Emitted stream does not exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             await self.client.get_stream(emitted_stream_name)
 
         # Todo: Are "checkpoint" and "state" streams somehow hidden?
@@ -3062,7 +2924,8 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
         uri = f"kdb://admin:changeit@{secure_grpc_target}"
 
         # Construct client without client auth.
-        client = await AsyncioKurrentDBClient(uri, root_certificates=root_certificates)
+        client = AsyncKurrentDBClient(uri, root_certificates=root_certificates)
+        await client.connect()
 
         # User key and cert should be None.
         self.assertIsNone(client.private_key)
@@ -3073,7 +2936,8 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
 
         # Construct client with client auth.
         uri += f"?UserKeyFile={self.user_key_file}&UserCertFile={self.user_cert_file}"
-        client = await AsyncioKurrentDBClient(uri, root_certificates=root_certificates)
+        client = AsyncKurrentDBClient(uri, root_certificates=root_certificates)
+        await client.connect()
 
         # User cert and key should have expected values.
         self.assertEqual(self.user_key, client.private_key)
@@ -3083,24 +2947,17 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
         with self.assertRaises(SSLError):
             await client.get_commit_position()
 
-        # Construct client with TlsCaFile (instead of passing root_certificates directly).
+        # Construct client with TlsCaFile (instead
+        # of passing root_certificates directly).
         uri += f"&TlsCaFile={self.tls_ca_file}"
-        client_with_tls_ca = await AsyncioKurrentDBClient(uri)
+        client_with_tls_ca = AsyncKurrentDBClient(uri)
+        await client_with_tls_ca.connect()
 
-        # Read the contents of TlsCaFile as bytes, since root_certificates are compared as bytes
-        with open(self.tls_ca_file, "rb") as f:
+        # Read the contents of TlsCaFile as bytes,
+        # because root_certificates are compared as bytes.
+        with open(self.tls_ca_file, "rb") as f:  # noqa: ASYNC101
             tls_ca_file_contents = f.read()
 
         # TlsCaFile should override the root_certificates passed directly.
         self.assertNotEqual(root_certificates, client_with_tls_ca.root_certificates)
         self.assertEqual(tls_ca_file_contents, client_with_tls_ca.root_certificates)
-
-
-class TestAsyncioKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
-    async def test_deprecated_function(self) -> None:
-        self.client = await AsyncioKurrentDBClient(
-            uri="kdb://admin:changeit@localhost:2114",
-            root_certificates=get_server_certificate("localhost:2114"),
-        )
-        assert isinstance(self.client, _AsyncioKurrentDBClient)
-        await self.client.get_commit_position()

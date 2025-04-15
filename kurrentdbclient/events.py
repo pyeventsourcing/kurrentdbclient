@@ -1,10 +1,13 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from typing_extensions import Literal
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 ContentType = Literal["application/json", "application/octet-stream"]
 
@@ -38,18 +41,17 @@ class RecordedEvent:
     id: UUID
     stream_name: str
     stream_position: int
-    commit_position: Optional[int]
-    prepare_position: Optional[int]
-    recorded_at: Optional[datetime] = None
-    link: Optional["RecordedEvent"] = None
-    retry_count: Optional[int] = None
+    commit_position: int | None
+    prepare_position: int | None
+    recorded_at: datetime | None = None
+    link: RecordedEvent | None = None
+    retry_count: int | None = None
 
     @property
     def ack_id(self) -> UUID:
         if self.link is not None:
             return self.link.id
-        else:
-            return self.id
+        return self.id
 
     @property
     def is_system_event(self) -> bool:

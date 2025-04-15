@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from uuid import uuid4
 
 from kurrentdbclient import (
@@ -8,7 +7,7 @@ from kurrentdbclient import (
     NewEvent,
     StreamState,
 )
-from kurrentdbclient.exceptions import ConsumerTooSlow
+from kurrentdbclient.exceptions import ConsumerTooSlowError
 from kurrentdbclient.streams import CatchupSubscription, RecordedEvent
 from tests.test_client import get_server_certificate
 
@@ -16,7 +15,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -176,7 +175,7 @@ while True:
             # record commit position
             handle_event(received)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
     # endregion checkpoint

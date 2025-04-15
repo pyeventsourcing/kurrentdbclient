@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
+# ruff: noqa: PERF203
 from uuid import uuid4
 
 from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
-from kurrentdbclient.exceptions import ConsumerTooSlow
+from kurrentdbclient.exceptions import ConsumerTooSlowError
 from kurrentdbclient.persistent import (
     PersistentSubscription,
     RecordedEvent,
@@ -13,7 +13,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -82,7 +82,7 @@ while True:
             else:
                 subscription.ack(event)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
 
@@ -110,7 +110,7 @@ while True:
             else:
                 subscription.ack(event)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
     # endregion subscribe-to-persistent-subscription-to-all
@@ -142,7 +142,7 @@ while True:
             else:
                 subscription.ack(event)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
     # endregion subscribe-to-persistent-subscription-with-manual-acks

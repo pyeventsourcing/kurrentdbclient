@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# ruff: noqa: EM101, S106
 from uuid import uuid4
 
 from kurrentdbclient import (
@@ -21,7 +21,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -92,7 +92,7 @@ try:
     events = client.get_stream(
         stream_name=unknown_stream_name, limit=1
     )
-except exceptions.NotFound:
+except exceptions.NotFoundError:
     print("The stream was not found")
 # endregion checking-for-stream-presence
 else:

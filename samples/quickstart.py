@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from uuid import uuid4
 
 from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
@@ -9,7 +8,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 

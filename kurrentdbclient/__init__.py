@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-from kurrentdbclient.asyncio_client import AsyncioKurrentDBClient, AsyncKurrentDBClient
+from kurrentdbclient.asyncio_client import AsyncKurrentDBClient
 from kurrentdbclient.client import (
     DEFAULT_EXCLUDE_FILTER,
     KDB_PERSISTENT_CONFIG_EVENTS_REGEX,
@@ -29,7 +28,6 @@ __all__ = [
     "DEFAULT_EXCLUDE_FILTER",
     "KDB_PERSISTENT_CONFIG_EVENTS_REGEX",
     "KDB_SYSTEM_EVENTS_REGEX",
-    "AsyncioKurrentDBClient",
     "AsyncCatchupSubscription",
     "AsyncKurrentDBClient",
     "AsyncPersistentSubscription",

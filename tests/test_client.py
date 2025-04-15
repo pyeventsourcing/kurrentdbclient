@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import datetime
 import json
 import os
@@ -8,9 +9,8 @@ from collections import Counter
 from tempfile import NamedTemporaryFile
 from threading import Thread
 from time import sleep
-from typing import Any, List, Optional, Sequence, Set, Tuple, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest import TestCase, skipIf
-from unittest.case import _AssertRaisesContext
 from uuid import UUID, uuid4
 
 from grpc import RpcError, StatusCode
@@ -21,15 +21,15 @@ import kurrentdbclient.protos.Grpc.persistent_pb2 as grpc_persistent
 from kurrentdbclient import KDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
 from kurrentdbclient.client import KurrentDBClient
 from kurrentdbclient.common import (
-    DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
+    DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+    DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+    DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+    DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
     handle_rpc_error,
 )
 from kurrentdbclient.connection_spec import (
@@ -39,32 +39,38 @@ from kurrentdbclient.connection_spec import (
 )
 from kurrentdbclient.events import CaughtUp, Checkpoint, NewEvent
 from kurrentdbclient.exceptions import (
-    AbortedByServer,
-    AlreadyExists,
-    ConsumerTooSlow,
-    DeadlineExceeded,
-    DiscoveryFailed,
-    ExceptionIteratingRequests,
-    ExceptionThrownByHandler,
-    FollowerNotFound,
-    GrpcDeadlineExceeded,
+    AbortedByServerError,
+    AlreadyExistsError,
+    ConsumerTooSlowError,
+    DeadlineExceededError,
+    DiscoveryFailedError,
+    ExceptionIteratingRequestsError,
+    ExceptionThrownByHandlerError,
+    FailedPreconditionError,
+    FollowerNotFoundError,
+    GrpcDeadlineExceededError,
     GrpcError,
     InternalError,
-    MaximumSubscriptionsReached,
-    NodeIsNotLeader,
-    NotFound,
-    OperationFailed,
-    ReadOnlyReplicaNotFound,
-    ServiceUnavailable,
+    MaximumSubscriptionsReachedError,
+    NodeIsNotLeaderError,
+    NotFoundError,
+    OperationFailedError,
+    ReadOnlyReplicaNotFoundError,
+    ServiceUnavailableError,
     SSLError,
-    StreamIsDeleted,
+    StreamIsDeletedError,
     UnknownError,
-    WrongCurrentVersion,
+    WrongCurrentVersionError,
 )
 from kurrentdbclient.gossip import NODE_STATE_FOLLOWER, NODE_STATE_LEADER
 from kurrentdbclient.persistent import SubscriptionReadReqs
 from kurrentdbclient.projections import ProjectionStatistics
 from kurrentdbclient.protos.Grpc import persistent_pb2
+from kurrentdbclient.streams import handle_streams_rpc_error
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from unittest.case import _AssertRaisesContext
 
 started = datetime.datetime.now()
 last = datetime.datetime.now()
@@ -76,7 +82,7 @@ KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.0.0")
 
 
 def get_elapsed_time() -> str:
-    global last
+    global last  # noqa: PLW0603
     last = datetime.datetime.now()
     delta = last - started
     result = ""
@@ -169,29 +175,29 @@ class TestConnectionSpec(TestCase):
     def test_tls(self) -> None:
         # Tls default true.
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222")
-        self.assertIs(spec.options.Tls, True)
+        self.assertTrue(spec.options.tls)
 
         # Set Tls "true".
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?Tls=true")
-        self.assertIs(spec.options.Tls, True)
+        self.assertTrue(spec.options.tls)
 
         # Set Tls "false".
         spec = ConnectionSpec("kdb://localhost:2222?Tls=false")
-        self.assertIs(spec.options.Tls, False)
+        self.assertFalse(spec.options.tls)
 
         # Check case insensitivity.
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?TLS=true")
-        self.assertIs(spec.options.Tls, True)
+        self.assertTrue(spec.options.tls)
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?tls=true")
-        self.assertIs(spec.options.Tls, True)
+        self.assertTrue(spec.options.tls)
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?tls=TRUE")
-        self.assertIs(spec.options.Tls, True)
+        self.assertTrue(spec.options.tls)
         spec = ConnectionSpec("kdb://localhost:2222?TLS=false")
-        self.assertIs(spec.options.Tls, False)
+        self.assertFalse(spec.options.tls)
         spec = ConnectionSpec("kdb://localhost:2222?tls=false")
-        self.assertIs(spec.options.Tls, False)
+        self.assertFalse(spec.options.tls)
         spec = ConnectionSpec("kdb://localhost:2222?tls=FALSE")
-        self.assertIs(spec.options.Tls, False)
+        self.assertFalse(spec.options.tls)
 
         # Invalid value.
         with self.assertRaises(ValueError):
@@ -199,70 +205,70 @@ class TestConnectionSpec(TestCase):
 
         # Repeated field (use first value).
         spec = ConnectionSpec("kdb://admin:changeit@localhost:2222?Tls=true&Tls=false")
-        self.assertTrue(spec.options.Tls)
+        self.assertTrue(spec.options.tls)
         spec = ConnectionSpec("kdb://localhost:2222?Tls=false&Tls=true")
-        self.assertFalse(spec.options.Tls)
+        self.assertFalse(spec.options.tls)
 
     def test_connection_name(self) -> None:
         # ConnectionName not mentioned.
         uri = "kdb://localhost:2222?Tls=false"
         spec = ConnectionSpec(uri)
-        self.assertIsInstance(spec.options.ConnectionName, str)
+        self.assertIsInstance(spec.options.connection_name, str)
 
         # Set ConnectionName.
         connection_name = str(uuid4())
         spec = ConnectionSpec(uri + f"&ConnectionName={connection_name}")
-        self.assertEqual(spec.options.ConnectionName, connection_name)
+        self.assertEqual(spec.options.connection_name, connection_name)
 
         # Check case insensitivity.
         spec = ConnectionSpec(uri + f"&connectionName={connection_name}")
-        self.assertEqual(spec.options.ConnectionName, connection_name)
+        self.assertEqual(spec.options.connection_name, connection_name)
 
         # Check case insensitivity.
         spec = ConnectionSpec(uri + f"&connectionName={connection_name}")
-        self.assertEqual(spec.options.ConnectionName, connection_name)
+        self.assertEqual(spec.options.connection_name, connection_name)
 
     def test_max_discover_attempts(self) -> None:
         # MaxDiscoverAttempts not mentioned.
         uri = "kdb://localhost:2222?Tls=false"
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.MaxDiscoverAttempts, 10)
+        self.assertEqual(spec.options.max_discover_attempts, 10)
 
         # Set MaxDiscoverAttempts.
         spec = ConnectionSpec(uri + "&MaxDiscoverAttempts=5")
-        self.assertEqual(spec.options.MaxDiscoverAttempts, 5)
+        self.assertEqual(spec.options.max_discover_attempts, 5)
 
     def test_discovery_interval(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
         # DiscoveryInterval not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.DiscoveryInterval, 100)
+        self.assertEqual(spec.options.discovery_interval, 100)
 
         # Set DiscoveryInterval.
         spec = ConnectionSpec(uri + "&DiscoveryInterval=200")
-        self.assertEqual(spec.options.DiscoveryInterval, 200)
+        self.assertEqual(spec.options.discovery_interval, 200)
 
     def test_gossip_timeout(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
         # GossipTimeout not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.GossipTimeout, 5)
+        self.assertEqual(spec.options.gossip_timeout, 5)
 
         # Set GossipTimeout.
         spec = ConnectionSpec(uri + "&GossipTimeout=10")
-        self.assertEqual(spec.options.GossipTimeout, 10)
+        self.assertEqual(spec.options.gossip_timeout, 10)
 
     def test_node_preference(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
         # NodePreference not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_LEADER)
 
         # Set NodePreference.
         spec = ConnectionSpec(uri + "&NodePreference=leader")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_LEADER)
         spec = ConnectionSpec(uri + "&NodePreference=follower")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_FOLLOWER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_FOLLOWER)
 
         # Invalid value.
         with self.assertRaises(ValueError):
@@ -270,25 +276,25 @@ class TestConnectionSpec(TestCase):
 
         # Case insensitivity.
         spec = ConnectionSpec(uri + "&nodePreference=leader")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_LEADER)
         spec = ConnectionSpec(uri + "&NODEPREFERENCE=leader")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_LEADER)
         spec = ConnectionSpec(uri + "&NodePreference=Leader")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_LEADER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_LEADER)
         spec = ConnectionSpec(uri + "&NodePreference=FOLLOWER")
-        self.assertEqual(spec.options.NodePreference, NODE_PREFERENCE_FOLLOWER)
+        self.assertEqual(spec.options.node_preference, NODE_PREFERENCE_FOLLOWER)
 
     def test_tls_verify_cert(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
         # TlsVerifyCert not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.TlsVerifyCert, True)
+        self.assertEqual(spec.options.tls_verify_cert, True)
 
         # Set TlsVerifyCert.
         spec = ConnectionSpec(uri + "&TlsVerifyCert=true")
-        self.assertEqual(spec.options.TlsVerifyCert, True)
+        self.assertEqual(spec.options.tls_verify_cert, True)
         spec = ConnectionSpec(uri + "&TlsVerifyCert=false")
-        self.assertEqual(spec.options.TlsVerifyCert, False)
+        self.assertEqual(spec.options.tls_verify_cert, False)
 
         # Invalid value.
         with self.assertRaises(ValueError):
@@ -296,79 +302,79 @@ class TestConnectionSpec(TestCase):
 
         # Case insensitivity.
         spec = ConnectionSpec(uri + "&TLSVERIFYCERT=true")
-        self.assertEqual(spec.options.TlsVerifyCert, True)
+        self.assertEqual(spec.options.tls_verify_cert, True)
         spec = ConnectionSpec(uri + "&tlsverifycert=false")
-        self.assertEqual(spec.options.TlsVerifyCert, False)
+        self.assertEqual(spec.options.tls_verify_cert, False)
         spec = ConnectionSpec(uri + "&TlsVerifyCert=True")
-        self.assertEqual(spec.options.TlsVerifyCert, True)
+        self.assertEqual(spec.options.tls_verify_cert, True)
         spec = ConnectionSpec(uri + "&TlsVerifyCert=False")
-        self.assertEqual(spec.options.TlsVerifyCert, False)
+        self.assertEqual(spec.options.tls_verify_cert, False)
 
     def test_default_deadline(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # DefaultDeadline not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.DefaultDeadline, None)
+        self.assertEqual(spec.options.default_deadline, None)
 
         # Set DefaultDeadline.
         spec = ConnectionSpec(uri + "&DefaultDeadline=10")
-        self.assertEqual(spec.options.DefaultDeadline, 10)
+        self.assertEqual(spec.options.default_deadline, 10)
 
     def test_keep_alive_interval(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # KeepAliveInterval not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.KeepAliveInterval, None)
+        self.assertEqual(spec.options.keep_alive_interval, None)
 
         # Set KeepAliveInterval.
         spec = ConnectionSpec(uri + "&KeepAliveInterval=10")
-        self.assertEqual(spec.options.KeepAliveInterval, 10)
+        self.assertEqual(spec.options.keep_alive_interval, 10)
 
     def test_keep_alive_timeout(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # KeepAliveTimeout not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.KeepAliveTimeout, None)
+        self.assertEqual(spec.options.keep_alive_timeout, None)
 
         # Set KeepAliveTimeout.
         spec = ConnectionSpec(uri + "&KeepAliveTimeout=10")
-        self.assertEqual(spec.options.KeepAliveTimeout, 10)
+        self.assertEqual(spec.options.keep_alive_timeout, 10)
 
     def test_tls_ca_file(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # TlsCaFile not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.TlsCaFile, None)
+        self.assertEqual(spec.options.tls_ca_file, None)
 
         # Set TlsCaFile.
         spec = ConnectionSpec(uri + "&TlsCaFile=some-ca-file")
-        self.assertEqual(spec.options.TlsCaFile, "some-ca-file")
+        self.assertEqual(spec.options.tls_ca_file, "some-ca-file")
 
     def test_user_cert_file(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # UserCertFile not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.UserCertFile, None)
+        self.assertEqual(spec.options.user_cert_file, None)
 
         # Set UserCertFile.
         spec = ConnectionSpec(uri + "&UserCertFile=some-path")
-        self.assertEqual(spec.options.UserCertFile, "some-path")
+        self.assertEqual(spec.options.user_cert_file, "some-path")
 
     def test_user_key_file(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
         # UserKeyFile not mentioned.
         spec = ConnectionSpec(uri)
-        self.assertEqual(spec.options.UserKeyFile, None)
+        self.assertEqual(spec.options.user_key_file, None)
 
         # Set UserKeyFile.
         spec = ConnectionSpec(uri + "&UserKeyFile=some-key")
-        self.assertEqual(spec.options.UserKeyFile, "some-key")
+        self.assertEqual(spec.options.user_key_file, "some-key")
 
     def test_raises_when_query_string_has_unsupported_field(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
@@ -386,13 +392,13 @@ def get_ca_certificate() -> str:
     ca_cert_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), "certs/ca/ca.crt"
     )
-    with open(ca_cert_path, "r") as f:
+    with open(ca_cert_path) as f:
         return f.read()
 
 
 def get_server_certificate(grpc_target: str) -> str:
     return ssl.get_server_certificate(
-        addr=cast(Tuple[str, int], grpc_target.split(":")),
+        addr=cast(tuple[str, int], grpc_target.split(":")),
     )
 
 
@@ -417,12 +423,10 @@ class KurrentDBClientTestCase(TimedTestCase):
     def get_root_certificates(self) -> str:
         if self.KDB_CLUSTER_SIZE == 1:
             return get_server_certificate(self.KDB_TARGET.split(",")[0])
-        elif self.KDB_CLUSTER_SIZE == 3:
+        if self.KDB_CLUSTER_SIZE == 3:
             return get_ca_certificate()
-        else:
-            raise ValueError(
-                f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
-            )
+        msg = f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
+        raise ValueError(msg)
 
     def tearDown(self) -> None:
         try:
@@ -473,31 +477,31 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         read_response = self.client.read_stream(stream_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             tuple(read_response)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, backwards=True)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, stream_position=1)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, stream_position=1, backwards=True)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, limit=10)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, backwards=True, limit=10)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name, stream_position=1, limit=10)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(
                 stream_name, stream_position=1, backwards=True, limit=10
             )
@@ -579,7 +583,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Check stream position is None.
@@ -591,7 +595,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # # Check get error when attempting to append empty list to position 1.
         # with self.assertRaises(WrongCurrentVersion) as cm:
         #     self.client.append_events(stream_name, current_version=1, events=[])
-        # self.assertEqual(cm.exception.args[0], f"Stream {stream_name!r} does not exist")
+        # self.assertEqual(
+        #     cm.exception.args[0],
+        #     f"Stream {stream_name!r} does not exist",
+        # )
 
         # # Append empty list of events.
         # commit_position0 = self.client.append_events(
@@ -621,7 +628,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check get error when attempting to append new event to position 1.
-        with self.assertRaises(WrongCurrentVersion) as cm:
+        with self.assertRaises(WrongCurrentVersionError) as cm:
             self.client.append_event(stream_name, current_version=1, event=event1)
         self.assertEqual(cm.exception.args[0], f"Stream {stream_name!r} does not exist")
 
@@ -654,7 +661,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Check we can't append another new event at initial position.
 
-        with self.assertRaises(WrongCurrentVersion) as cm:
+        with self.assertRaises(WrongCurrentVersionError) as cm:
             self.client.append_event(
                 stream_name, current_version=StreamState.NO_STREAM, event=event2
             )
@@ -707,7 +714,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[0].id, event2.id)
 
         # Check we can't append another new event at second position.
-        with self.assertRaises(WrongCurrentVersion) as cm:
+        with self.assertRaises(WrongCurrentVersionError) as cm:
             self.client.append_event(stream_name, current_version=0, event=event3)
         self.assertEqual(
             "Stream position of last event is 1 not 0", cm.exception.args[0]
@@ -815,7 +822,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[2].id, event3.id)
 
         # Mixture of "idempotent" write of event2, event3, with new event4.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(
                 stream_name,
                 current_version=0,
@@ -895,7 +902,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         event1 = NewEvent(type="Snapshot", data=random_data())
 
         # Append new event (fails, stream does not exist).
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_event(
                 stream_name, current_version=StreamState.EXISTS, event=event1
             )
@@ -987,7 +994,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     #
     #     # Append batch of new events.
     #     commit_position2 = self.client.append_events_multiplexed(
-    #         stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM,
+    #         events=[event1, event2]
     #     )
     #
     #     # Read stream and check recorded events.
@@ -1036,7 +1045,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         event2 = NewEvent(type="OrderUpdated", data=random_data())
 
         # Fail to append (stream does not exist).
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(
                 stream_name, current_version=1, events=[event1, event2]
             )
@@ -1063,7 +1072,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Fail to append (stream already exists).
         event3 = NewEvent(type="OrderUpdated", data=random_data())
         event4 = NewEvent(type="OrderUpdated", data=random_data())
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(
                 stream_name,
                 current_version=StreamState.NO_STREAM,
@@ -1071,7 +1080,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             )
 
         # Fail to append (wrong expected position).
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(
                 stream_name, current_version=10, events=[event3, event4]
             )
@@ -1144,7 +1153,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         event2 = NewEvent(type="OrderUpdated", data=random_data())
 
         # Append batch of new events.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(
                 stream_name, current_version=StreamState.EXISTS, events=[event1, event2]
             )
@@ -1225,7 +1234,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
         new_events = [event1] * 10000
         # Timeout appending new event.
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             self.client.append_events(
                 stream_name=stream_name1,
                 current_version=StreamState.NO_STREAM,
@@ -1233,7 +1242,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 timeout=0,
             )
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name1)
 
         # # Timeout appending new event.
@@ -1390,15 +1399,16 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[2].stream_name, stream_name1)
         self.assertEqual(events[2].type, "OrderDeleted")
 
-    def assertFilteredEvents(
+    def assert_filtered_events(
         self,
         commit_position: int,
-        expected: Set[str],
+        expected: set[str],
         filter_exclude: Sequence[str] = (),
         filter_include: Sequence[str] = (),
+        *,
         filter_by_stream_name: bool = False,
     ) -> None:
-        events: List[RecordedEvent] = list(
+        events: list[RecordedEvent] = list(
             self.client.read_all(
                 commit_position=commit_position,
                 filter_exclude=filter_exclude,
@@ -1407,9 +1417,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             )
         )
         if filter_by_stream_name is False:
-            actual = set([e.type for e in events])
+            actual = {e.type for e in events}
         else:
-            actual = set([e.stream_name for e in events])
+            actual = {e.stream_name for e in events}
         self.assertEqual(expected, actual)
 
     def test_read_all_filter_include_event_types(self) -> None:
@@ -1439,56 +1449,56 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read only OrderCreated.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include="OrderCreated",
             expected={"OrderCreated"},
         )
 
         # Read only OrderCreated and OrderDeleted.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include=["OrderCreated", "OrderDeleted"],
             expected={"OrderCreated", "OrderDeleted"},
         )
 
         # Read only Order.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include="Order",
             expected=set(),
         )
 
         # Read only Updated.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include="Updated",
             expected=set(),
         )
 
         # Read only Order.*.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include="Order.*",
             expected={"OrderCreated", "OrderUpdated", "OrderDeleted"},
         )
 
         # Read only Invoice.*.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include="Invoice.*",
             expected={"InvoiceCreated", "InvoiceUpdated", "InvoiceDeleted"},
         )
 
         # Read only .*Created.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include=".*Created",
             expected={"OrderCreated", "InvoiceCreated"},
         )
 
         # Read only .*Updated.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include=".*Updated",
             expected={"OrderUpdated", "InvoiceUpdated"},
@@ -1519,7 +1529,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude OrderCreated. Should exclude event1.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "OrderCreated"],
             expected={
@@ -1533,7 +1543,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude OrderCreated and OrderDeleted. Should exclude event1 and event3.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[
                 KDB_SYSTEM_EVENTS_REGEX,
@@ -1550,7 +1560,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude Order. Should exclude nothing.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order"],
             expected={
@@ -1565,7 +1575,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude Created. Should exclude nothing.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Created"],
             expected={
@@ -1580,7 +1590,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude Order.*. Should exclude event1, event2, event3.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order.*"],
             expected={
@@ -1592,7 +1602,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude *.Created. Should exclude event1 and event4.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*Created"],
             expected={
@@ -1605,7 +1615,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude *.thing.*. Should exclude event7.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*thing.*"],
             expected={
@@ -1619,7 +1629,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Exclude OrderCreated.+. Should exclude nothing.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".OrderCreated.+"],
             expected={
@@ -1657,7 +1667,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read only stream1 and stream2.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_include=[stream_name1, stream_name2],
@@ -1665,7 +1675,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read only stream2 and stream3.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_include=[stream_name2, stream_name3],
@@ -1673,7 +1683,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read only prefix1.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_include=prefix1 + ".*",
@@ -1681,7 +1691,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read only prefix2.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_include=prefix2 + ".*",
@@ -1712,7 +1722,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read everything except stream1.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, stream_name1],
@@ -1720,7 +1730,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read everything except stream2 and stream3.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, stream_name2, stream_name3],
@@ -1728,7 +1738,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read everything except prefix1.*.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix1 + ".*"],
@@ -1736,7 +1746,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read everything except prefix2.*.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix2 + ".*"],
@@ -1744,7 +1754,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read everything except prefix2.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_by_stream_name=True,
             filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, prefix2],
@@ -1772,7 +1782,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Both include and exclude.
-        self.assertFilteredEvents(
+        self.assert_filtered_events(
             commit_position=commit_position,
             filter_include=["OrderCreated"],
             filter_exclude=["OrderCreated"],
@@ -1811,8 +1821,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Delete a stream. Because then we get a response that has a "link" but not
         # an "event" even though we resolve links. In other words, a link that
         # doesn't have an event. There's a code path for this that we need to cover.
-        # See BaseReadResponse._convert_read_resp() where a streams_pb2.ReadResp.ReadEvent
-        # a "link streams_pb2.ReadResp.ReadEvent.RecordedEvent" but not an
+        # See BaseReadResponse._convert_read_resp() where a
+        # streams_pb2.ReadResp.ReadEvent a gives a
+        # "link streams_pb2.ReadResp.ReadEvent.RecordedEvent" but not an
         # "event streams_pb2.ReadResp.ReadEvent.RecordedEvent".
         stream_name2 = str(uuid4())
         event2 = NewEvent(type="OrderCreated", data=b"{}", metadata=b"{}")
@@ -1857,7 +1868,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Construct three events.
@@ -1880,21 +1891,21 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(1, self.client.get_current_version(stream_name))
 
         # Can't delete the stream when specifying incorrect expected position.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.delete_stream(stream_name, current_version=0)
 
         # Delete the stream, specifying correct expected position.
         self.client.delete_stream(stream_name, current_version=1)
 
         # Can't call delete again with incorrect expected position.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.delete_stream(stream_name, current_version=0)
 
         # Can call delete again, with correct expected position.
         self.client.delete_stream(stream_name, current_version=1)
 
         # Expect "stream not found" when reading deleted stream.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Expect stream position is None.
@@ -1928,7 +1939,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[1].id, event4.id)
 
         # Can't delete the stream again with incorrect expected position.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.delete_stream(stream_name, current_version=0)
 
         # Can still read the events.
@@ -1940,14 +1951,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.delete_stream(stream_name, current_version=3)
 
         # Stream is now "not found".
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
         self.assertEqual(
             StreamState.NO_STREAM, self.client.get_current_version(stream_name)
         )
 
         # Can't call delete again with incorrect expected position.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.delete_stream(stream_name, current_version=2)
 
         # Can delete again without error.
@@ -1978,7 +1989,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Timeout reading all events.
         read_response = self.client.read_all(timeout=0.001)
         sleep(0.5)
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             list(read_response)
 
     def test_read_all_can_be_stopped(self) -> None:
@@ -2038,12 +2049,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Can't delete stream that doesn't exist, while expecting "any" version.
         # Todo: I don't fully understand why this should cause an error.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_stream(stream_name, current_version=StreamState.ANY)
 
         # Construct three events.
@@ -2071,7 +2082,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.delete_stream(stream_name, current_version=StreamState.ANY)
 
         # Expect "stream not found" when reading deleted stream.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Expect stream position is None.
@@ -2080,7 +2091,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Can append to a deleted stream.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(stream_name, current_version=0, events=[event3])
         self.client.append_events(stream_name, current_version=1, events=[event3])
 
@@ -2094,7 +2105,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Delete the stream again, specifying "any" expected position.
         self.client.delete_stream(stream_name, current_version=StreamState.ANY)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
         self.assertEqual(
             StreamState.NO_STREAM, self.client.get_current_version(stream_name)
@@ -2108,11 +2119,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Can't delete stream, expecting stream exists, because stream never existed.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_stream(
                 stream_name, current_version=StreamState.NO_STREAM
             )
@@ -2139,11 +2150,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.delete_stream(stream_name, current_version=StreamState.ANY)
 
         # Can't delete deleted stream, expecting stream exists, because it was deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.delete_stream(stream_name, current_version=StreamState.EXISTS)
 
         # Expect "stream not found" when reading deleted stream.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Expect stream position is None.
@@ -2152,7 +2163,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Can't append to a deleted stream with incorrect expected position.
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.append_events(stream_name, current_version=0, events=[event3])
 
         # Can append to a deleted stream with correct expected position.
@@ -2170,14 +2181,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Can delete the appended stream, whilst expecting stream exists.
         self.client.delete_stream(stream_name, current_version=StreamState.EXISTS)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
         self.assertEqual(
             StreamState.NO_STREAM, self.client.get_current_version(stream_name)
         )
 
         # Can't call delete again, expecting stream exists, because it was deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.delete_stream(stream_name, current_version=StreamState.EXISTS)
 
     def test_tombstone_stream_with_current_version(self) -> None:
@@ -2185,7 +2196,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Construct three events.
@@ -2206,30 +2217,30 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Expect stream position is an int.
         self.assertEqual(1, self.client.get_current_version(stream_name))
 
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.tombstone_stream(stream_name, current_version=0)
 
         # Tombstone the stream, specifying expected position.
         self.client.tombstone_stream(stream_name, current_version=1)
 
         # Can't tombstone again with correct expected position, stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.tombstone_stream(stream_name, current_version=1)
 
         # Can't tombstone again with incorrect expected position, stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.tombstone_stream(stream_name, current_version=2)
 
         # Can't read from stream, because stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_stream(stream_name)
 
         # Can't get stream position, because stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_current_version(stream_name)
 
         # Can't append to tombstoned stream, because stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.append_events(stream_name, current_version=1, events=[event3])
 
     def test_tombstone_stream_with_any_current_version(self) -> None:
@@ -2246,7 +2257,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         event2 = NewEvent(type="OrderUpdated", data=random_data())
 
         # Can't append to tombstoned stream that never existed.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.append_events(
                 stream_name1, current_version=StreamState.NO_STREAM, events=[event1]
             )
@@ -2269,13 +2280,13 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.tombstone_stream(stream_name2, current_version=StreamState.ANY)
 
         # Can't call tombstone again.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.tombstone_stream(stream_name2, current_version=StreamState.ANY)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_stream(stream_name2)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_current_version(stream_name2)
 
     def test_tombstone_stream_expecting_stream_exists(self) -> None:
@@ -2283,11 +2294,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
 
         # Check stream not found.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Can't tombstone stream that doesn't exist, while expecting "stream exists".
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.tombstone_stream(
                 stream_name, current_version=StreamState.EXISTS
             )
@@ -2313,15 +2324,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.tombstone_stream(stream_name, current_version=StreamState.EXISTS)
 
         # Can't call tombstone again.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.tombstone_stream(
                 stream_name, current_version=StreamState.NO_STREAM
             )
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_stream(stream_name)
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_current_version(stream_name)
 
     def test_subscribe_to_all_filter_exclude_system_events(self) -> None:
@@ -2393,8 +2404,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         for event in subscription:
             if event.type.startswith("$"):
                 break
-            else:
-                self.fail("Didn't get the $metadata event")
+            self.fail("Didn't get the $metadata event")
 
     def test_subscribe_to_all_filter_include_event_types(self) -> None:
         self.construct_esdb_client()
@@ -2592,15 +2602,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Iterate over subscription, remembering last checkpoint commit position.
-        last_checkpoint_commit_position: Optional[int] = None
-        last_event: Optional[RecordedEvent] = None
+        last_checkpoint_commit_position: int | None = None
+        last_event: RecordedEvent | None = None
         try:
             for _event in subscription1:
                 if isinstance(_event, Checkpoint):
                     last_checkpoint_commit_position = _event.commit_position
                 elif isinstance(_event, RecordedEvent):
                     last_event = _event
-        except DeadlineExceeded:
+        except DeadlineExceededError:
             pass
 
         # Check we got an event.
@@ -2612,7 +2622,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Check we got a checkpoint.
         assert last_checkpoint_commit_position is not None
 
-        # Show the checkpoint commit position is greater than the current commit position.
+        # Show checkpoint commit position is greater than current commit position.
         self.assertGreater(
             last_checkpoint_commit_position,
             self.client.get_commit_position(filter_exclude=[]),
@@ -2673,7 +2683,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         def get_event_at_commit_position(
             commit_position: int,
-        ) -> Optional[RecordedEvent]:
+        ) -> RecordedEvent | None:
             read_response = self.client.read_all(
                 commit_position=commit_position,
                 # backwards=True,
@@ -2685,8 +2695,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 event = events[0]
                 assert event.commit_position == commit_position, event
                 return event
-            else:
-                return None
+            return None
 
         event = get_event_at_commit_position(first_append_commit_position)
         self.assertIsNotNone(event)
@@ -2707,13 +2716,13 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # We shouldn't get an extra checkpoint at the end (bug with <v23.10),
         # that has a commit position greater than the current commit position (v24.2).
-        checkpoint_commit_position: Optional[int] = None
+        checkpoint_commit_position: int | None = None
         try:
             for event in subscription1:
                 if isinstance(event, Checkpoint):
                     checkpoint_commit_position = event.commit_position
                     # break
-        except GrpcDeadlineExceeded:
+        except GrpcDeadlineExceededError:
             pass
 
         fail_msg = ""
@@ -2887,7 +2896,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
             # Expect to timeout instead of waiting indefinitely for next event.
             count = 0
-            with self.assertRaises(GrpcDeadlineExceeded):
+            with self.assertRaises(GrpcDeadlineExceededError):
                 for _ in subscription:
                     count += 1
             if count > 0:
@@ -2928,7 +2937,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Append new events.
-        with self.assertRaises(ConsumerTooSlow):
+        with self.assertRaises(ConsumerTooSlowError):
             while True:
                 # Write 10000 events.
                 commit_position = self.client.append_events(
@@ -2962,7 +2971,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             # Read one event.
             try:
                 next(subscription)
-            except ConsumerTooSlow:
+            except ConsumerTooSlowError:
                 break
         else:
             self.fail("Didn't see 'ConsumerTooSlow' error")
@@ -3401,7 +3410,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             pass
 
         # Ack with wrong type of object.
-        with self.assertRaises(ExceptionIteratingRequests) as cm:
+        with self.assertRaises(ExceptionIteratingRequestsError) as cm:
             for _ in subscription:
                 subscription.ack(NotUUID())  # type: ignore
         self.assertIsInstance(cm.exception.__cause__, ValueError)
@@ -3715,7 +3724,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         assert events[-2].data == event2.data
         assert events[-1].data == event3.data
 
-    # def test_subscription_to_all_read_with_message_timeout_consumer_crashes_and_resumes(
+    # def test_subscription_to_all_with_message_timeout_consumer_crashes_and_resumes(
     #     self,
     # ) -> None:
     #     self.construct_esdb_client()
@@ -3772,7 +3781,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     #         break  # Fail to ack event1 and crash out.
     #
     #     # del subscription1
-    #     subscription1.stop()  # If we don't stop(), then subscription2 is severely delayed.
+    #     # If we don't stop(), then subscription2 is severely delayed.
+    #     subscription1.stop()
     #
     #     # Read all events.
     #
@@ -4274,7 +4284,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Multiple consumers.
         subscription1 = self.client.read_subscription_to_all(group_name=group_name1)
         subscription2 = self.client.read_subscription_to_all(group_name=group_name1)
-        with self.assertRaises(MaximumSubscriptionsReached):
+        with self.assertRaises(MaximumSubscriptionsReachedError):
             self.client.read_subscription_to_all(group_name=group_name1)
         subscription1.stop()
         subscription2.stop()
@@ -4284,7 +4294,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         group_name = f"my-subscription-{uuid4().hex}"
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_subscription_info(group_name)
         # Create persistent subscription.
         self.client.create_subscription_to_all(group_name=group_name)
@@ -4332,7 +4342,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.create_subscription_to_all(group_name)
 
         # Try to create same persistent subscription.
-        with self.assertRaises(AlreadyExists):
+        with self.assertRaises(AlreadyExistsError):
             self.client.create_subscription_to_all(group_name)
 
     def test_subscription_to_all_update(self) -> None:
@@ -4341,10 +4351,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         group_name = f"my-subscription-{uuid4().hex}"
 
         # Can't update subscription that doesn't exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             # raises in get_info()
             self.client.update_subscription_to_all(group_name=group_name)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             # raises in update()
             self.client._connection.persistent_subscriptions.update(
                 group_name=group_name,
@@ -4361,36 +4371,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, False)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4403,36 +4403,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4445,36 +4435,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4486,36 +4466,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "C:0/P:0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "Pinned")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4529,33 +4499,25 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "Pinned")
         self.assertEqual(info.message_timeout, 15.0)
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4570,28 +4532,22 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4609,24 +4565,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4643,22 +4593,16 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(info.max_checkpoint_count, 12)
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4677,17 +4621,13 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4705,15 +4645,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_checkpoint_count, 12)
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4732,12 +4668,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
         self.assertEqual(info.live_buffer_size, 300)
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4759,7 +4693,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.read_batch_size, 250)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -4953,7 +4887,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         group_name = f"my-subscription-{uuid4().hex}"
 
         # Can't delete a subscription that doesn't exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(group_name=group_name)
 
         # Create persistent subscription.
@@ -4974,7 +4908,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         group_names = [s.group_name for s in subscriptions_after]
         self.assertNotIn(group_name, group_names)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(group_name=group_name)
 
     def test_subscription_to_stream_from_start(self) -> None:
@@ -5318,7 +5252,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
         group_name = f"my-subscription-{uuid4().hex}"
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_subscription_info(
                 group_name=group_name,
                 stream_name=stream_name,
@@ -5367,7 +5301,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = f"my-stream-{uuid4().hex}"
 
         # Can't update subscription that doesn't exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.update_subscription_to_stream(
                 group_name=group_name,
                 stream_name=stream_name,
@@ -5394,36 +5328,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, False)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5438,36 +5362,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "DispatchToSingle")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5484,36 +5398,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.start_from, "0")
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
-        self.assertEqual(
-            info.message_timeout, DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT
-        )
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.message_timeout, DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT)
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5529,33 +5433,25 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.resolve_links, True)
         self.assertEqual(info.consumer_strategy, "RoundRobin")
         self.assertEqual(info.message_timeout, 15.0)
-        self.assertEqual(
-            info.max_retry_count, DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT
-        )
+        self.assertEqual(info.max_retry_count, DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5574,28 +5470,22 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(
             info.min_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
         )
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5615,24 +5505,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(
             info.max_checkpoint_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
         )
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5651,22 +5535,16 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_retry_count, 5)
         self.assertEqual(info.min_checkpoint_count, 7)
         self.assertEqual(info.max_checkpoint_count, 12)
-        self.assertEqual(
-            info.checkpoint_after, DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER
-        )
+        self.assertEqual(info.checkpoint_after, DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5687,17 +5565,13 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(
             info.max_subscriber_count,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
+            DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
         )
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5717,15 +5591,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.max_checkpoint_count, 12)
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
-        self.assertEqual(
-            info.live_buffer_size, DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE
-        )
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.live_buffer_size, DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE)
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5746,12 +5616,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.checkpoint_after, 1.0)
         self.assertEqual(info.max_subscriber_count, 10)
         self.assertEqual(info.live_buffer_size, 300)
-        self.assertEqual(
-            info.read_batch_size, DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE
-        )
+        self.assertEqual(info.read_batch_size, DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5775,7 +5643,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.read_batch_size, 250)
         self.assertEqual(
             info.history_buffer_size,
-            DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+            DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         )
         self.assertEqual(info.extra_statistics, False)
 
@@ -5955,7 +5823,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         subscription2 = self.client.read_subscription_to_stream(
             group_name=group_name, stream_name=stream_name
         )
-        with self.assertRaises(MaximumSubscriptionsReached):
+        with self.assertRaises(MaximumSubscriptionsReachedError):
             self.client.read_subscription_to_stream(
                 group_name=group_name, stream_name=stream_name
             )
@@ -5972,7 +5840,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.create_subscription_to_stream(group_name, stream_name)
 
         # Try to create same persistent subscription.
-        with self.assertRaises(AlreadyExists):
+        with self.assertRaises(AlreadyExistsError):
             self.client.create_subscription_to_stream(group_name, stream_name)
 
     def test_subscription_to_stream_delete(self) -> None:
@@ -5981,7 +5849,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         stream_name = str(uuid4())
         group_name = f"my-subscription-{uuid4().hex}"
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(
                 group_name=group_name, stream_name=stream_name
             )
@@ -6000,7 +5868,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         subscriptions_after = self.client.list_subscriptions_to_stream(stream_name)
         self.assertEqual(len(subscriptions_after), 0)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(
                 group_name=group_name, stream_name=stream_name
             )
@@ -6196,7 +6064,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Delete stream.
         self.client.delete_stream(stream_name, current_version=StreamState.EXISTS)
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(stream_name)
 
         # Get stream metadata (should have "$tb").
@@ -6250,7 +6118,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         metadata, version = self.client.get_stream_metadata(stream_name)
         self.assertEqual(metadata["$acl"], acl)
 
-        with self.assertRaises(WrongCurrentVersion):
+        with self.assertRaises(WrongCurrentVersionError):
             self.client.set_stream_metadata(
                 stream_name=stream_name,
                 metadata=metadata,
@@ -6260,7 +6128,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.tombstone_stream(stream_name, current_version=StreamState.ANY)
 
         # Can't get metadata after tombstoning stream, because stream is deleted.
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_stream_metadata(stream_name)
 
         # For some reason, we can set stream metadata, even though the stream
@@ -6278,7 +6146,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             current_version=StreamState.ANY,
         )
 
-        with self.assertRaises(StreamIsDeleted):
+        with self.assertRaises(StreamIsDeletedError):
             self.client.get_stream_metadata(stream_name)
 
     def test_gossip_read(self) -> None:
@@ -6341,7 +6209,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Raises error if projection already exists.
-        with self.assertRaises(AlreadyExists):
+        with self.assertRaises(AlreadyExistsError):
             self.client.create_projection(
                 query="",
                 name=projection_name,
@@ -6350,7 +6218,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             )
 
         # Raises error if track_emitted=True but emit_enabled=False...
-        with self.assertRaises(ExceptionThrownByHandler):
+        with self.assertRaises(ExceptionThrownByHandlerError):
             self.client.create_projection(
                 query="",
                 name=projection_name,
@@ -6363,7 +6231,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.update_projection(name=projection_name, query="")
 
         # Create named projection.
@@ -6381,7 +6249,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_projection(projection_name)
 
         # Create named projection.
@@ -6404,7 +6272,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             )
         else:
             # Can't delete a projection that has been deleted.
-            with self.assertRaises(NotFound):
+            with self.assertRaises(NotFoundError):
                 self.client.delete_projection(
                     name=projection_name,
                 )
@@ -6414,7 +6282,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_projection_statistics(name=projection_name)
 
         # Create named projection.
@@ -6467,7 +6335,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.disable_projection(name=projection_name)
 
         # Create named projection.
@@ -6481,7 +6349,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.disable_projection(name=projection_name)
 
         # Create named projection.
@@ -6495,7 +6363,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.enable_projection(name=projection_name)
 
         # Create named projection.
@@ -6509,7 +6377,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.reset_projection(name=projection_name)
 
         # Create named projection.
@@ -6523,7 +6391,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_name = str(uuid4())
 
         # Raises NotFound unless projection exists.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_projection_state(name=projection_name)
 
         # Create named projection (query is an empty string).
@@ -6531,7 +6399,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Try to get projection state.
         # Todo: Why does this just hang?
-        with self.assertRaises(DeadlineExceeded):
+        with self.assertRaises(DeadlineExceededError):
             self.client.get_projection_state(name=projection_name, timeout=1)
 
         # Create named projection.
@@ -6712,7 +6580,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # self.assertIn("count", result.value)
 
         # Can't delete whilst running.
-        with self.assertRaises(OperationFailed):
+        with self.assertRaises(OperationFailedError):
             self.client.delete_projection(
                 projection_name,
                 delete_emitted_streams=True,
@@ -6766,25 +6634,25 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         try:
             statistics = self.client.get_projection_statistics(name=projection_name)
             self.assertEqual("Deleting/Stopped", statistics.status)
-        except NotFound:
+        except NotFoundError:
             pass
 
         sleep(1)
 
         # After deleting, projection methods raise NotFound.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_projection_statistics(name=projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_projection_state(projection_name)
 
         # with self.assertRaises(NotFound):
         #     self.client.get_projection_result(projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.enable_projection(projection_name)
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.disable_projection(projection_name)
 
         # Result stream still exists.
@@ -6792,7 +6660,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(2, len(result_events))
 
         # Emitted stream does not exist.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(emitted_stream_name)
 
         # Todo: Are "checkpoint" and "state" streams somehow hidden?
@@ -6866,7 +6734,7 @@ class TestRootCertificatesAreOptional(TimedTestCase):
         uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
         uri += "?MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
-        with self.assertRaises(DiscoveryFailed):
+        with self.assertRaises(DiscoveryFailedError):
             KurrentDBClient(uri, root_certificates="blah")
 
 
@@ -6917,11 +6785,13 @@ class TestOptionalClientAuth(TimedTestCase):
         with self.assertRaises(SSLError):
             client.get_commit_position()
 
-        # Construct client with TlsCaFile (instead of passing root_certificates directly).
+        # Construct client with TlsCaFile (instead
+        # of passing root_certificates directly).
         uri += f"&TlsCaFile={self.tls_ca_file}"
         client_with_tls_ca = KurrentDBClient(uri)
 
-        # Read the contents of TlsCaFile as bytes, since root_certificates are compared as bytes
+        # Read the contents of TlsCaFile as bytes,
+        # because root_certificates are compared as bytes.
         with open(self.tls_ca_file, "rb") as f:
             tls_ca_file_contents = f.read()
 
@@ -6937,7 +6807,7 @@ class TestDiscoverScheme(TestCase):
             "kdb+discover://my-unresolvable-cluster"
             "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
         )
-        with self.assertRaises(DiscoveryFailed) as cm1:
+        with self.assertRaises(DiscoveryFailedError) as cm1:
             KurrentDBClient(uri)
         self.assertIn(":2113", str(cm1.exception))
         self.assertIn("DNS resolution failed", str(cm1.exception))
@@ -6948,7 +6818,7 @@ class TestDiscoverScheme(TestCase):
             "kdb+discover://my-unresolvable-cluster:9898"
             "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
         )
-        with self.assertRaises(DiscoveryFailed) as cm2:
+        with self.assertRaises(DiscoveryFailedError) as cm2:
             KurrentDBClient(uri)
         self.assertIn(":9898", str(cm2.exception))
         self.assertIn("DNS resolution failed", str(cm2.exception))
@@ -6957,7 +6827,7 @@ class TestDiscoverScheme(TestCase):
         # Name is resolvable but 'service not available' on port 2222.
         uri = "kdb://localhost:2222?Tls=false"
         client = KurrentDBClient(uri)
-        with self.assertRaises(ServiceUnavailable) as cm3:
+        with self.assertRaises(ServiceUnavailableError) as cm3:
             client.read_gossip()
         self.assertIn("Failed to connect to remote host", str(cm3.exception))
 
@@ -6965,7 +6835,7 @@ class TestDiscoverScheme(TestCase):
             "kdb+discover://localhost:2222"
             "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
         )
-        with self.assertRaises(DiscoveryFailed) as cm4:
+        with self.assertRaises(DiscoveryFailedError) as cm4:
             KurrentDBClient(uri)
         self.assertIn(":2222", str(cm4.exception))
         self.assertIn("Failed to connect to remote host", str(cm4.exception))
@@ -7026,7 +6896,7 @@ class TestDiscoverScheme(TestCase):
         self.assertEqual(len(client.get_stream(stream_name)), 2)
 
         # Discover insecure single-node cluster, but fail to connect to follower.
-        with self.assertRaises(FollowerNotFound):
+        with self.assertRaises(FollowerNotFoundError):
             KurrentDBClient(uri + "&NodePreference=follower")
 
         # Discover secure single-node cluster, connect to leader.
@@ -7047,7 +6917,7 @@ class TestDiscoverScheme(TestCase):
         self.assertEqual(len(client.get_stream(stream_name)), 2)
 
         # Discover secure single-node cluster, but fail to connect to follower.
-        with self.assertRaises(FollowerNotFound):
+        with self.assertRaises(FollowerNotFoundError):
             KurrentDBClient(
                 uri + "&NodePreference=follower", root_certificates=root_certificates
             )
@@ -7055,7 +6925,7 @@ class TestDiscoverScheme(TestCase):
         # In three-node cluster, check at least one node is a follower (not a leader).
         root_certificates = get_ca_certificate()
         ports = ["2110", "2111", "2112"]
-        with self.assertRaises(NodeIsNotLeader) as cm5:
+        with self.assertRaises(NodeIsNotLeaderError) as cm5:
             for port in ports:
                 uri = (
                     f"kdb://admin:changeit@localhost:{port}?"
@@ -7202,7 +7072,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         # Fail to write to follower.
         event1 = NewEvent(type="OrderCreated", data=random_data())
         stream_name = str(uuid4())
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.append_event(
                 stream_name, current_version=StreamState.NO_STREAM, event=event1
             )
@@ -7221,7 +7091,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         event1 = NewEvent(type="OrderCreated", data=random_data())
         event2 = NewEvent(type="OrderUpdated", data=random_data())
 
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.append_events(
                 stream_name,
                 current_version=StreamState.NO_STREAM,
@@ -7232,8 +7102,8 @@ class TestRequiresLeaderHeader(TimedTestCase):
         self._set_reader_connection_on_writer()
 
         # Todo: Occasionally getting "Exception was thrown by handler." from this. Why?
-        #   kurrentdbclient.exceptions.ExceptionThrownByHandler: <_MultiThreadedRendezvous of
-        #   RPC that terminated with:
+        #   kurrentdbclient.exceptions.ExceptionThrownByHandler:
+        #   <_MultiThreadedRendezvous of RPC that terminated with:
         #       status = StatusCode.UNKNOWN
         #       details = "Exception was thrown by handler."
         #       debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"
@@ -7250,18 +7120,17 @@ class TestRequiresLeaderHeader(TimedTestCase):
                     current_version=StreamState.NO_STREAM,
                     events=[event1, event2],
                 )
-            except ExceptionThrownByHandler:
+            except ExceptionThrownByHandlerError:
                 if retries == 0:
                     raise
-                else:
-                    sleep(1)
+                sleep(1)
             else:
                 break
 
     def test_reconnects_to_new_leader_on_set_stream_metadata(self) -> None:
         # Fail to write to follower.
         stream_name = str(uuid4())
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.set_stream_metadata(stream_name=stream_name, metadata={})
 
         # Swap connection.
@@ -7280,7 +7149,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         )
 
         # Fail to delete stream on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.delete_stream(stream_name, current_version=1)
 
         # Swap connection.
@@ -7291,7 +7160,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_tombstone_stream(self) -> None:
         # Fail to tombstone stream on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.tombstone_stream(str(uuid4()), current_version=StreamState.ANY)
 
         # Swap connection.
@@ -7302,20 +7171,20 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_create_subscription_to_all(self) -> None:
         # Fail to create subscription on follower.
-        with self.assertRaises(NodeIsNotLeader):
-            self.reader.create_subscription_to_all(group_name=f"group{str(uuid4())}")
+        with self.assertRaises(NodeIsNotLeaderError):
+            self.reader.create_subscription_to_all(group_name=f"group{uuid4()!s}")
 
         # Swap connection.
         self._set_reader_connection_on_writer()
 
         # Create subscription on leader.
-        self.writer.create_subscription_to_all(group_name=f"group{str(uuid4())}")
+        self.writer.create_subscription_to_all(group_name=f"group{uuid4()!s}")
 
     def test_reconnects_to_new_leader_on_create_subscription_to_stream(self) -> None:
         # Fail to create subscription on follower.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         stream_name = str(uuid4())
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.create_subscription_to_stream(
                 group_name=group_name, stream_name=stream_name
             )
@@ -7330,11 +7199,11 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_read_subscription_to_all(self) -> None:
         # Create subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         self.writer.create_subscription_to_all(group_name=group_name)
 
         # Fail to read subscription on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.read_subscription_to_all(group_name=group_name)
 
         # Swap connection.
@@ -7345,14 +7214,14 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_read_subscription_to_stream(self) -> None:
         # Create stream subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         stream_name = str(uuid4())
         self.writer.create_subscription_to_stream(
             group_name=group_name, stream_name=stream_name
         )
 
         # Fail to read stream subscription on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.read_subscription_to_stream(
                 group_name=group_name, stream_name=stream_name
             )
@@ -7367,11 +7236,11 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_list_subscriptions(self) -> None:
         # Create subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         self.writer.create_subscription_to_all(group_name=group_name)
 
         # Fail to list subscriptions on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.list_subscriptions()
 
         # Swap connection.
@@ -7382,14 +7251,14 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_list_subscriptions_to_stream(self) -> None:
         # Create stream subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         stream_name = str(uuid4())
         self.writer.create_subscription_to_stream(
             group_name=group_name, stream_name=stream_name
         )
 
         # Fail to list stream subscriptions on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.list_subscriptions_to_stream(stream_name=stream_name)
 
         # Swap connection.
@@ -7400,11 +7269,11 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_get_subscription_info(self) -> None:
         # Create subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         self.writer.create_subscription_to_all(group_name=group_name)
 
         # Fail to get subscription info on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.get_subscription_info(group_name=group_name)
 
         # Swap connection.
@@ -7415,11 +7284,11 @@ class TestRequiresLeaderHeader(TimedTestCase):
 
     def test_reconnects_to_new_leader_on_delete_subscription(self) -> None:
         # Create subscription on leader.
-        group_name = f"group{str(uuid4())}"
+        group_name = f"group{uuid4()!s}"
         self.writer.create_subscription_to_all(group_name=group_name)
 
         # Fail to delete subscription on follower.
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             self.reader.delete_subscription(group_name=group_name)
 
         # Swap connection.
@@ -7443,7 +7312,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
         while True:
             try:
                 stream_events = self.reader.get_stream(stream_name)
-            except NotFound:
+            except NotFoundError:
                 pass
             else:
                 if len(stream_events) == 2:
@@ -7451,7 +7320,7 @@ class TestRequiresLeaderHeader(TimedTestCase):
             sleep(0.1)
 
         # Change reader's node preference to 'leader'
-        self.reader.connection_spec.options._NodePreference = "leader"
+        self.reader.connection_spec.options._node_preference = "leader"
 
         # Check reader reconnects to leader.
         self.assertNotEqual(
@@ -7489,12 +7358,12 @@ class TestAutoReconnectClosedConnection(TimedTestCase):
 
     def test_get_stream(self) -> None:
         # Read all events - should reconnect.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.writer.get_stream(str(uuid4()))
 
     def test_read_subscription_to_all(self) -> None:
         # Read subscription - should reconnect.
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.writer.read_subscription_to_all(str(uuid4()))
 
 
@@ -7534,7 +7403,7 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
         )
 
     def test_get_stream(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_stream(
                 str(uuid4()),
             )
@@ -7543,12 +7412,12 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
         read_response = self.client.read_stream(
             str(uuid4()),
         )
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             tuple(read_response)
 
     def test_read_all(self) -> None:
         read_response = self.client.read_all()
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             tuple(read_response)
 
     def test_append_event(self) -> None:
@@ -7580,7 +7449,7 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
         self.client.subscribe_to_stream(str(uuid4()))
 
     def test_get_subscription_info(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.get_subscription_info(
                 group_name=f"my-subscription-{uuid4().hex}"
             )
@@ -7592,27 +7461,27 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
         self.client.list_subscriptions_to_stream(stream_name=str(uuid4()))
 
     def test_delete_stream(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_stream(
                 stream_name=str(uuid4()), current_version=StreamState.NO_STREAM
             )
 
     def test_replay_parked_events(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.replay_parked_events(
                 group_name=f"my-subscription-{uuid4().hex}"
             )
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.replay_parked_events(
                 group_name=f"my-subscription-{uuid4().hex}", stream_name=str(uuid4())
             )
 
     def test_delete_subscription(self) -> None:
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(group_name=f"my-subscription-{uuid4().hex}")
 
-        with self.assertRaises(NotFound):
+        with self.assertRaises(NotFoundError):
             self.client.delete_subscription(
                 group_name=f"my-subscription-{uuid4().hex}", stream_name=str(uuid4())
             )
@@ -7630,7 +7499,7 @@ class TestRaisesDiscoveryFailed(KurrentDBClientTestCase):
     KDB_TLS = False
 
     def test(self) -> None:
-        with self.assertRaises(DiscoveryFailed):
+        with self.assertRaises(DiscoveryFailedError):
             self.construct_esdb_client()
 
 
@@ -7649,11 +7518,11 @@ class TestConnectToPreferredNode(KurrentDBClientTestCase):
     KDB_CLUSTER_SIZE = 1
 
     def test_no_followers(self) -> None:
-        with self.assertRaises(FollowerNotFound):
+        with self.assertRaises(FollowerNotFoundError):
             self.construct_esdb_client("NodePreference=follower")
 
     def test_no_read_only_replicas(self) -> None:
-        with self.assertRaises(ReadOnlyReplicaNotFound):
+        with self.assertRaises(ReadOnlyReplicaNotFoundError):
             self.construct_esdb_client("NodePreference=readonlyreplica")
 
     def test_random(self) -> None:
@@ -7669,7 +7538,7 @@ class TestSubscriptionReadRequest(TimedTestCase):
         self.assertIsInstance(grpc_read_req_options, grpc_persistent.ReadReq)
         self.assertEqual(grpc_read_req_options.options.buffer_size, 150)
 
-        event_ids: List[UUID] = []
+        event_ids: list[UUID] = []
         for _ in range(102):
             event_id = uuid4()
             event_ids.append(event_id)
@@ -7696,7 +7565,7 @@ class TestSubscriptionReadRequest(TimedTestCase):
         self.assertIsInstance(grpc_read_req_options, grpc_persistent.ReadReq)
         self.assertEqual(grpc_read_req_options.options.buffer_size, 150)
 
-        event_ids: List[UUID] = []
+        event_ids: list[UUID] = []
         for _ in range(102):
             event_id = uuid4()
             event_ids.append(event_id)
@@ -7965,11 +7834,11 @@ class TestSubscriptionReadRequest(TimedTestCase):
 
         sleep(read_request._max_ack_delay)
 
-        while True:
-            try:
+        try:
+            while True:
                 grpc_read_req1 = next(read_request)
-            except StopIteration:
-                break
+        except StopIteration:
+            pass
 
         thread.join()
 
@@ -7979,27 +7848,27 @@ class TestSubscriptionReadRequest(TimedTestCase):
 
 class TestHandleRpcError(TestCase):
     def test_handle_exception_thrown_by_handler(self) -> None:
-        with self.assertRaises(ExceptionThrownByHandler):
+        with self.assertRaises(ExceptionThrownByHandlerError):
             raise handle_rpc_error(FakeExceptionThrownByHandlerError()) from None
 
     def test_handle_deadline_exceeded_error(self) -> None:
-        with self.assertRaises(GrpcDeadlineExceeded):
+        with self.assertRaises(GrpcDeadlineExceededError):
             raise handle_rpc_error(FakeDeadlineExceededRpcError()) from None
 
     def test_handle_unavailable_error(self) -> None:
-        with self.assertRaises(ServiceUnavailable):
+        with self.assertRaises(ServiceUnavailableError):
             raise handle_rpc_error(FakeUnavailableRpcError()) from None
 
     def test_handle_writing_to_follower_error(self) -> None:
-        with self.assertRaises(NodeIsNotLeader):
+        with self.assertRaises(NodeIsNotLeaderError):
             raise handle_rpc_error(FakeWritingToFollowerError()) from None
 
     def test_handle_consumer_too_slow_error(self) -> None:
-        with self.assertRaises(ConsumerTooSlow):
+        with self.assertRaises(ConsumerTooSlowError):
             raise handle_rpc_error(FakeConsumerTooSlowError()) from None
 
     def test_handle_aborted_by_server_error(self) -> None:
-        with self.assertRaises(AbortedByServer):
+        with self.assertRaises(AbortedByServerError):
             raise handle_rpc_error(FakeAbortedByServerError()) from None
 
     def test_handle_unknown_error(self) -> None:
@@ -8017,6 +7886,30 @@ class TestHandleRpcError(TestCase):
             raise handle_rpc_error(MyRpcError(msg)) from None
         self.assertEqual(cm.exception.__class__, GrpcError)
         self.assertIsInstance(cm.exception.args[0], MyRpcError)
+
+    def test_streams_unknown_error(self) -> None:
+        with self.assertRaises(UnknownError):
+            raise handle_streams_rpc_error(FakeUnknownRpcError()) from None
+
+    def test_stream_not_found_error(self) -> None:
+        with self.assertRaises(NotFoundError):
+            raise handle_streams_rpc_error(
+                FakeWrongExpectedVersionActuallyMinusOneError()
+            ) from None
+
+    def test_stream_wrong_version_error(self) -> None:
+        with self.assertRaises(WrongCurrentVersionError):
+            raise handle_streams_rpc_error(
+                FakeWrongExpectedVersionActuallyPlusOneError()
+            ) from None
+
+    def test_stream_deleted_error(self) -> None:
+        with self.assertRaises(StreamIsDeletedError):
+            raise handle_streams_rpc_error(FakeStreamIsDeletedError()) from None
+
+    def test_stream_other_failed_precondition_error(self) -> None:
+        with self.assertRaises(FailedPreconditionError):
+            raise handle_streams_rpc_error(FakeFailedPreconditionRpcError()) from None
 
 
 class FakeRpcError(_MultiThreadedRendezvous):
@@ -8072,6 +7965,26 @@ class FakeAbortedByServerError(FakeRpcError):
 class FakeUnknownRpcError(FakeRpcError):
     def __init__(self) -> None:
         super().__init__(status_code=StatusCode.UNKNOWN)
+
+
+class FakeFailedPreconditionRpcError(FakeRpcError):
+    def __init__(self, details: str = "") -> None:
+        super().__init__(status_code=StatusCode.FAILED_PRECONDITION, details=details)
+
+
+class FakeWrongExpectedVersionActuallyMinusOneError(FakeFailedPreconditionRpcError):
+    def __init__(self) -> None:
+        super().__init__(details="WrongExpectedVersion Actual version: -1")
+
+
+class FakeWrongExpectedVersionActuallyPlusOneError(FakeFailedPreconditionRpcError):
+    def __init__(self) -> None:
+        super().__init__(details="WrongExpectedVersion Actual version: 1")
+
+
+class FakeStreamIsDeletedError(FakeFailedPreconditionRpcError):
+    def __init__(self) -> None:
+        super().__init__(details="is deleted")
 
 
 def random_data(size: int = 16) -> bytes:

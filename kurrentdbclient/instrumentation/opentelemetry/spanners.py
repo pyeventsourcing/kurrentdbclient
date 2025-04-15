@@ -1,28 +1,20 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import inspect
 import json
 import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
     Generic,
-    Iterable,
     Literal,
-    Optional,
     Protocol,
-    Sequence,
-    Tuple,
     TypeVar,
-    Union,
     cast,
     overload,
 )
-from uuid import UUID
 
-import grpc
 from opentelemetry.context import Context
 from opentelemetry.trace import (
     NonRecordingSpan,
@@ -34,7 +26,6 @@ from opentelemetry.trace import (
     Tracer,
     set_span_in_context,
 )
-from opentelemetry.util.types import AttributeValue
 from typing_extensions import Self
 
 from kurrentdbclient import (
@@ -46,7 +37,6 @@ from kurrentdbclient import (
     RecordedEvent,
     StreamState,
 )
-from kurrentdbclient.client import BaseKurrentDBClient
 from kurrentdbclient.common import (
     AbstractAsyncCatchupSubscription,
     AbstractAsyncPersistentSubscription,
@@ -69,6 +59,15 @@ from kurrentdbclient.instrumentation.opentelemetry.utils import (
     _set_span_ok,
     _start_span,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+    from uuid import UUID
+
+    import grpc
+    from opentelemetry.util.types import AttributeValue
+
+    from kurrentdbclient.client import BaseKurrentDBClient
 
 STREAMS_APPEND = "streams.append"
 STREAMS_SUBSCRIBE = "streams.subscribe"
@@ -106,7 +105,7 @@ def _get_span_name(func: Callable[..., Any]) -> str:
     return SPAN_NAMES_BY_CLIENT_METHOD.get(func.__qualname__, func.__qualname__)
 
 
-def _get_span_name_and_kind(func: Callable[..., Any]) -> Tuple[str, SpanKind]:
+def _get_span_name_and_kind(func: Callable[..., Any]) -> tuple[str, SpanKind]:
     return _get_span_name(func), _get_span_kind(func)
 
 
@@ -116,12 +115,12 @@ class GetStreamMethod(Protocol):
         /,
         stream_name: str,
         *,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[RecordedEvent]:
         pass  # pragma: no cover
 
@@ -132,12 +131,12 @@ class AsyncGetStreamMethod(Protocol):
         /,
         stream_name: str,
         *,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[RecordedEvent]:
         pass  # pragma: no cover
 
@@ -150,12 +149,12 @@ def span_get_stream(
     /,
     stream_name: str,
     *,
-    stream_position: Optional[int] = None,
+    stream_position: int | None = None,
     backwards: bool = False,
     resolve_links: bool = False,
     limit: int = sys.maxsize,
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> AsyncSpannerResponse[Sequence[RecordedEvent]]:
     pass  # pragma: no cover
 
@@ -168,12 +167,12 @@ def span_get_stream(
     /,
     stream_name: str,
     *,
-    stream_position: Optional[int] = None,
+    stream_position: int | None = None,
     backwards: bool = False,
     resolve_links: bool = False,
     limit: int = sys.maxsize,
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> SpannerResponse[Sequence[RecordedEvent]]:
     pass  # pragma: no cover
 
@@ -181,16 +180,16 @@ def span_get_stream(
 def span_get_stream(
     tracer: Tracer,
     instance: BaseKurrentDBClient,
-    spanned_func: Union[GetStreamMethod, AsyncGetStreamMethod],
+    spanned_func: GetStreamMethod | AsyncGetStreamMethod,
     /,
     stream_name: str,
     *,
-    stream_position: Optional[int] = None,
+    stream_position: int | None = None,
     backwards: bool = False,
     resolve_links: bool = False,
     limit: int = sys.maxsize,
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> OverloadedSpannerResponse[Sequence[RecordedEvent], Sequence[RecordedEvent]]:
     span_name, span_kind = _get_span_name_and_kind(spanned_func)
 
@@ -269,7 +268,7 @@ def span_read_stream(
 def span_read_stream(
     tracer: Tracer,
     instance: BaseKurrentDBClient,
-    spanned_func: Union[ReadStreamMethod, AsyncReadStreamMethod],
+    spanned_func: ReadStreamMethod | AsyncReadStreamMethod,
     /,
     stream_name: str,
     *args: Any,
@@ -325,10 +324,10 @@ class AppendToStreamMethod(Protocol):
         /,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
-        events: Union[NewEvent, Iterable[NewEvent]],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        events: NewEvent | Iterable[NewEvent],
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         pass  # pragma: no cover
 
@@ -339,10 +338,10 @@ class AsyncAppendToStreamMethod(Protocol):
         /,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
-        events: Union[NewEvent, Iterable[NewEvent]],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        events: NewEvent | Iterable[NewEvent],
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         pass  # pragma: no cover
 
@@ -355,10 +354,10 @@ def span_append_to_stream(
     /,
     stream_name: str,
     *,
-    current_version: Union[int, StreamState],
-    events: Union[NewEvent, Iterable[NewEvent]],
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    current_version: int | StreamState,
+    events: NewEvent | Iterable[NewEvent],
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> AsyncSpannerResponse[int]:
     pass  # pragma: no cover
 
@@ -371,10 +370,10 @@ def span_append_to_stream(
     /,
     stream_name: str,
     *,
-    current_version: Union[int, StreamState],
-    events: Union[NewEvent, Iterable[NewEvent]],
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    current_version: int | StreamState,
+    events: NewEvent | Iterable[NewEvent],
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> SpannerResponse[int]:
     pass  # pragma: no cover
 
@@ -382,14 +381,14 @@ def span_append_to_stream(
 def span_append_to_stream(
     tracer: Tracer,
     instance: BaseKurrentDBClient,
-    spanned_func: Union[AppendToStreamMethod, AsyncAppendToStreamMethod],
+    spanned_func: AppendToStreamMethod | AsyncAppendToStreamMethod,
     /,
     stream_name: str,
     *,
-    current_version: Union[int, StreamState],
-    events: Union[NewEvent, Iterable[NewEvent]],
-    timeout: Optional[float] = None,
-    credentials: Optional[grpc.CallCredentials] = None,
+    current_version: int | StreamState,
+    events: NewEvent | Iterable[NewEvent],
+    timeout: float | None = None,
+    credentials: grpc.CallCredentials | None = None,
 ) -> OverloadedSpannerResponse[int, int]:
 
     span_name, span_kind = _get_span_name_and_kind(spanned_func)
@@ -464,7 +463,7 @@ def span_catchup_subscription(
 def span_catchup_subscription(
     tracer: Tracer,
     instance: BaseKurrentDBClient,
-    spanned_func: Union[CatchupSubscriptionMethod, AsyncCatchupSubscriptionMethod],
+    spanned_func: CatchupSubscriptionMethod | AsyncCatchupSubscriptionMethod,
     /,
     *args: Any,
     **kwargs: Any,
@@ -555,9 +554,9 @@ def span_persistent_subscription(
 def span_persistent_subscription(
     tracer: Tracer,
     instance: BaseKurrentDBClient,
-    spanned_func: Union[
-        ReadPersistentSubscriptionMethod, AsyncReadPersistentSubscriptionMethod
-    ],
+    spanned_func: (
+        ReadPersistentSubscriptionMethod | AsyncReadPersistentSubscriptionMethod
+    ),
     /,
     *args: Any,
     **kwargs: Any,
@@ -627,7 +626,7 @@ class TracedRecordedEventIterator(
         self.tracer = tracer
         self.span_name = span_name
         self.span_kind = span_kind
-        self._current_span: Optional[Span] = None
+        self._current_span: Span | None = None
 
         # self.iterator_span: Optional[Span] = None
         # self.iterator_context: Optional[Context] = None
@@ -694,7 +693,7 @@ class TracedRecordedEventIterator(
         self.response.__enter__()
         return self
 
-    def __exit__(self, *args: Any, **kwargs: Any) -> None:
+    def __exit__(self, *args: object, **kwargs: Any) -> None:
         return self.response.__exit__(*args, **kwargs)
 
     def __del__(self) -> None:
@@ -753,9 +752,9 @@ class TracedRecordedEventSubscription(
         self,
         *,
         span: Span,
-        stream_name: Optional[str] = None,
-        event_id: Optional[str] = None,
-        event_type: Optional[str] = None,
+        stream_name: str | None = None,
+        event_id: str | None = None,
+        event_type: str | None = None,
     ) -> None:
         _enrich_span(
             span=span,
@@ -783,12 +782,12 @@ class TracedPersistentSubscription(
     TracedRecordedEventSubscription[AbstractPersistentSubscription],
     AbstractPersistentSubscription,
 ):
-    def ack(self, item: Union[UUID, RecordedEvent]) -> None:
+    def ack(self, item: UUID | RecordedEvent) -> None:
         self.response.ack(item)
 
     def nack(
         self,
-        item: Union[UUID, RecordedEvent],
+        item: UUID | RecordedEvent,
         action: Literal["unknown", "park", "retry", "skip", "stop"],
     ) -> None:
         self.response.nack(item, action)
@@ -820,7 +819,7 @@ class TracedAsyncRecordedEventIterator(
         self.tracer = tracer
         self.span_name = span_name
         self.span_kind = span_kind
-        self._current_span: Optional[Span] = None
+        self._current_span: Span | None = None
 
     async def __anext__(self) -> RecordedEvent:
         span_name = _get_span_name(self.response.__anext__)
@@ -873,7 +872,7 @@ class TracedAsyncRecordedEventIterator(
         await self.response.__aenter__()
         return self
 
-    async def __aexit__(self, *args: Any, **kwargs: Any) -> None:
+    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
         return await self.response.__aexit__(*args, **kwargs)
 
     def _set_iter_error_for_testing(self) -> None:
@@ -930,9 +929,9 @@ class TracedAsyncRecordedEventSubscription(
         self,
         *,
         span: Span,
-        stream_name: Optional[str] = None,
-        event_id: Optional[str] = None,
-        event_type: Optional[str] = None,
+        stream_name: str | None = None,
+        event_id: str | None = None,
+        event_type: str | None = None,
     ) -> None:
         _enrich_span(
             span=span,
@@ -960,12 +959,12 @@ class TracedAsyncPersistentSubscription(
     TracedAsyncRecordedEventSubscription[AbstractAsyncPersistentSubscription],
     AbstractAsyncPersistentSubscription,
 ):
-    async def ack(self, item: Union[UUID, RecordedEvent]) -> None:
+    async def ack(self, item: UUID | RecordedEvent) -> None:
         await self.response.ack(item)
 
     async def nack(
         self,
-        item: Union[UUID, RecordedEvent],
+        item: UUID | RecordedEvent,
         action: Literal["unknown", "park", "retry", "skip", "stop"],
     ) -> None:
         await self.response.nack(item, action)
@@ -975,16 +974,16 @@ def _enrich_span(
     *,
     span: Span,
     client: BaseKurrentDBClient,
-    db_operation_name: Optional[str] = None,
-    stream_name: Optional[str] = None,
-    subscription_id: Optional[str] = None,
-    event_id: Optional[str] = None,
-    event_type: Optional[str] = None,
+    db_operation_name: str | None = None,
+    stream_name: str | None = None,
+    subscription_id: str | None = None,
+    event_id: str | None = None,
+    event_type: str | None = None,
 ) -> None:
     if span.is_recording():
 
         # Gather attributes.
-        attributes: Dict[str, AttributeValue] = {}
+        attributes: dict[str, AttributeValue] = {}
 
         # Gather db attributes.
         if db_operation_name is not None:
@@ -1016,7 +1015,7 @@ def _extract_db_user(client: BaseKurrentDBClient) -> str:
     return client.connection_spec.username or ""
 
 
-def _extract_server_address_and_port(client: BaseKurrentDBClient) -> Tuple[str, str]:
+def _extract_server_address_and_port(client: BaseKurrentDBClient) -> tuple[str, str]:
     # For "quality of life" of readers of observability platforms, try to
     # maintain a constant server address (when using esdb+discover with
     # one target only).
@@ -1037,7 +1036,7 @@ METADATA_SPAN_ID = "$spanId"
 
 
 def _set_context_in_events(
-    context: SpanContext, events: Union[NewEvent, Iterable[NewEvent]]
+    context: SpanContext, events: NewEvent | Iterable[NewEvent]
 ) -> Sequence[NewEvent]:
     # Kind of propagate OpenTelemetry context in "standard KurrentDB" style.
     reconstructed_events = []
@@ -1050,10 +1049,10 @@ def _set_context_in_events(
                 d[METADATA_SPAN_ID] = _int_to_hex(context.span_id)
                 d[METADATA_TRACE_ID] = _int_to_hex(context.trace_id)
                 metadata = json.dumps(d).encode("utf8")
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
             else:
-                event = NewEvent(
+                event = NewEvent(  # noqa: PLW2901
                     id=event.id,
                     type=event.type,
                     data=event.data,
@@ -1065,15 +1064,15 @@ def _set_context_in_events(
 
 
 def _extract_context_from_event(
-    recorded_event: Union[NewEvent, RecordedEvent],
-) -> Optional[Context]:
+    recorded_event: NewEvent | RecordedEvent,
+) -> Context | None:
     # Extract propagated OpenTelemetry context using "standard KurrentDB" style.
     try:
         m = json.loads(recorded_event.metadata.decode("utf8"))
         parent_span_id = _hex_to_int(m[METADATA_SPAN_ID])
         trace_id = _hex_to_int(m[METADATA_TRACE_ID])
     except Exception:
-        context: Optional[Context] = None
+        context: Context | None = None
     else:
         trace_flags = TraceFlags(TraceFlags.SAMPLED)
         span_context = SpanContext(

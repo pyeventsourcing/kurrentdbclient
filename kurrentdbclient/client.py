@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
@@ -9,38 +8,32 @@ from functools import wraps
 from threading import Event, Lock
 from time import sleep
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
-    Union,
     cast,
     overload,
 )
 
 import grpc
-from typing_extensions import Literal
+from typing_extensions import Literal, Self
 
 from kurrentdbclient.common import (
     DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_EVENT_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_BATCH_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_DELAY,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-    DEFAULT_PERSISTENT_SUBSCRIPTION_STOPPING_GRACE,
+    DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+    DEFAULT_PERSISTENT_SUB_EVENT_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+    DEFAULT_PERSISTENT_SUB_MAX_ACK_BATCH_SIZE,
+    DEFAULT_PERSISTENT_SUB_MAX_ACK_DELAY,
+    DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+    DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+    DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+    DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+    DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+    DEFAULT_PERSISTENT_SUB_STOPPING_GRACE,
     DEFAULT_WINDOW_SIZE,
     AbstractCatchupSubscription,
     AbstractPersistentSubscription,
@@ -59,14 +52,14 @@ from kurrentdbclient.connection_spec import (
 )
 from kurrentdbclient.events import NewEvent, RecordedEvent
 from kurrentdbclient.exceptions import (
-    DiscoveryFailed,
-    FollowerNotFound,
+    DiscoveryFailedError,
+    FollowerNotFoundError,
     GrpcError,
-    LeaderNotFound,
-    NodeIsNotLeader,
-    NotFound,
-    ReadOnlyReplicaNotFound,
-    ServiceUnavailable,
+    LeaderNotFoundError,
+    NodeIsNotLeaderError,
+    NotFoundError,
+    ReadOnlyReplicaNotFoundError,
+    ServiceUnavailableError,
 )
 from kurrentdbclient.gossip import (
     NODE_STATE_FOLLOWER,
@@ -75,17 +68,21 @@ from kurrentdbclient.gossip import (
     ClusterMember,
     GossipService,
 )
-from kurrentdbclient.persistent import (
-    ConsumerStrategy,
-    PersistentSubscriptionsService,
-    SubscriptionInfo,
-)
-from kurrentdbclient.projections import (
-    ProjectionsService,
-    ProjectionState,
-    ProjectionStatistics,
-)
 from kurrentdbclient.streams import StreamsService, StreamState
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    from kurrentdbclient.persistent import (
+        ConsumerStrategy,
+        PersistentSubscriptionsService,
+        SubscriptionInfo,
+    )
+    from kurrentdbclient.projections import (
+        ProjectionsService,
+        ProjectionState,
+        ProjectionStatistics,
+    )
 
 # Matches the 'type' of "system" events.
 KDB_SYSTEM_EVENTS_REGEX = r"\$.+"
@@ -108,9 +105,9 @@ def autoreconnect(f: _TCallable) -> _TCallable:
         try:
             return f(*args, **kwargs)
 
-        except NodeIsNotLeader as e:
+        except NodeIsNotLeaderError as e:
             if (
-                client.connection_spec.options.NodePreference == NODE_PREFERENCE_LEADER
+                client.connection_spec.options.node_preference == NODE_PREFERENCE_LEADER
                 and not (
                     client.connection_spec.scheme in URI_SCHEMES_NON_DISCOVER
                     and len(client.connection_spec.targets) == 1
@@ -119,8 +116,7 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 client.reconnect(e.leader_grpc_target)
                 sleep(0.1)
                 return f(*args, **kwargs)
-            else:
-                raise
+            raise
 
         except ValueError as e:
             s = str(e)
@@ -128,10 +124,9 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 client.reconnect()
                 sleep(0.1)
                 return f(*args, **kwargs)
-            else:  # pragma: no cover
-                raise
+            raise  # pragma: no cover
 
-        except ServiceUnavailable:
+        except ServiceUnavailableError:
             client.reconnect()
             sleep(0.1)
             return f(*args, **kwargs)
@@ -154,11 +149,11 @@ def retrygrpc(f: _TCallable) -> _TCallable:
 class BaseKurrentDBClient(ABC):
     def __init__(
         self,
-        uri: Optional[str] = None,
+        uri: str | None = None,
         *,
-        root_certificates: Optional[Union[str, bytes]] = None,
-        private_key: Optional[Union[str, bytes]] = None,
-        certificate_chain: Optional[Union[str, bytes]] = None,
+        root_certificates: str | bytes | None = None,
+        private_key: str | bytes | None = None,
+        certificate_chain: str | bytes | None = None,
     ) -> None:
         self._is_closed = False
         self.root_certificates = (
@@ -177,43 +172,43 @@ class BaseKurrentDBClient(ABC):
         self.connection_spec = ConnectionSpec(uri)
 
         # Load private_key from UserKeyFile if specified
-        if self.connection_spec.options.UserKeyFile:
-            with open(self.connection_spec.options.UserKeyFile, "rb") as f:
+        if self.connection_spec.options.user_key_file:
+            with open(self.connection_spec.options.user_key_file, "rb") as f:
                 self.private_key = f.read()
         else:
             self.private_key = None
 
         # Load certificate_chain from UserCertFile if specified
-        if self.connection_spec.options.UserCertFile:
-            with open(self.connection_spec.options.UserCertFile, "rb") as f:
+        if self.connection_spec.options.user_cert_file:
+            with open(self.connection_spec.options.user_cert_file, "rb") as f:
                 self.certificate_chain = f.read()
         else:
             self.certificate_chain = None
 
         # Load root_certificates from TlsCaFile if specified
-        if self.connection_spec.options.TlsCaFile:
-            with open(self.connection_spec.options.TlsCaFile, "rb") as f:
+        if self.connection_spec.options.tls_ca_file:
+            with open(self.connection_spec.options.tls_ca_file, "rb") as f:
                 self.root_certificates = f.read()
 
-        self._default_deadline = self.connection_spec.options.DefaultDeadline
+        self._default_deadline = self.connection_spec.options.default_deadline
 
         self.grpc_options: GrpcOptions = (
             ("grpc.max_receive_message_length", 17 * 1024 * 1024),
         )
-        if self.connection_spec.options.KeepAliveInterval is not None:
+        if self.connection_spec.options.keep_alive_interval is not None:
             self.grpc_options += (
-                ("grpc.keepalive_ms", self.connection_spec.options.KeepAliveInterval),
+                ("grpc.keepalive_ms", self.connection_spec.options.keep_alive_interval),
             )
-        if self.connection_spec.options.KeepAliveTimeout is not None:
+        if self.connection_spec.options.keep_alive_timeout is not None:
             self.grpc_options += (
                 (
                     "grpc.keepalive_timeout_ms",
-                    self.connection_spec.options.KeepAliveTimeout,
+                    self.connection_spec.options.keep_alive_timeout,
                 ),
             )
 
         self._call_metadata = (
-            ("connection-name", self.connection_spec.options.ConnectionName),
+            ("connection-name", self.connection_spec.options.connection_name),
         )
 
         self._call_credentials = self.construct_call_credentials(
@@ -230,40 +225,40 @@ class BaseKurrentDBClient(ABC):
         return self._is_closed
 
     def construct_call_credentials(
-        self, username: Optional[str], password: Optional[str]
-    ) -> Optional[grpc.CallCredentials]:
-        if username and password and self.connection_spec.options.Tls is True:
+        self, username: str | None, password: str | None
+    ) -> grpc.CallCredentials | None:
+        if username and password and self.connection_spec.options.tls is True:
             return grpc.metadata_call_credentials(
                 BasicAuthCallCredentials(username, password)
             )
-        else:
-            return None
+        return None
 
     def _select_preferred_member(
         self, cluster_members: Sequence[ClusterMember]
     ) -> ClusterMember:
-        node_preference = self.connection_spec.options.NodePreference
+        node_preference = self.connection_spec.options.node_preference
         if node_preference == NODE_PREFERENCE_LEADER:
             leaders = [c for c in cluster_members if c.state == NODE_STATE_LEADER]
             if len(leaders) != 1:  # pragma: no cover
                 # Todo: Cover this with a test.
-                raise LeaderNotFound(f"Expected one leader, discovered {len(leaders)}")
+                msg = f"Expected one leader, discovered {len(leaders)}"
+                raise LeaderNotFoundError(msg)
             preferred_member = leaders[0]
         elif node_preference == NODE_PREFERENCE_FOLLOWER:
             followers = [c for c in cluster_members if c.state == NODE_STATE_FOLLOWER]
             if len(followers) == 0:
-                raise FollowerNotFound()
-            preferred_member = random.choice(followers)
+                raise FollowerNotFoundError
+            preferred_member = random.choice(followers)  # noqa: S311
         elif node_preference == NODE_PREFERENCE_REPLICA:
             replicas = [c for c in cluster_members if c.state == NODE_STATE_REPLICA]
             if len(replicas) == 0:
-                raise ReadOnlyReplicaNotFound()
+                raise ReadOnlyReplicaNotFoundError
             # Todo: Cover this with a test.
-            preferred_member = random.choice(replicas)  # pragma: no cover
+            preferred_member = random.choice(replicas)  # noqa: S311 # pragma: no cover
         else:
             assert node_preference == NODE_PREFERENCE_RANDOM
             assert len(cluster_members) > 0
-            preferred_member = random.choice(cluster_members)
+            preferred_member = random.choice(cluster_members)  # noqa: S311
         return preferred_member
 
 
@@ -274,11 +269,11 @@ class KurrentDBClient(BaseKurrentDBClient):
 
     def __init__(
         self,
-        uri: Optional[str] = None,
+        uri: str | None = None,
         *,
-        root_certificates: Optional[Union[str, bytes]] = None,
-        private_key: Optional[Union[str, bytes]] = None,
-        certificate_chain: Optional[Union[str, bytes]] = None,
+        root_certificates: str | bytes | None = None,
+        private_key: str | bytes | None = None,
+        certificate_chain: str | bytes | None = None,
     ) -> None:
         super().__init__(
             uri,
@@ -317,7 +312,7 @@ class KurrentDBClient(BaseKurrentDBClient):
     def projections(self) -> ProjectionsService:
         return self._connection.projections
 
-    def _connect(self, grpc_target: Optional[str] = None) -> KurrentDBConnection:
+    def _connect(self, grpc_target: str | None = None) -> KurrentDBConnection:
         if grpc_target:
             # Just connect to the given target.
             return self._construct_esdb_connection(grpc_target)
@@ -333,7 +328,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         return self._discover_preferred_node()
 
     def _discover_preferred_node(self) -> KurrentDBConnection:
-        attempts = self.connection_spec.options.MaxDiscoverAttempts
+        attempts = self.connection_spec.options.max_discover_attempts
         assert attempts > 0
         if self.connection_spec.scheme in URI_SCHEMES_NON_DISCOVER:
             grpc_options: GrpcOptions = ()
@@ -342,7 +337,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         while True:
             # Attempt to discover preferred node.
             try:
-                last_exception: Optional[Exception] = None
+                last_exception: Exception | None = None
                 for grpc_target in self.connection_spec.targets:
                     connection = self._construct_esdb_connection(
                         grpc_target=grpc_target,
@@ -350,7 +345,7 @@ class KurrentDBClient(BaseKurrentDBClient):
                     )
                     try:
                         cluster_members = connection.gossip.read(
-                            timeout=self.connection_spec.options.GossipTimeout,
+                            timeout=self.connection_spec.options.gossip_timeout,
                             metadata=self._call_metadata,
                             credentials=self._call_credentials,
                         )
@@ -363,18 +358,17 @@ class KurrentDBClient(BaseKurrentDBClient):
                     msg = (
                         "Failed to obtain cluster info from"
                         f" '{','.join(self.connection_spec.targets)}':"
-                        f" {str(last_exception)}"
+                        f" {last_exception!s}"
                     )
-                    raise DiscoveryFailed(msg) from last_exception
+                    raise DiscoveryFailedError(msg) from last_exception
 
                 preferred_member = self._select_preferred_member(cluster_members)
 
-            except DiscoveryFailed:
+            except DiscoveryFailedError:
                 attempts -= 1
                 if attempts == 0:
                     raise
-                else:
-                    sleep(self.connection_spec.options.DiscoveryInterval / 1000)
+                sleep(self.connection_spec.options.discovery_interval / 1000)
             else:
                 break
 
@@ -387,7 +381,7 @@ class KurrentDBClient(BaseKurrentDBClient):
 
         return connection
 
-    def reconnect(self, grpc_target: Optional[str] = None) -> None:
+    def reconnect(self, grpc_target: str | None = None) -> None:
         self._is_reconnection_required.set()
         with self._reconnection_lock:
             if self._is_reconnection_required.is_set():
@@ -412,7 +406,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         self, grpc_target: str, grpc_options: GrpcOptions = ()
     ) -> grpc.Channel:
         grpc_options = self.grpc_options + grpc_options
-        if self.connection_spec.options.Tls is True:
+        if self.connection_spec.options.tls is True:
             channel_credentials = grpc.ssl_channel_credentials(
                 root_certificates=self.root_certificates,
                 private_key=self.private_key,
@@ -482,10 +476,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         events: Iterable[NewEvent],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         return self.append_to_stream(
             stream_name=stream_name,
@@ -499,10 +493,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
+        current_version: int | StreamState,
         event: NewEvent,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         """
         Appends a new event to the named stream.
@@ -522,10 +516,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         /,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
-        events: Union[NewEvent, Iterable[NewEvent]],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        events: NewEvent | Iterable[NewEvent],
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         """
         Appends a new event or a sequence of new events to the named stream.
@@ -540,15 +534,14 @@ class KurrentDBClient(BaseKurrentDBClient):
                 metadata=self._call_metadata,
                 credentials=credentials or self._call_credentials,
             )
-        else:
-            return self.streams.batch_append(
-                stream_name=stream_name,
-                current_version=current_version,
-                events=events,
-                timeout=timeout,
-                metadata=self._call_metadata,
-                credentials=credentials or self._call_credentials,
-            )
+        return self.streams.batch_append(
+            stream_name=stream_name,
+            current_version=current_version,
+            events=events,
+            timeout=timeout,
+            metadata=self._call_metadata,
+            credentials=credentials or self._call_credentials,
+        )
 
     @retrygrpc
     @autoreconnect
@@ -556,9 +549,9 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         # Todo: Reconsider using current_version=None to indicate "stream exists"?
         timeout = timeout if timeout is not None else self._default_deadline
@@ -576,9 +569,9 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        current_version: Union[int, StreamState],
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        current_version: int | StreamState,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         timeout = timeout if timeout is not None else self._default_deadline
         self.streams.tombstone(
@@ -595,12 +588,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[RecordedEvent]:
         """
         Returns a sequence of recorded events from the named stream.
@@ -620,12 +613,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractReadResponse:
         """
         Reads recorded events from the named stream.
@@ -644,15 +637,15 @@ class KurrentDBClient(BaseKurrentDBClient):
     def read_all(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         backwards: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
         limit: int = sys.maxsize,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractReadResponse:
         """
         Reads recorded events in "all streams" in the database.
@@ -676,24 +669,26 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> Union[int, Literal[StreamState.NO_STREAM]]:
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> int | Literal[StreamState.NO_STREAM]:
         """
         Returns the current position of the end of a stream.
         """
         try:
-            last_event = list(
-                self.streams.read(
-                    stream_name=stream_name,
-                    backwards=True,
-                    limit=1,
-                    timeout=timeout,
-                    metadata=self._call_metadata,
-                    credentials=credentials or self._call_credentials,
+            last_event = next(
+                iter(
+                    self.streams.read(
+                        stream_name=stream_name,
+                        backwards=True,
+                        limit=1,
+                        timeout=timeout,
+                        metadata=self._call_metadata,
+                        credentials=credentials or self._call_credentials,
+                    )
                 )
-            )[0]
-        except NotFound:
+            )
+        except NotFoundError:
             # StreamState.NO_STREAM is the correct "current version" both when appending
             # to a stream that never existed and when appending to a stream that has
             # been deleted (in this case of a deleted stream, the "current version"
@@ -710,8 +705,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> int:
         """
         Returns the current commit position of the database.
@@ -740,9 +735,9 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> Tuple[Dict[str, Any], Union[int, Literal[StreamState.NO_STREAM]]]:
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> tuple[dict[str, Any], int | Literal[StreamState.NO_STREAM]]:
         """
         Gets the stream metadata.
         """
@@ -755,7 +750,7 @@ class KurrentDBClient(BaseKurrentDBClient):
                 timeout=timeout,
                 credentials=credentials or self._call_credentials,
             )
-        except NotFound:
+        except NotFoundError:
             return {}, StreamState.NO_STREAM
         else:
             metadata_event = metadata_events[0]
@@ -765,10 +760,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        metadata: Dict[str, Any],
-        current_version: Union[int, StreamState] = StreamState.ANY,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        metadata: dict[str, Any],
+        current_version: int | StreamState = StreamState.ANY,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Sets the stream metadata.
@@ -793,7 +788,7 @@ class KurrentDBClient(BaseKurrentDBClient):
     def subscribe_to_all(
         self,
         *,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
@@ -803,8 +798,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractCatchupSubscription:
         """
         Starts a catch-up subscription, from which all
@@ -877,12 +872,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         from_end: bool = False,
         resolve_links: bool = False,
         include_caught_up: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractCatchupSubscription:
         """
         Starts a catch-up subscription from which
@@ -910,18 +905,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating persistent subscription from start of database.
@@ -938,18 +933,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         filter_include: Sequence[str] = (),
         filter_by_stream_name: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating persistent subscription from a commit position.
@@ -968,18 +963,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating persistent subscription from end of database.
@@ -992,7 +987,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         *,
         from_end: bool = False,
-        commit_position: Optional[int] = None,
+        commit_position: int | None = None,
         resolve_links: bool = False,
         filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
         filter_include: Sequence[str] = (),
@@ -1000,18 +995,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         window_size: int = DEFAULT_WINDOW_SIZE,
         checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Creates a persistent subscription on all streams.
@@ -1052,18 +1047,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         *,
         resolve_links: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating stream subscription from start of stream.
@@ -1078,18 +1073,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         stream_position: int,
         resolve_links: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating stream subscription from stream position.
@@ -1104,18 +1099,18 @@ class KurrentDBClient(BaseKurrentDBClient):
         from_end: bool = True,
         resolve_links: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for creating stream subscription from end of stream.
@@ -1129,21 +1124,21 @@ class KurrentDBClient(BaseKurrentDBClient):
         stream_name: str,
         *,
         from_end: bool = False,
-        stream_position: Optional[int] = None,
+        stream_position: int | None = None,
         resolve_links: bool = False,
         consumer_strategy: ConsumerStrategy = "DispatchToSingle",
-        message_timeout: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MESSAGE_TIMEOUT,
-        max_retry_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_RETRY_COUNT,
-        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MIN_CHECKPOINT_COUNT,
-        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_CHECKPOINT_COUNT,
-        checkpoint_after: float = DEFAULT_PERSISTENT_SUBSCRIPTION_CHECKPOINT_AFTER,
-        max_subscriber_count: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_SUBSCRIBER_COUNT,
-        live_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_LIVE_BUFFER_SIZE,
-        read_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_READ_BATCH_SIZE,
-        history_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_HISTORY_BUFFER_SIZE,
+        message_timeout: float = DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
+        max_retry_count: int = DEFAULT_PERSISTENT_SUB_MAX_RETRY_COUNT,
+        min_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
+        max_checkpoint_count: int = DEFAULT_PERSISTENT_SUB_MAX_CHECKPOINT_COUNT,
+        checkpoint_after: float = DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
+        max_subscriber_count: int = DEFAULT_PERSISTENT_SUB_MAX_SUBSCRIBER_COUNT,
+        live_buffer_size: int = DEFAULT_PERSISTENT_SUB_LIVE_BUFFER_SIZE,
+        read_batch_size: int = DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+        history_buffer_size: int = DEFAULT_PERSISTENT_SUB_HISTORY_BUFFER_SIZE,
         extra_statistics: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Creates a persistent subscription on one stream.
@@ -1178,12 +1173,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         group_name: str,
         *,
-        event_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_EVENT_BUFFER_SIZE,
-        max_ack_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_BATCH_SIZE,
-        max_ack_delay: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_DELAY,
-        stopping_grace: float = DEFAULT_PERSISTENT_SUBSCRIPTION_STOPPING_GRACE,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        event_buffer_size: int = DEFAULT_PERSISTENT_SUB_EVENT_BUFFER_SIZE,
+        max_ack_batch_size: int = DEFAULT_PERSISTENT_SUB_MAX_ACK_BATCH_SIZE,
+        max_ack_delay: float = DEFAULT_PERSISTENT_SUB_MAX_ACK_DELAY,
+        stopping_grace: float = DEFAULT_PERSISTENT_SUB_STOPPING_GRACE,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractPersistentSubscription:
         """
         Reads a persistent subscription on all streams.
@@ -1206,12 +1201,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         stream_name: str,
         *,
-        event_buffer_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_EVENT_BUFFER_SIZE,
-        max_ack_batch_size: int = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_BATCH_SIZE,
-        max_ack_delay: float = DEFAULT_PERSISTENT_SUBSCRIPTION_MAX_ACK_DELAY,
-        stopping_grace: float = DEFAULT_PERSISTENT_SUBSCRIPTION_STOPPING_GRACE,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        event_buffer_size: int = DEFAULT_PERSISTENT_SUB_EVENT_BUFFER_SIZE,
+        max_ack_batch_size: int = DEFAULT_PERSISTENT_SUB_MAX_ACK_BATCH_SIZE,
+        max_ack_delay: float = DEFAULT_PERSISTENT_SUB_MAX_ACK_DELAY,
+        stopping_grace: float = DEFAULT_PERSISTENT_SUB_STOPPING_GRACE,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> AbstractPersistentSubscription:
         """
         Reads a persistent subscription on one stream.
@@ -1233,10 +1228,10 @@ class KurrentDBClient(BaseKurrentDBClient):
     def get_subscription_info(
         self,
         group_name: str,
-        stream_name: Optional[str] = None,
+        stream_name: str | None = None,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> SubscriptionInfo:
         """
         Gets info for a persistent subscription.
@@ -1254,8 +1249,8 @@ class KurrentDBClient(BaseKurrentDBClient):
     def list_subscriptions(
         self,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[SubscriptionInfo]:
         """
         Lists all persistent subscriptions.
@@ -1272,8 +1267,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         stream_name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[SubscriptionInfo]:
         """
         Lists persistent stream subscriptions.
@@ -1290,20 +1285,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         group_name: str,
         *,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from same position.
@@ -1315,20 +1310,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         *,
         from_end: Literal[False],
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from start of database.
@@ -1340,20 +1335,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         *,
         from_end: Literal[True],
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from end of database.
@@ -1365,20 +1360,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         *,
         commit_position: int,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating persistent subscription to run from a commit position.
@@ -1390,22 +1385,22 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         group_name: str,
         *,
-        from_end: Optional[bool] = None,
-        commit_position: Optional[int] = None,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        from_end: bool | None = None,
+        commit_position: int | None = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Updates a persistent subscription on all streams.
@@ -1445,20 +1440,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         stream_name: str,
         *,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from same stream position.
@@ -1471,20 +1466,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         stream_name: str,
         *,
         from_end: Literal[False],
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from start of stream.
@@ -1497,20 +1492,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         stream_name: str,
         *,
         from_end: Literal[True],
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from end of stream.
@@ -1523,20 +1518,20 @@ class KurrentDBClient(BaseKurrentDBClient):
         stream_name: str,
         *,
         stream_position: int,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Signature for updating subscription to run from stream position.
@@ -1549,22 +1544,22 @@ class KurrentDBClient(BaseKurrentDBClient):
         group_name: str,
         stream_name: str,
         *,
-        from_end: Optional[bool] = None,
-        stream_position: Optional[int] = None,
-        resolve_links: Optional[bool] = None,
-        consumer_strategy: Optional[ConsumerStrategy] = None,
-        message_timeout: Optional[float] = None,
-        max_retry_count: Optional[int] = None,
-        min_checkpoint_count: Optional[int] = None,
-        max_checkpoint_count: Optional[int] = None,
-        checkpoint_after: Optional[float] = None,
-        max_subscriber_count: Optional[int] = None,
-        live_buffer_size: Optional[int] = None,
-        read_batch_size: Optional[int] = None,
-        history_buffer_size: Optional[int] = None,
-        extra_statistics: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        from_end: bool | None = None,
+        stream_position: int | None = None,
+        resolve_links: bool | None = None,
+        consumer_strategy: ConsumerStrategy | None = None,
+        message_timeout: float | None = None,
+        max_retry_count: int | None = None,
+        min_checkpoint_count: int | None = None,
+        max_checkpoint_count: int | None = None,
+        checkpoint_after: float | None = None,
+        max_subscriber_count: int | None = None,
+        live_buffer_size: int | None = None,
+        read_batch_size: int | None = None,
+        history_buffer_size: int | None = None,
+        extra_statistics: bool | None = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Updates a persistent subscription on one stream.
@@ -1607,10 +1602,10 @@ class KurrentDBClient(BaseKurrentDBClient):
     def replay_parked_events(
         self,
         group_name: str,
-        stream_name: Optional[str] = None,
+        stream_name: str | None = None,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         timeout = timeout if timeout is not None else self._default_deadline
 
@@ -1627,10 +1622,10 @@ class KurrentDBClient(BaseKurrentDBClient):
     def delete_subscription(
         self,
         group_name: str,
-        stream_name: Optional[str] = None,
+        stream_name: str | None = None,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Deletes a persistent subscription.
@@ -1650,13 +1645,13 @@ class KurrentDBClient(BaseKurrentDBClient):
     def read_gossip(
         self,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> Sequence[ClusterMember]:
         timeout = (
             timeout
             if timeout is not None
-            else self.connection_spec.options.GossipTimeout
+            else self.connection_spec.options.gossip_timeout
         )
         return self.gossip.read(
             timeout=timeout,
@@ -1673,8 +1668,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         query: str,
         emit_enabled: bool = False,
         track_emitted_streams: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Creates a projection.
@@ -1699,8 +1694,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         *,
         query: str,
         emit_enabled: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Updates a projection.
@@ -1725,8 +1720,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         delete_emitted_streams: bool = False,
         delete_state_stream: bool = False,
         delete_checkpoint_stream: bool = False,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Deletes a projection.
@@ -1749,8 +1744,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         *,
         name: str,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionStatistics:
         """
         Gets statistics for named projection.
@@ -1769,9 +1764,9 @@ class KurrentDBClient(BaseKurrentDBClient):
     def list_continuous_projection_statistics(
         self,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> List[ProjectionStatistics]:
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> list[ProjectionStatistics]:
         """
         Lists statistics for continuous projections.
         """
@@ -1788,9 +1783,9 @@ class KurrentDBClient(BaseKurrentDBClient):
     def list_all_projection_statistics(
         self,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> List[ProjectionStatistics]:
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> list[ProjectionStatistics]:
         """
         Lists statistics for all projections.
         """
@@ -1809,8 +1804,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Disables a projection.
@@ -1831,8 +1826,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Aborts a projection.
@@ -1853,8 +1848,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Enables a projection.
@@ -1874,8 +1869,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Resets a projection.
@@ -1896,8 +1891,8 @@ class KurrentDBClient(BaseKurrentDBClient):
         self,
         name: str,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionState:
         """
         Gets projection state.
@@ -1939,8 +1934,8 @@ class KurrentDBClient(BaseKurrentDBClient):
     def restart_projections_subsystem(
         self,
         *,
-        timeout: Optional[float] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         """
         Restarts projections subsystem.
@@ -1966,10 +1961,10 @@ class KurrentDBClient(BaseKurrentDBClient):
                 esdb_connection.close()
                 self._is_closed = True
 
-    def __enter__(self) -> KurrentDBClient:
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args: Any, **kwargs: Any) -> None:
+    def __exit__(self, *args: object, **kwargs: Any) -> None:
         self.close()
 
     def __del__(self) -> None:

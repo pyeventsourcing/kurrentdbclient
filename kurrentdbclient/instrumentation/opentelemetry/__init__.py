@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import Any, Collection
+from typing import TYPE_CHECKING, Any
 
 # Note: namespace pacakge issue? don't understand why this and not e.g. utils.unwrap
 from opentelemetry.instrumentation.instrumentor import (  # type: ignore[attr-defined]
@@ -27,6 +26,9 @@ from kurrentdbclient.instrumentation.opentelemetry.spanners import (
 from kurrentdbclient.instrumentation.opentelemetry.utils import apply_spanner
 from kurrentdbclient.instrumentation.opentelemetry.version import __version__
 
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
 
 class _RedefinedBaseInstrumentor(BaseInstrumentor):  # type: ignore[misc]
     pass
@@ -46,13 +48,12 @@ class _BaseInstrumentor(_RedefinedBaseInstrumentor):
 
     def _get_tracer(self, **kwargs: Any) -> Tracer:
         tracer_provider = kwargs.get("tracer_provider")
-        tracer = get_tracer(
+        return get_tracer(
             __name__,
             __version__,
             tracer_provider=tracer_provider,
             schema_url=Schemas.V1_25_0.value,
         )
-        return tracer
 
 
 class KurrentDBClientInstrumentor(_BaseInstrumentor):

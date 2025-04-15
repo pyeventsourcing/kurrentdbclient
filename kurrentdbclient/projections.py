@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import grpc
 import grpc.aio
-from google.protobuf import struct_pb2
 
 from kurrentdbclient.common import (
     AsyncGrpcStreamers,
@@ -16,13 +14,17 @@ from kurrentdbclient.common import (
     TGrpcStreamers,
     handle_rpc_error,
 )
-from kurrentdbclient.connection_spec import ConnectionSpec
-from kurrentdbclient.exceptions import KurrentDBClientException
+from kurrentdbclient.exceptions import KurrentDBClientError
 from kurrentdbclient.protos.Grpc import (
     projections_pb2,
     projections_pb2_grpc,
     shared_pb2,
 )
+
+if TYPE_CHECKING:
+    from google.protobuf import struct_pb2
+
+    from kurrentdbclient.connection_spec import ConnectionSpec
 
 
 @dataclass(frozen=True)
@@ -56,7 +58,7 @@ class ProjectionState:
 class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
     def __init__(
         self,
-        channel: Union[grpc.Channel, grpc.aio.Channel],
+        channel: grpc.Channel | grpc.aio.Channel,
         connection_spec: ConnectionSpec,
         grpc_streamers: TGrpcStreamers,
     ):
@@ -65,6 +67,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_create_req(
+        *,
         query: str,
         name: str,
         emit_enabled: bool,
@@ -82,6 +85,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_update_req(
+        *,
         name: str,
         query: str,
         emit_enabled: bool,
@@ -96,6 +100,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_delete_req(
+        *,
         name: str,
         delete_emitted_streams: bool,
         delete_state_stream: bool,
@@ -114,7 +119,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
     def _construct_statistics_req(
         *,
         name: str | None = None,
-        all: bool = False,
+        all: bool = False,  # noqa: A002
     ) -> projections_pb2.StatisticsReq:
         if name is not None:
             options = projections_pb2.StatisticsReq.Options(name=name)
@@ -130,6 +135,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_disable_req(
+        *,
         name: str,
         write_checkpoint: bool,
     ) -> projections_pb2.DisableReq:
@@ -152,6 +158,7 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 
     @staticmethod
     def _construct_reset_req(
+        *,
         name: str,
         write_checkpoint: bool,
     ) -> projections_pb2.ResetReq:
@@ -207,19 +214,21 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
         kind_oneof = value.WhichOneof("kind")
         if kind_oneof == "null_value":
             return None
-        elif kind_oneof == "number_value":
+        if kind_oneof == "number_value":
             return value.number_value
-        elif kind_oneof == "string_value":
+        if kind_oneof == "string_value":
             return value.string_value
-        elif kind_oneof == "bool_value":
+        if kind_oneof == "bool_value":
             return value.bool_value
-        elif kind_oneof == "struct_value":
+        if kind_oneof == "struct_value":
             fields = value.struct_value.fields
             return {f: self._extract_value(fields[f]) for f in fields}
-        elif kind_oneof == "list_value":
+        if kind_oneof == "list_value":
             return [self._extract_value(v) for v in value.list_value.values]
-        else:  # pragma: no cover
-            raise ValueError(f"Unsupported kind of value '{kind_oneof}': {value}")
+        # no cover: start
+        msg = f"Unsupported kind of value '{kind_oneof}': {value}"
+        raise ValueError(msg)
+        # no cover: end
 
     @staticmethod
     def _construct_projection_statistics(
@@ -251,13 +260,14 @@ class BaseProjectionsService(KurrentDBService[TGrpcStreamers]):
 class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
     async def create(
         self,
+        *,
         query: str,
         name: str,
         emit_enabled: bool,
         track_emitted_streams: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         create_req = self._construct_create_req(
             query=query,
@@ -278,12 +288,13 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
 
     async def update(
         self,
+        *,
         name: str,
         query: str,
         emit_enabled: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         update_req = self._construct_update_req(
             name=name,
@@ -303,13 +314,14 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
 
     async def delete(
         self,
+        *,
         name: str,
         delete_emitted_streams: bool,
         delete_state_stream: bool,
         delete_checkpoint_stream: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         delete_req = self._construct_delete_req(
             name=name,
@@ -331,9 +343,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
     async def get_statistics(
         self,
         name: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionStatistics:
         statistics_req = self._construct_statistics_req(name=name)
         try:
@@ -347,24 +359,22 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 assert isinstance(
                     statistics_resp, projections_pb2.StatisticsResp
                 ), statistics_resp
-                projection_statistics = self._construct_projection_statistics(
-                    statistics_resp
-                )
-                return projection_statistics
-            else:  # pragma: no cover
-                raise KurrentDBClientException(
-                    "Statistics request didn't return any statistics"
-                )
+                return self._construct_projection_statistics(statistics_resp)
+            # no cover: start
+            msg = "Statistics request didn't return any statistics"
+            raise KurrentDBClientError(msg)
+            # no cover: stop
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
 
     async def list_statistics(
         self,
-        all: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> List[ProjectionStatistics]:  # pragma: no cover
+        *,
+        all: bool = False,  # noqa: A002
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> list[ProjectionStatistics]:  # pragma: no cover
         statistics_req = self._construct_statistics_req(all=all)
         try:
             statistics_resps = self._stub.Statistics(
@@ -388,11 +398,12 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
 
     async def disable(
         self,
+        *,
         name: str,
         write_checkpoint: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         disable_req = self._construct_disable_req(
             name=name,
@@ -412,9 +423,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
     async def enable(
         self,
         name: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         enable_req = self._construct_enable_req(
             name=name,
@@ -432,11 +443,12 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
 
     async def reset(
         self,
+        *,
         name: str,
         write_checkpoint: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         reset_req = self._construct_reset_req(
             name=name,
@@ -457,9 +469,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
         self,
         name: str,
         partition: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionState:
         state_req = self._construct_state_req(
             name=name,
@@ -505,9 +517,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
 
     async def restart_subsystem(
         self,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         try:
             empty_resp = await self._stub.RestartSubsystem(
@@ -528,13 +540,14 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def create(
         self,
+        *,
         query: str,
         name: str,
         emit_enabled: bool,
         track_emitted_streams: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         create_req = self._construct_create_req(
             query=query,
@@ -555,12 +568,13 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def update(
         self,
+        *,
         name: str,
         query: str,
         emit_enabled: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         update_req = self._construct_update_req(
             name=name,
@@ -580,13 +594,14 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def delete(
         self,
+        *,
         name: str,
         delete_emitted_streams: bool,
         delete_state_stream: bool,
         delete_checkpoint_stream: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         delete_req = self._construct_delete_req(
             name=name,
@@ -608,9 +623,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
     def get_statistics(
         self,
         name: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionStatistics:
         statistics_req = self._construct_statistics_req(name=name)
         try:
@@ -624,24 +639,22 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 assert isinstance(
                     statistics_resp, projections_pb2.StatisticsResp
                 ), statistics_resp
-                projection_statistics = self._construct_projection_statistics(
-                    statistics_resp
-                )
-                return projection_statistics
-            else:  # pragma: no cover
-                raise KurrentDBClientException(
-                    "Statistics request didn't return any statistics"
-                )
+                return self._construct_projection_statistics(statistics_resp)
+            # no cover: start
+            msg = "Statistics request didn't return any statistics"
+            raise KurrentDBClientError(msg)
+            # no cover: stop
         except grpc.RpcError as e:
             raise handle_rpc_error(e) from None
 
     def list_statistics(
         self,
-        all: bool = False,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
-    ) -> List[ProjectionStatistics]:  # pragma: no cover
+        *,
+        all: bool = False,  # noqa: A002
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> list[ProjectionStatistics]:  # pragma: no cover
         statistics_req = self._construct_statistics_req(all=all)
         try:
             statistics_resps = self._stub.Statistics(
@@ -665,11 +678,12 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def disable(
         self,
+        *,
         name: str,
         write_checkpoint: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         disable_req = self._construct_disable_req(
             name=name,
@@ -689,9 +703,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
     def enable(
         self,
         name: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         enable_req = self._construct_enable_req(
             name=name,
@@ -709,11 +723,12 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def reset(
         self,
+        *,
         name: str,
         write_checkpoint: bool,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         reset_req = self._construct_reset_req(
             name=name,
@@ -734,9 +749,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
         self,
         name: str,
         partition: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionState:
         state_req = self._construct_state_req(
             name=name,
@@ -782,9 +797,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
 
     def restart_subsystem(
         self,
-        timeout: Optional[float] = None,
-        metadata: Optional[Metadata] = None,
-        credentials: Optional[grpc.CallCredentials] = None,
+        timeout: float | None = None,
+        metadata: Metadata | None = None,
+        credentials: grpc.CallCredentials | None = None,
     ) -> None:
         try:
             empty_resp = self._stub.RestartSubsystem(

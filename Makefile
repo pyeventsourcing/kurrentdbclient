@@ -10,6 +10,7 @@
 # KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-ce/eventstoredb-ce:24.2.0-alpha.115-jammy
 # KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/eventstore-staging-ce/eventstoredb-ce:24.6.0-nightly-x64-8.0-jammy
 KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
+#KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-preview/kurrentdb:25.0.1-rc.1-x64-8.0-bookworm-slim
 
 
 PYTHONUNBUFFERED=1
@@ -32,6 +33,10 @@ install-packages:
 install:
 	$(POETRY) --version
 	$(POETRY) install -vv $(opts)
+
+.PHONY: poetry-python-version
+poetry-python-version:
+	$(POETRY) run python --version
 
 .PHONY: install-pre-commit-hooks
 install-pre-commit-hooks:
@@ -58,9 +63,13 @@ lint-black:
 	$(POETRY) run black --check --diff --extend-exclude samples .
 	$(POETRY) run black --check --diff --line-length=$(SAMPLES_LINE_LENGTH) ./samples
 
-.PHONY: lint-flake8
-lint-flake8:
-	$(POETRY) run flake8
+.PHONY: lint-ruff
+lint-ruff:
+	$(POETRY) run ruff check .
+
+#.PHONY: lint-flake8
+#lint-flake8:
+#	$(POETRY) run flake8
 
 .PHONY: lint-isort
 lint-isort:
@@ -72,7 +81,7 @@ lint-mypy:
 	$(POETRY) run mypy --strict
 
 .PHONY: lint-python
-lint-python: lint-black lint-flake8 lint-isort lint-mypy
+lint-python: lint-black lint-ruff lint-isort lint-mypy
 
 .PHONY: lint
 lint: lint-python
@@ -82,13 +91,22 @@ fmt-black:
 	$(POETRY) run black --extend-exclude=samples .
 	$(POETRY) run black --line-length=$(SAMPLES_LINE_LENGTH) ./samples
 
+.PHONY: fmt-ruff
+fmt-ruff:
+	$(POETRY) run ruff --fix kurrentdbclient tests
+
+.PHONY: fmt-ruff-unsafe
+fmt-ruff-unsafe:
+	$(POETRY) run ruff --fix --unsafe-fixes kurrentdbclient tests
+
+
 .PHONY: fmt-isort
 fmt-isort:
 	$(POETRY) run isort --extend-skip=samples .
 	$(POETRY) run isort --line-length=$(SAMPLES_LINE_LENGTH) samples
 
 .PHONY: fmt
-fmt: fmt-isort fmt-black
+fmt: fmt-isort fmt-black fmt-ruff
 
 .PHONY: test
 test:

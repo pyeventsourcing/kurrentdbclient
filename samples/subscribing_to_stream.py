@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+# ruff: noqa: S106
+import contextlib
 from uuid import uuid4
 
 from kurrentdbclient import (
@@ -7,7 +8,7 @@ from kurrentdbclient import (
     StreamState,
     exceptions,
 )
-from kurrentdbclient.exceptions import ConsumerTooSlow
+from kurrentdbclient.exceptions import ConsumerTooSlowError
 from kurrentdbclient.streams import CatchupSubscription, RecordedEvent
 from tests.test_client import get_server_certificate
 
@@ -15,7 +16,7 @@ DEBUG = False
 _print = print
 
 
-def print(*args):
+def print(*args):  # noqa: A001
     if DEBUG:
         _print(*args)
 
@@ -82,16 +83,13 @@ subscription = client.subscribe_to_stream(
 # endregion subscribe-to-stream-from-position
 subscription.stop()
 
-
-try:
+# Suppress error if commit position does not exist in this sample database.
+with contextlib.suppress(exceptions.GrpcError):
     # region subscribe-to-all-from-position
     subscription = client.subscribe_to_all(
         commit_position=1_056,
     )
     # endregion subscribe-to-all-from-position
-except exceptions.GrpcError:
-    # Commit position does not exist in this sample database, so we are skipping
-    pass
 
 
 # region subscribe-to-stream-live
@@ -145,7 +143,7 @@ while True:
             # record stream position
             handle_event(event)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
     # endregion subscribe-to-stream-subscription-dropped
@@ -168,7 +166,7 @@ while True:
             # record commit position
             handle_event(event)
 
-    except ConsumerTooSlow:
+    except ConsumerTooSlowError:
         # subscription was dropped
         continue
     # endregion subscribe-to-all-subscription-dropped
