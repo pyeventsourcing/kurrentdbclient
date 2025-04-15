@@ -12,15 +12,15 @@
 KURRENTDB_DOCKER_IMAGE ?= docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
 
 
-POETRY ?= poetry
-POETRY_VERSION=1.5.1
-POETRY_INSTALLER_URL ?= https://install.python-poetry.org
 PYTHONUNBUFFERED=1
 SAMPLES_LINE_LENGTH=70
 
+POETRY_VERSION=2.1.2
+POETRY ?= poetry@$(POETRY_VERSION)
+
 .PHONY: install-poetry
 install-poetry:
-	@curl -sSL $(POETRY_INSTALLER_URL) | python3
+	@pipx install --suffix="@$(POETRY_VERSION)" "poetry==$(POETRY_VERSION)"
 	$(POETRY) --version
 
 .PHONY: install-packages
