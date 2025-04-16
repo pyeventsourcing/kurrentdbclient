@@ -1,3 +1,8 @@
+Please note: following the rebranding of EventStoreDB to KurrentDB, this package has
+been rebranded as [`kurrentdbclient`](https://pypi.org/project/kurrentdbclient). Please
+migrate your code to use the [`kurrentdbclient`](https://pypi.org/project/kurrentdbclient)
+package when you are ready.
+
 # Python gRPC Client for EventStoreDB
 
 This [Python package](https://pypi.org/project/esdbclient/) provides multithreaded and asyncio Python
