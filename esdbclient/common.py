@@ -262,7 +262,7 @@ def handle_rpc_error(e: grpc.RpcError) -> EventStoreDBClientException:  # noqa: 
             if "SSL_ERROR" in details:
                 # root_certificates is None and CA cert not installed
                 return SSLError(e)
-            if "empty address list:" in details:
+            if "empty address list" in details:
                 # given root_certificates is invalid
                 return SSLError(e)
             return ServiceUnavailable(details)

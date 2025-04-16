@@ -2591,8 +2591,8 @@ class TestEventStoreDBClient(EventStoreDBClientTestCase):
 
         # Sadly, the checkpoint commit position doesn't correspond
         # to an event that has been filtered out.
+        assert event.commit_position is not None
         with self.assertRaises(AssertionError):
-            assert event.commit_position is not None
             get_event_at_commit_position(event.commit_position)
 
         # And the checkpoint commit position is greater than the current commit position.
@@ -6729,8 +6729,7 @@ class TestRootCertificatesAreOptional(TimedTestCase):
         # if grpc lib can verify server cert using locally installed CA certs.
         uri = "esdb://admin:changeit@127.0.0.1:2110"
         with self.assertRaises(SSLError):
-            client = EventStoreDBClient(uri)
-            client.get_commit_position()
+            EventStoreDBClient(uri).get_commit_position()
 
     def test_one_target_tls_true_invalid_root_certificates(self) -> None:
         uri = "esdb://admin:changeit@127.0.0.1:2110"
@@ -6759,9 +6758,11 @@ class TestOptionalClientAuth(TimedTestCase):
         self.user_key = b"some-key"
         self.user_cert = b"some-cert"
         self.tls_ca = b"some-cert"
-        with NamedTemporaryFile(delete=False) as f1, NamedTemporaryFile(
-            delete=False
-        ) as f2, NamedTemporaryFile(delete=False) as f3:
+        with (
+            NamedTemporaryFile(delete=False) as f1,
+            NamedTemporaryFile(delete=False) as f2,
+            NamedTemporaryFile(delete=False) as f3,
+        ):
             f1.write(self.user_key)
             f2.write(self.user_cert)
             f3.write(self.tls_ca)
@@ -6817,39 +6818,38 @@ class TestOptionalClientAuth(TimedTestCase):
 class TestESDBDiscoverScheme(TestCase):
     def test_calls_dns_and_uses_given_port_number_or_default(self) -> None:
         # Cluster name not configured in DNS, default port.
+        uri = (
+            "esdb+discover://my-unresolvable-cluster"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm1:
-            uri = (
-                "esdb+discover://my-unresolvable-cluster"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             EventStoreDBClient(uri)
         self.assertIn(":2113", str(cm1.exception))
         self.assertIn("DNS resolution failed", str(cm1.exception))
         self.assertNotIn("Deadline Exceeded", str(cm1.exception))
 
         # Cluster name not configured in DNS, non-default port.
+        uri = (
+            "esdb+discover://my-unresolvable-cluster:9898"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm2:
-            uri = (
-                "esdb+discover://my-unresolvable-cluster:9898"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             EventStoreDBClient(uri)
         self.assertIn(":9898", str(cm2.exception))
         self.assertIn("DNS resolution failed", str(cm2.exception))
         self.assertNotIn("Deadline Exceeded", str(cm2.exception))
 
         # Name is resolvable but 'service not available' on port 2222.
+        uri = "esdb://localhost:2222?Tls=false"
         with self.assertRaises(ServiceUnavailable) as cm3:
-            uri = "esdb://localhost:2222?Tls=false"
-            client = EventStoreDBClient(uri)
-            client.read_gossip()
+            EventStoreDBClient(uri).read_gossip()
         self.assertIn("Failed to connect to remote host", str(cm3.exception))
 
+        uri = (
+            "esdb+discover://localhost:2222"
+            "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
+        )
         with self.assertRaises(DiscoveryFailed) as cm4:
-            uri = (
-                "esdb+discover://localhost:2222"
-                "?Tls=false&DiscoveryInterval=0&MaxDiscoverAttempts=1&GossipTimeout=30"
-            )
             EventStoreDBClient(uri)
         self.assertIn(":2222", str(cm4.exception))
         self.assertIn("Failed to connect to remote host", str(cm4.exception))

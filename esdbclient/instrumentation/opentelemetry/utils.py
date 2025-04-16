@@ -45,8 +45,8 @@ class WraptWrapperFunc(Protocol[T_contra, P, R]):
         self,
         original: BoundFunc[P, R],
         instance: T_contra,
-        args: P.args,
-        kwargs: P.kwargs,
+        args: Any,
+        kwargs: Any,
     ) -> R:
         pass  # pragma: no cover
 
@@ -76,8 +76,8 @@ def apply_spanner(
         async def async_instrumentation_wrapper(
             original: BoundFunc[P, Coroutine[Any, Any, R]],
             instance: T,
-            args: P.kwargs,
-            kwargs: P.args,
+            args: Any,
+            kwargs: Any,
         ) -> R:
             # Use the spanner function to execute the spanned function.
             with async_spanner(tracer, instance, original, *args, **kwargs) as result:
@@ -98,8 +98,8 @@ def apply_spanner(
         def instrumentation_wrapper(
             original: BoundFunc[P, R],
             instance: T,
-            args: P.args,
-            kwargs: P.kwargs,
+            args: Any,
+            kwargs: Any,
         ) -> R:
             # Use the spanner function to execute the spanned function.
             with spanner(tracer, instance, original, *args, **kwargs) as result:
