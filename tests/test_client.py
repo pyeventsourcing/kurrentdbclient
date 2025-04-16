@@ -6743,9 +6743,11 @@ class TestOptionalClientAuth(TimedTestCase):
         self.user_key = b"some-key"
         self.user_cert = b"some-cert"
         self.tls_ca = b"some-cert"
-        with NamedTemporaryFile(delete=False) as f1, NamedTemporaryFile(
-            delete=False
-        ) as f2, NamedTemporaryFile(delete=False) as f3:
+        with (
+            NamedTemporaryFile(delete=False) as f1,
+            NamedTemporaryFile(delete=False) as f2,
+            NamedTemporaryFile(delete=False) as f3,
+        ):
             f1.write(self.user_key)
             f2.write(self.user_cert)
             f3.write(self.tls_ca)
