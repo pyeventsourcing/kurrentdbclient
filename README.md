@@ -6,6 +6,9 @@
   </picture>
 </a>
 
+Please note: following the rebranding of EventStoreDB to KurrentDB, this package
+is a rebranding of the [`esdbclient`](https://pypi.org/project/esdbclient) package.
+
 # Python gRPC Client for KurrentDB
 
 This [Python package](https://pypi.org/project/kurrentdbclient/) provides multithreaded and asyncio Python
