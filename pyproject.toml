@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kurrentdbclient"
-version = "1.0b6"
+version = "1.0b7"
 
 description = "Python gRPC Client for KurrentDB"
 authors = [
