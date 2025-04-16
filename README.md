@@ -26,7 +26,7 @@ SSL/TLS, with both single-server and cluster modes, and with Python versions
 The test suite has 100% line and branch coverage. The code has typing annotations
 checked strictly with mypy. The code is formatted with black and isort, and checked
 with flake8. Poetry is used for package management during development, and for
-building and publishing distributions to [PyPI](https://pypi.org/project/esdbclient/).
+building and publishing distributions to [PyPI](https://pypi.org/project/kurrentdbclient/).
 
 For an example of usage, see the [eventsourcing-eventstoredb](
 https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
@@ -3690,7 +3690,7 @@ span.
 
 ## Communities<a id="communities"></a>
 
-- [Issues](https://github.com/pyeventsourcing/esdbclient/issues)
+- [Issues](https://github.com/pyeventsourcing/kurrentdbclient/issues)
 - [Discuss](https://discuss.eventstore.com/)
 - [Discord (Event Store)](https://discord.gg/Phn9pmCw3t)
 
