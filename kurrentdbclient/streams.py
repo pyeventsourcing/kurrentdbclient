@@ -188,9 +188,6 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                 self.aio_call.cancel()
             self._grpc_streamers.remove(self)
 
-    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
-        await self.stop()
-
 
 class AsyncCatchupSubscription(AsyncReadResponse, AbstractAsyncCatchupSubscription):
     def __init__(
