@@ -435,13 +435,18 @@ except TypeError:  # pragma: no cover
 
 
 class RecordedEventIterator(Iterator[RecordedEvent], _ContextManager):
+    def __init__(self) -> None:
+        self._is_context_manager_active = False
+
     def __iter__(self) -> Self:
         return self
 
     def __enter__(self) -> Self:
+        self._is_context_manager_active = True
         return self
 
     def __exit__(self, *args: object, **kwargs: Any) -> None:
+        self._is_context_manager_active = False
         self.stop()
 
     def __del__(self) -> None:
@@ -489,6 +494,10 @@ except TypeError:  # pragma: no cover
 
 
 class AsyncRecordedEventIterator(AsyncIterator[RecordedEvent], _AsyncContextManager):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._is_context_manager_active = False
+
     @abstractmethod
     async def stop(self) -> None:
         pass  # pragma: no cover
@@ -497,9 +506,11 @@ class AsyncRecordedEventIterator(AsyncIterator[RecordedEvent], _AsyncContextMana
         return self
 
     async def __aenter__(self) -> Self:
+        self._is_context_manager_active = True
         return self
 
     async def __aexit__(self, *args: object, **kwargs: Any) -> None:
+        self._is_context_manager_active = False
         await self.stop()
 
     def _set_iter_error_for_testing(self) -> None:

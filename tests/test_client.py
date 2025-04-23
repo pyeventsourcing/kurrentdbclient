@@ -55,6 +55,7 @@ from kurrentdbclient.exceptions import (
     NodeIsNotLeaderError,
     NotFoundError,
     OperationFailedError,
+    ProgrammingError,
     ReadOnlyReplicaNotFoundError,
     ServiceUnavailableError,
     SSLError,
@@ -3579,6 +3580,27 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         assert events[-3].data == event1.data
         assert events[-2].data == event2.data
         assert events[-1].data == event3.data
+
+    def test_persistent_subscription_ack_after_stop(self) -> None:
+        self.construct_esdb_client()
+
+        group_name = str(uuid4())
+        self.client.create_subscription_to_all(group_name)
+
+        # Can't ack after subscription has been stopped (not context manager).
+        s = self.client.read_subscription_to_all(group_name)
+        s.stop()
+        with self.assertRaises(ProgrammingError):
+            s.ack(uuid4())
+        with self.assertRaises(ProgrammingError):
+            s.nack(uuid4(), "retry")
+
+        # Can ack after subscription has been stopped (is context manager).
+        s = self.client.read_subscription_to_all(group_name)
+        with s:
+            s.stop()
+            s.ack(uuid4())
+            s.nack(uuid4(), "retry")
 
     def test_subscription_to_all_read_with_message_timeout_event_buffer_size_1(
         self,

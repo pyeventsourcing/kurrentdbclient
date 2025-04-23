@@ -74,13 +74,14 @@ while True:
         stream_name=stream_name,
     )
     try:
-        for event in subscription:
-            try:
-                handle_event(event)
-            except Exception:
-                subscription.nack(event, action="park")
-            else:
-                subscription.ack(event)
+        with subscription:
+            for event in subscription:
+                try:
+                    handle_event(event)
+                except Exception:
+                    subscription.nack(event, action="park")
+                else:
+                    subscription.ack(event)
 
     except ConsumerTooSlowError:
         # subscription was dropped
@@ -102,13 +103,14 @@ while True:
         group_name=group_name,
     )
     try:
-        for event in subscription:
-            try:
-                handle_event(event)
-            except Exception:
-                subscription.nack(event, action="park")
-            else:
-                subscription.ack(event)
+        with subscription:
+            for event in subscription:
+                try:
+                    handle_event(event)
+                except Exception:
+                    subscription.nack(event, action="park")
+                else:
+                    subscription.ack(event)
 
     except ConsumerTooSlowError:
         # subscription was dropped
@@ -131,16 +133,17 @@ while True:
         stream_name=stream_name,
     )
     try:
-        for event in subscription:
-            try:
-                handle_event(event)
-            except Exception:
-                if event.retry_count < 5:
-                    subscription.nack(event, action="retry")
+        with subscription:
+            for event in subscription:
+                try:
+                    handle_event(event)
+                except Exception:
+                    if event.retry_count < 5:
+                        subscription.nack(event, action="retry")
+                    else:
+                        subscription.nack(event, action="park")
                 else:
-                    subscription.nack(event, action="park")
-            else:
-                subscription.ack(event)
+                    subscription.ack(event)
 
     except ConsumerTooSlowError:
         # subscription was dropped

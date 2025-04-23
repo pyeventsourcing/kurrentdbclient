@@ -442,6 +442,9 @@ class SubscriptionReadReqs(BaseSubscriptionReadReqs):
             raise
 
     def ack(self, event_id: UUID) -> None:
+        if self._queue_poison_sent:
+            msg = "Subscription has already been stopped"
+            raise ProgrammingError(msg)
         self._ack_queue.put((event_id, "ack"))
 
     def nack(
@@ -449,6 +452,9 @@ class SubscriptionReadReqs(BaseSubscriptionReadReqs):
         event_id: UUID,
         action: Literal["unknown", "park", "retry", "skip", "stop"],
     ) -> None:
+        if self._queue_poison_sent:
+            msg = "Subscription has already been stopped"
+            raise ProgrammingError(msg)
         assert action in ["unknown", "park", "retry", "skip", "stop"]
         self._ack_queue.put((event_id, action))
 
@@ -471,7 +477,7 @@ class BasePersistentSubscription:
 
 
 class AsyncPersistentSubscription(
-    BasePersistentSubscription, AsyncGrpcStreamer, AbstractAsyncPersistentSubscription
+    AsyncGrpcStreamer, AbstractAsyncPersistentSubscription, BasePersistentSubscription
 ):
     def __init__(
         self,
@@ -483,12 +489,14 @@ class AsyncPersistentSubscription(
         stream_name: str | None,
         grpc_streamers: AsyncGrpcStreamers,
     ) -> None:
-        super().__init__(grpc_streamers=grpc_streamers)
+        AsyncGrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
+        AbstractAsyncPersistentSubscription.__init__(self)
         self._read_reqs = read_reqs
         self._stream_stream_call = stream_stream_call
         self._stream_stream_call_iter = stream_stream_call.__aiter__()
         self._expected_group_name = expected_group_name
         self._stream_name = stream_name
+        self._is_stopping = False
 
     async def init(self) -> None:
         try:
@@ -521,6 +529,8 @@ class AsyncPersistentSubscription(
         return self._subscription_id
 
     async def __anext__(self) -> RecordedEvent:
+        if self._is_context_manager_active and self._is_stopping:
+            raise StopAsyncIteration
         try:
             while True:
                 read_resp = await self._get_next_read_resp()
@@ -564,7 +574,9 @@ class AsyncPersistentSubscription(
             return response
 
     async def stop(self, *, wait_until_stopped: bool = True) -> None:
-        if not await self._set_is_stopped():
+        if self._is_context_manager_active:
+            self._is_stopping = True
+        elif not await self._set_is_stopped():
             await self._read_reqs.stop(wait_until_stopped=wait_until_stopped)
             self._stream_stream_call.cancel()
             await asyncio.sleep(0.05)
@@ -598,9 +610,11 @@ class PersistentSubscription(
         stream_name: str | None,
         grpc_streamers: GrpcStreamers,
     ):
-        super().__init__(grpc_streamers=grpc_streamers)
+        GrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
+        AbstractPersistentSubscription.__init__(self)
         self._read_reqs = read_reqs
         self._read_resps = read_resps
+        self._is_stopping = False
 
         try:
             first_read_resp = self._get_next_read_resp()
@@ -634,6 +648,8 @@ class PersistentSubscription(
         return self._subscription_id
 
     def __next__(self) -> RecordedEvent:
+        if self._is_stopping:
+            raise StopIteration
         while True:
             try:
                 read_resp = self._get_next_read_resp()
@@ -673,7 +689,9 @@ class PersistentSubscription(
         self._is_stopped = True
 
     def stop(self) -> None:
-        if not self._set_is_stopped():
+        if self._is_context_manager_active:
+            self._is_stopping = True
+        elif not self._set_is_stopped():
             self._read_reqs.stop()
             self._read_resps.cancel()
             self._grpc_streamers.remove(self)
