@@ -371,6 +371,10 @@ class TestConnectionSpec(TestCase):
         spec = ConnectionSpec(uri + "&UserCertFile=some-path")
         self.assertEqual(spec.options.user_cert_file, "some-path")
 
+        # Set userCertFile.
+        spec = ConnectionSpec(uri + "&userCertFile=some-path")
+        self.assertEqual(spec.options.user_cert_file, "some-path")
+
     def test_user_key_file(self) -> None:
         uri = "kdb://localhost:2222?Tls=false"
 
@@ -380,6 +384,10 @@ class TestConnectionSpec(TestCase):
 
         # Set UserKeyFile.
         spec = ConnectionSpec(uri + "&UserKeyFile=some-key")
+        self.assertEqual(spec.options.user_key_file, "some-key")
+
+        # Set userKeyFile.
+        spec = ConnectionSpec(uri + "&userKeyFile=some-key")
         self.assertEqual(spec.options.user_key_file, "some-key")
 
     def test_raises_when_query_string_has_unsupported_field(self) -> None:
