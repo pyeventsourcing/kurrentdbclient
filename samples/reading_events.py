@@ -93,7 +93,7 @@ try:
         stream_name=unknown_stream_name, limit=1
     )
 except exceptions.NotFoundError:
-    print("The stream was not found")
+    print("stream not found")
 # endregion checking-for-stream-presence
 else:
     raise Exception("Exception not raised")
