@@ -1,5 +1,6 @@
 import time
-time.sleep(0.001)   # avoid zero execution time check :-)
+
+time.sleep(0.001)  # avoid zero execution time check :-)
 """
 # region client-with-user-certificates
 query_string = f"tls=true&userCertFile={path_to_ca_file}&userKeyFile={path_to_key_file}"
