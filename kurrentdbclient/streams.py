@@ -8,7 +8,7 @@ from asyncio import CancelledError
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, overload, runtime_checkable
+from typing import TYPE_CHECKING, overload, runtime_checkable
 from uuid import UUID, uuid4
 
 import grpc
@@ -142,6 +142,7 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
     ):
         BaseReadResponse.__init__(self, stream_name=stream_name)
         AsyncGrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
+        AbstractAsyncReadResponse.__init__(self)
         self.aio_call = aio_call
         self.read_resp_iter = aio_call.__aiter__()
 
@@ -227,6 +228,7 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
     ):
         GrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
         BaseReadResponse.__init__(self, stream_name=stream_name)
+        AbstractReadResponse.__init__(self)
         self._read_resps = read_resps
 
     def __next__(self) -> RecordedEvent:

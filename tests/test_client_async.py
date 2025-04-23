@@ -2351,15 +2351,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         await s.stop()
         self.assertTrue(cast(AsyncPersistentSubscription, s)._is_stopped)
 
-    async def test_persistent_subscription_raises_programming_error(self) -> None:
+    async def test_persistent_subscription_ack_after_stop(self) -> None:
         group_name = str(uuid4())
         await self.client._connection.close()
         await self.client.create_subscription_to_all(group_name)
+
+        # Can't ack after subscription has been stopped (not context manager).
         s = await self.client.read_subscription_to_all(group_name)
         await s.stop()
         with self.assertRaises(ProgrammingError):
             await s.ack(uuid4())
         with self.assertRaises(ProgrammingError):
+            await s.nack(uuid4(), "retry")
+
+        # Can ack after subscription has been stopped (is context manager).
+        s = await self.client.read_subscription_to_all(group_name)
+        async with s:
+            await s.stop()
+            # with self.assertRaises(ProgrammingError):
+            await s.ack(uuid4())
+            # with self.assertRaises(ProgrammingError):
             await s.nack(uuid4(), "retry")
 
     async def test_persistent_subscription_read_reqs(self) -> None:
