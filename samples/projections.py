@@ -59,11 +59,11 @@ try:
         query=projection_query,
     )
 except exceptions.AlreadyExistsError:
-    pass
+    print("projection already exists")
+    # endregion CreateContinuous_Conflict
 else:
     raise Exception("Projection didn't already exist")
 
-# endregion CreateContinuous_Conflict
 
 # region Enable
 client.enable_projection(name=projection_name)
@@ -73,10 +73,10 @@ client.enable_projection(name=projection_name)
 try:
     client.enable_projection(name="does-not-exist")
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion EnableNotFound
 else:
     raise Exception("Projection exists")
-# endregion EnableNotFound
 
 client.append_event(
     stream_name=str(uuid4()),
@@ -141,10 +141,10 @@ client.disable_projection(name=projection_name)
 try:
     client.disable_projection(name="does-not-exist")
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion DisableNotFound
 else:
     raise Exception("Projection exists")
-# endregion DisableNotFound
 
 # region Abort
 client.abort_projection(name=projection_name)
@@ -154,10 +154,10 @@ client.abort_projection(name=projection_name)
 try:
     client.abort_projection(name="does-not-exist")
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion Abort_NotFound
 else:
     raise Exception("Projection exists")
-# endregion Abort_NotFound
 
 # region Reset
 client.reset_projection(name=projection_name)
@@ -167,10 +167,10 @@ client.reset_projection(name=projection_name)
 try:
     client.reset_projection(name="does-not-exist")
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion Reset_NotFound
 else:
     raise Exception("Projection exists")
-# endregion Reset_NotFound
 
 # region Update
 projection_query = """fromAll()
@@ -200,10 +200,10 @@ try:
         query=projection_query,
     )
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion Update_NotFound
 else:
     raise Exception("Projection exists")
-# endregion Update_NotFound
 
 # region Delete
 # A projection must be disabled before it can be deleted.
@@ -217,10 +217,10 @@ client.delete_projection(name=projection_name)
 try:
     client.delete_projection(name="does-not-exist")
 except exceptions.NotFoundError:
-    pass
+    print("projection not found")
+    # endregion DeleteNotFound
 else:
     raise Exception("Projection exists")
-# endregion DeleteNotFound
 
 
 # region RestartSubSystem
