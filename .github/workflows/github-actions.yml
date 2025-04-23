@@ -6,21 +6,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-        eventstore-image-tag: ["21.10.10-buster-slim", "22.10.2-bullseye-slim"]
-#        eventstore-image-tag: ["21.10.11-dev"]   # For Joao's dev builds
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # https://cloudsmith.io/~eventstore/repos/eventstore-ce/packages/
+        # https://cloudsmith.io/~eventstore/repos/eventstore-staging-ce/packages/
+        kurrentdb-docker-image:
+#          - docker.eventstore.com/eventstore-ce/eventstoredb-ce:22.10.4-jammy
+#          - docker.eventstore.com/eventstore-ce/eventstoredb-oss:23.10.2-jammy
+#          - docker.eventstore.com/eventstore/eventstoredb-ee:24.10.0-x64-8.0-bookworm-slim
+          - docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim
     env:
-      EVENTSTORE_IMAGE_TAG: ${{ matrix.eventstore-image-tag }}
+      KURRENTDB_DOCKER_IMAGE: ${{ matrix.kurrentdb-docker-image }}
     runs-on: "ubuntu-22.04"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Poetry
         run: make install-poetry
-      - name: Install packages
-        run: make install-packages
+      - name: Install package
+        run: make install
       - name: Lint
         run: make lint
       - name: Check asyncio test case
@@ -31,8 +36,8 @@ jobs:
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncSetupError
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncTestError
           ! timeout --preserve-status --kill-after=10s 5m poetry run python -m unittest test_isolated_asyncio_test_case.TestAsyncTeardownError
-      - name: Start EventStoreDB
-        run: make start-eventstoredb
+      - name: Start KurrentDB
+        run: make start-kurrentdb
       - name: Run tests
         run: make test
       - name: Docker logs - secure cluster
@@ -40,10 +45,10 @@ jobs:
         run: docker compose logs
       - name: Docker logs - insecure server
         if: success() || failure()
-        run: docker logs my-eventstoredb-insecure
+        run: docker logs my-kurrentdb-insecure
       - name: Docker logs - secure server
         if: success() || failure()
-        run: docker logs my-eventstoredb-secure
+        run: docker logs my-kurrentdb-secure
       - name: Report memory
         if: success() || failure()
         run: top -bn1

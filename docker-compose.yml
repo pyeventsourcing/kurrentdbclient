@@ -1,5 +1,3 @@
-version: "3.5"
-
 services:
   volumes-provisioner:
     image: hasnat/volumes-provisioner
@@ -10,33 +8,37 @@ services:
     network_mode: none
 
   cert-gen:
-    image: eventstore/es-gencert-cli:1.0.2
+    image: docker.eventstore.com/eventstore-utils/es-gencert-cli:1.2
     entrypoint: bash
     user: "1000:1000"
     command: >
-      -c "mkdir -p ./certs && cd /certs
+      -c "mkdir -p ./certs
+      && cd /certs
+      && rm -rfv ./ca
+      && rm -rfv ./node1
+      && rm -rfv ./node2
+      && rm -rfv ./node3
       && es-gencert-cli create-ca
       && es-gencert-cli create-node -out ./node1 -ip-addresses 127.0.0.1,172.30.240.11 -dns-names localhost
       && es-gencert-cli create-node -out ./node2 -ip-addresses 127.0.0.1,172.30.240.12 -dns-names localhost
-      && es-gencert-cli create-node -out ./node3 -ip-addresses 127.0.0.1,172.30.240.13 -dns-names localhost
-      && find . -type f -print0 | xargs -0 chmod 666"
+      && es-gencert-cli create-node -out ./node3 -ip-addresses 127.0.0.1,172.30.240.13 -dns-names localhost"
+#      && find . -type f -print0 | xargs -0 chmod 666"
     volumes:
       - "./certs:/certs"
     depends_on:
       - volumes-provisioner
 
-  esdb-node1:
-    image: ${EVENTSTORE_IMAGE_NAME}:${EVENTSTORE_IMAGE_TAG}
+  kurrentdb-node1:
+    image: ${KURRENTDB_DOCKER_IMAGE}
     env_file:
       - shared.env
     environment:
-      - EVENTSTORE_GOSSIP_SEED=172.30.240.12:2113,172.30.240.13:2113
-      - EVENTSTORE_INT_IP=172.30.240.11
-      - EVENTSTORE_CERTIFICATE_FILE=/etc/eventstore/certs/node1/node.crt
-      - EVENTSTORE_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node1/node.key
-      - EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
-      - EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2110
-      - EVENTSTORE_ADVERTISE_TCP_PORT_TO_CLIENT_AS=1110
+      - KURRENTDB_GOSSIP_SEED=172.30.240.12:2113,172.30.240.13:2113
+      - KURRENTDB_REPLICATION_IP=172.30.240.11
+      - KURRENTDB_CERTIFICATE_FILE=/etc/eventstore/certs/node1/node.crt
+      - KURRENTDB_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node1/node.key
+      - KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
+      - KURRENTDB_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2110
     ports:
       - 1110:1113
       - 2110:2113
@@ -49,18 +51,17 @@ services:
     depends_on:
       - cert-gen
 
-  esdb-node2:
-    image: ${EVENTSTORE_IMAGE_NAME}:${EVENTSTORE_IMAGE_TAG}
+  kurrentdb-node2:
+    image: ${KURRENTDB_DOCKER_IMAGE}
     env_file:
       - shared.env
     environment:
-      - EVENTSTORE_GOSSIP_SEED=172.30.240.11:2113,172.30.240.13:2113
-      - EVENTSTORE_INT_IP=172.30.240.12
-      - EVENTSTORE_CERTIFICATE_FILE=/etc/eventstore/certs/node2/node.crt
-      - EVENTSTORE_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node2/node.key
-      - EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
-      - EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2111
-      - EVENTSTORE_ADVERTISE_TCP_PORT_TO_CLIENT_AS=1111
+      - KURRENTDB_GOSSIP_SEED=172.30.240.11:2113,172.30.240.13:2113
+      - KURRENTDB_REPLICATION_IP=172.30.240.12
+      - KURRENTDB_CERTIFICATE_FILE=/etc/eventstore/certs/node2/node.crt
+      - KURRENTDB_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node2/node.key
+      - KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
+      - KURRENTDB_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2111
     ports:
       - 1111:1113
       - 2111:2113
@@ -73,18 +74,17 @@ services:
     depends_on:
       - cert-gen
 
-  esdb-node3:
-    image: ${EVENTSTORE_IMAGE_NAME}:${EVENTSTORE_IMAGE_TAG}
+  kurrentdb-node3:
+    image: ${KURRENTDB_DOCKER_IMAGE}
     env_file:
       - shared.env
     environment:
-      - EVENTSTORE_GOSSIP_SEED=172.30.240.11:2113,172.30.240.12:2113
-      - EVENTSTORE_INT_IP=172.30.240.13
-      - EVENTSTORE_CERTIFICATE_FILE=/etc/eventstore/certs/node3/node.crt
-      - EVENTSTORE_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node3/node.key
-      - EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
-      - EVENTSTORE_ADVERTISE_HTTP_PORT_TO_CLIENT_AS=2112
-      - EVENTSTORE_ADVERTISE_TCP_PORT_TO_CLIENT_AS=1112
+      - KURRENTDB_GOSSIP_SEED=172.30.240.11:2113,172.30.240.12:2113
+      - KURRENTDB_REPLICATION_IP=172.30.240.13
+      - KURRENTDB_CERTIFICATE_FILE=/etc/eventstore/certs/node3/node.crt
+      - KURRENTDB_CERTIFICATE_PRIVATE_KEY_FILE=/etc/eventstore/certs/node3/node.key
+      - KURRENTDB_ADVERTISE_HOST_TO_CLIENT_AS=127.0.0.1
+      - KURRENTDB_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2112
     ports:
       - 1112:1113
       - 2112:2113
@@ -99,7 +99,7 @@ services:
 
 networks:
   clusternetwork:
-    name: eventstoredb.local
+    name: kurrentdb.local
     driver: bridge
     ipam:
       driver: default

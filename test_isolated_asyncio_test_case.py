@@ -1,15 +1,10 @@
-# -*- coding: utf-8 -*-
-import sys
-
-if sys.version_info[0:2] > (3, 7):
-    from unittest import IsolatedAsyncioTestCase
-else:
-    from async_case import IsolatedAsyncioTestCase
+from unittest import IsolatedAsyncioTestCase
 
 
 class TestAsyncSetupError(IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        raise Exception("This should cause the test suite to fail")
+        msg = "This should cause the test suite to fail"
+        raise Exception(msg)
 
     async def test(self):
         pass
@@ -17,7 +12,8 @@ class TestAsyncSetupError(IsolatedAsyncioTestCase):
 
 class TestAsyncTeardownError(IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
-        raise Exception("This should cause the test suite to fail")
+        msg = "This should cause the test suite to fail"
+        raise Exception(msg)
 
     async def test(self):
         pass
@@ -25,4 +21,5 @@ class TestAsyncTeardownError(IsolatedAsyncioTestCase):
 
 class TestAsyncTestError(IsolatedAsyncioTestCase):
     async def test(self):
-        raise Exception("This should cause the test suite to fail")
+        msg = "This should cause the test suite to fail"
+        raise Exception(msg)

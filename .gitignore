@@ -133,3 +133,6 @@ dmypy.json
 /.idea/
 
 *.sqlite3*
+
+# KurrentDB es-gencert-cli Docker container output
+certs/

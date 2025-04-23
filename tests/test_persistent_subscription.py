@@ -1,43 +1,34 @@
-# -*- coding: utf-8 -*-
-import os
-from typing import List
 from unittest import TestCase
 from uuid import UUID, uuid4
 
-from esdbclient import EventStoreDBClient, NewEvent, StreamState
-from tests.test_client import get_ca_certificate, get_server_certificate
-
-
-def random_data() -> bytes:
-    return os.urandom(16)
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
+from tests.test_client import get_ca_certificate, get_server_certificate, random_data
 
 
 class TestPersistentSubscriptionACK(TestCase):
-    client: EventStoreDBClient
+    client: KurrentDBClient
 
-    ESDB_TARGET = "localhost:2114"
-    ESDB_TLS = True
-    ESDB_CLUSTER_SIZE = 1
+    KDB_TARGET = "localhost:2114"
+    KDB_TLS = True
+    KDB_CLUSTER_SIZE = 1
 
     def construct_esdb_client(self) -> None:
         qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        if self.ESDB_TLS:
-            uri = f"esdb://admin:changeit@{self.ESDB_TARGET}?{qs}"
+        if self.KDB_TLS:
+            uri = f"kdb://admin:changeit@{self.KDB_TARGET}?{qs}"
             root_certificates = self.get_root_certificates()
         else:
-            uri = f"esdb://{self.ESDB_TARGET}?Tls=false&{qs}"
+            uri = f"kdb://{self.KDB_TARGET}?Tls=false&{qs}"
             root_certificates = None
-        self.client = EventStoreDBClient(uri, root_certificates=root_certificates)
+        self.client = KurrentDBClient(uri, root_certificates=root_certificates)
 
     def get_root_certificates(self) -> str:
-        if self.ESDB_CLUSTER_SIZE == 1:
-            return get_server_certificate(self.ESDB_TARGET)
-        elif self.ESDB_CLUSTER_SIZE == 3:
+        if self.KDB_CLUSTER_SIZE == 1:
+            return get_server_certificate(self.KDB_TARGET)
+        if self.KDB_CLUSTER_SIZE == 3:
             return get_ca_certificate()
-        else:
-            raise ValueError(
-                f"Test doesn't work with cluster size {self.ESDB_CLUSTER_SIZE}"
-            )
+        msg = f"Test doesn't work with cluster size {self.KDB_CLUSTER_SIZE}"
+        raise ValueError(msg)
 
     def setUp(self) -> None:
         self.construct_esdb_client()
@@ -49,39 +40,38 @@ class TestPersistentSubscriptionACK(TestCase):
 
     def given_subscription(self) -> str:
         group_name = f"my-subscription-{uuid4().hex}"
-        print(f"  Given subscription {group_name}")
+        # print(f"  Given subscription {group_name}")
         self.client.create_subscription_to_all(group_name=group_name, from_end=True)
         return group_name
 
-    def when_append_new_events(self, *data: bytes) -> List[UUID]:
+    def when_append_new_events(self, *data: bytes) -> list[UUID]:
         events = [NewEvent(type="AnEvent", data=d, metadata=b"{}") for d in data]
         self.client.append_events(
             str(uuid4()),
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        ids = [e.id for e in events]
-        print(f"  When appending events:\n    {', '.join(str(id) for id in ids)}")
-        return ids
+        return [e.id for e in events]
+        # print(f"  When appending events:\n    {', '.join(str(id) for id in ids)}")
 
     def then_consumer_receives_and_acks(
         self,
-        expected_ids: List[UUID],
+        expected_ids: list[UUID],
         on: str,
     ) -> None:
-        print(
-            f"  Then consumer of {on} should receive:\n   "
-            f" {', '.join(str(id) for id in expected_ids)}"
-        )
+        # print(
+        #     f"  Then consumer of {on} should receive:\n   "
+        #     f" {', '.join(str(id) for id in expected_ids)}"
+        # )
         unexpected_ids = []
         with self.client.read_subscription_to_all(group_name=on) as subscription:
             expected_received_count = 0
             for _, event in enumerate(subscription, start=1):
-                print(f"    > Received: {event.id!s}")
+                # print(f"    > Received: {event.id!s}")
                 if event.id not in expected_ids:
                     unexpected_ids.append(event.id)
                 else:
-                    subscription.ack(event.id)
+                    subscription.ack(event)
                     expected_received_count += 1
                 if expected_received_count == len(expected_ids):
                     break
@@ -92,7 +82,7 @@ class TestPersistentSubscriptionACK(TestCase):
             self.fail(msg)
 
     def test_event_is_removed_from_subscription_after_ack(self) -> None:
-        print("Scenario: Persistent subscription consumer doesn't receive ACKed events")
+        # print("Scenario: Persistent sub. consumer doesn't receive ACKed events")
         subscription = self.given_subscription()
 
         first_batch = self.when_append_new_events(random_data(), random_data())

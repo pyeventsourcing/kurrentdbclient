@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import os
 import ssl
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+
+# from tempfile import NamedTemporaryFile
 from unittest import TestCase
 
 BASE_DIR = Path(__file__).parents[1]
@@ -14,27 +14,25 @@ BASE_DIR = Path(__file__).parents[1]
 class TestDocs(TestCase):
     def setUp(self) -> None:
         self.setup_environ()
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError as e:
-            if str(e).startswith("There is no current event loop in thread"):
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            else:
-                raise
+        # try:
+        #     loop = asyncio.get_event_loop()
+        # except RuntimeError as e:
+        #     if str(e).startswith("There is no current event loop in thread"):
+        #         loop = asyncio.new_event_loop()
+        #         asyncio.set_event_loop(loop)
+        #     else:
+        #         raise
 
     def setup_environ(self) -> None:
-        os.environ["ESDB_ROOT_CERTIFICATES"] = ssl.get_server_certificate(
+        os.environ["KDB_ROOT_CERTIFICATES"] = ssl.get_server_certificate(
             addr=("localhost", 2114)
         )
-        os.environ["ESDB_URI"] = "esdb://admin:changeit@localhost:2114"
+        os.environ["KDB_URI"] = "kdb://admin:changeit@localhost:2114"
 
     def tearDown(self) -> None:
-        del os.environ["ESDB_URI"]
-        try:
-            del os.environ["ESDB_ROOT_CERTIFICATES"]
-        except KeyError:
-            pass
+        del os.environ["KDB_URI"]
+        with contextlib.suppress(KeyError):
+            del os.environ["KDB_ROOT_CERTIFICATES"]
 
     def test_readme(self) -> None:
         self._out = ""
@@ -44,14 +42,11 @@ class TestDocs(TestCase):
             self.fail(f"README file not found: {path}")
         self.check_code_snippets_in_file(path)
 
-    def check_code_snippets_in_file(self, doc_path: Path) -> None:  # noqa: C901
+    def check_code_snippets_in_file(self, doc_path: Path) -> None:
         # Extract lines of Python code from the README.md file.
 
-        PRINT_BLOCK_LINE_NUMBERS = True
-        if PRINT_BLOCK_LINE_NUMBERS:
-            lines = ["import sys"]
-        else:
-            lines = []
+        print_block_line_numbers = True
+        lines = ["import sys"] if print_block_line_numbers else []
         num_code_lines = 0
         num_code_lines_in_block = 0
         is_code = False
@@ -71,7 +66,7 @@ class TestDocs(TestCase):
                         )
                     is_code = True
                     is_md = True
-                    if PRINT_BLOCK_LINE_NUMBERS:
+                    if print_block_line_numbers:
                         line = (
                             f"sys.stderr.write('Block on line: {line_index}\\n') and"
                             " sys.stderr.flush()"
@@ -130,16 +125,15 @@ class TestDocs(TestCase):
                     line = ""
                 elif is_code:
                     # Process line in code block.
-                    if is_rst:
-                        # Restructured code block normally indented with four spaces.
-                        if len(line.strip()):
-                            if not line.startswith("    "):
-                                self.fail(
-                                    f"Code line needs 4-char indent: {repr(line)}: "
-                                    f"{doc_path}"
-                                )
-                            # Strip four chars of indentation.
-                            line = line[4:]
+                    # Restructured code block normally indented with four spaces.
+                    if is_rst and len(line.strip()):
+                        if not line.startswith("    "):
+                            self.fail(
+                                f"Code line needs 4-char indent: {line!r}: "
+                                f"{doc_path}"
+                            )
+                        # Strip four chars of indentation.
+                        line = line[4:]
 
                     if len(line.strip()):
                         num_code_lines_in_block += 1
@@ -155,16 +149,24 @@ class TestDocs(TestCase):
 
         print(f"{num_code_lines} lines of code in {doc_path}")
 
-        # Write the code into a temp file.
-        tempfile = NamedTemporaryFile("w+")
-        source = "\n".join(lines) + "\n"
-        tempfile.writelines(source)
-        tempfile.flush()
+        for i, line in enumerate(lines):
+            if "set_tracer_provider(" in line:
+                lines[i] = ""
+            if "instrument()" in line:
+                lines[i] = ""
+            if "uninstrument()" in line:
+                lines[i] = ""
 
-        exec(
+        source = "\n".join(lines) + "\n"
+
+        # # Write the code into a temp file.
+        # tempfile = NamedTemporaryFile("w+")
+        # tempfile.writelines(source)
+        # tempfile.flush()
+
+        exec(  # noqa: S102
             compile(source=source, filename=doc_path, mode="exec"), globals(), globals()
         )
-        return
 
         # print(Path.cwd())
         # print("\n".join(lines) + "\n")
@@ -195,4 +197,4 @@ class TestDocs(TestCase):
 
 class TestDocsInsecure(TestDocs):
     def setup_environ(self) -> None:
-        os.environ["ESDB_URI"] = "esdb://localhost:2113?Tls=false"
+        os.environ["KDB_URI"] = "kdb://localhost:2113?Tls=false"

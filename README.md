@@ -1,211 +1,49 @@
-# Python gRPC Client for EventStoreDB
+<a href="https://kurrent.io">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-White.png.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-Black.png">
+    <img alt="Kurrent" src="https://github.com/pyeventsourcing/kurrentdbclient/raw/1.0/KurrentLogo-Plum.png" height="50%" width="50%">
+  </picture>
+</a>
 
-This [Python package](https://pypi.org/project/esdbclient/) provides a Python
-gRPC client for the [EventStoreDB](https://www.eventstore.com/) database.
+Please note: following the rebranding of EventStoreDB to KurrentDB, this package
+is a rebranding of the [`esdbclient`](https://pypi.org/project/esdbclient) package.
 
-This client has been developed in collaboration with the EventStoreDB
-team. Although not all the features of EventStoreDB are supported
-by this client, many of the most useful features are presented
-in an easy-to-use interface.
+# Python gRPC Client for KurrentDB
 
-This client has been tested to work with EventStoreDB LTS versions 21.10
-and 22.10, without and without SSL/TLS, and with Python versions 3.7 to 3.11.
-There is 100% test coverage. The code has typing annotations, checked with mypy.
-The code is formatted with black and isort, and checked with flake8. Poetry
-is used for package management during development, and for building and
-publishing distributions to [PyPI](https://pypi.org/project/esdbclient/).
+This [Python package](https://pypi.org/project/kurrentdbclient/) provides multithreaded and asyncio Python
+clients for the [KurrentDB](https://kurrent.io/) database.
 
-## Synopsis
+The multithreaded `KurrentDBClient` is described in detail below. Please scroll
+down for <a href="#asyncio-client">information</a> about `AsyncKurrentDBClient`.
 
-You can connect to an EventStoreDB database using the `EventStoreDBClient` class.
+These clients have been developed and are being maintained in a collaboration
+with the KurrentDB team, and are officially supported by Kurrent Inc.
+Although not all aspects of the KurrentDB gRPC API are implemented, most
+features are presented in an easy-to-use interface.
 
-The `EventStoreDBClient` class can be imported from the `esdbclient` package.
+These clients have been tested to work with KurrentDB 25.0.0, without and without
+SSL/TLS, with both single-server and cluster modes, and with Python versions
+3.9, 3.10, 3.11, 3.12, and 3.13.
 
-Probably the three most useful methods of `EventStoreDBClient` are:
-
-* `append_to_stream()` This method can be used to record new events in a particular
-"stream". This is useful, for example, when executing a command in an application
-that mutates an aggregate. This method is "atomic" in that either all or none of
-the events will be recorded.
-
-* `read_stream()` This method can be used to retrieve all the recorded
-events in a "stream". This is useful, for example, when reconstructing
-an aggregate from recorded events before executing a command in an
-application that creates new events.
-
-* `subscribe_to_all()` This method can be used to receive all recorded events in
-the database. This is useful, for example, in event-processing components because
-it supports processing events with "exactly-once" semantics.
-
-The example below uses an "insecure" EventStoreDB server running locally on port 2113.
-
-```python
-import uuid
-
-from esdbclient import EventStoreDBClient, NewEvent, StreamState
-
-
-# Construct EventStoreDBClient with an EventStoreDB URI. The
-# connection string URI specifies that the client should
-# connect to an "insecure" server running on port 2113.
-
-client = EventStoreDBClient(
-    uri="esdb://localhost:2113?Tls=false"
-)
-
-
-# Generate new events. Typically, domain events of different
-# types are generated in a domain model, and then serialized
-# into NewEvent objects. An aggregate ID may be used as the
-# name of a stream in EventStoreDB.
-
-stream_name1 = str(uuid.uuid4())
-event1 = NewEvent(
-    type='OrderCreated',
-    data=b'{"order_number": "123456"}'
-)
-event2 = NewEvent(
-    type='OrderSubmitted',
-    data=b'{}'
-)
-event3 = NewEvent(
-    type='OrderCancelled',
-    data=b'{}'
-)
-
-
-# Append new events to a new stream. The value returned
-# from the append_to_stream() method is the overall
-# "commit position" in the database of the last new event
-# recorded by this operation. The returned "commit position"
-# may be used in a user interface to poll an eventually
-# consistent event-processing component until it can
-# present an up-to-date materialized view. New events are
-# each allocated a "stream position", which is the next
-# available position in the stream, starting from 0.
-
-commit_position1 = client.append_to_stream(
-    stream_name=stream_name1,
-    current_version=StreamState.NO_STREAM,
-    events=[event1, event2],
-)
-
-# Append events to an existing stream. The "current version"
-# is the "stream position" of the last recorded event in a
-# stream. We have recorded two new events, so the "current
-# version" is 1. The exception 'WrongCurrentVersion' will be
-# raised if an incorrect value is given.
-
-commit_position2 = client.append_to_stream(
-    stream_name=stream_name1,
-    current_version=1,
-    events=[event3],
-)
-
-# - allocated commit positions increase monotonically
-assert commit_position2 > commit_position1
-
-
-# Read events from a stream. This method returns a
-# "read response" iterator, which returns recorded
-# events. The iterator will stop when there are no
-# more events to be returned.
-
-read_response = client.read_stream(
-    stream_name=stream_name1
-)
-
-# Iterate over "read response" to get recorded events.
-# The recorded events may be deserialized to domain event
-# objects of different types and used to reconstruct an
-# aggregate in a domain model.
-recorded_events = tuple(read_response)
-
-# - stream 'stream_name1' now has three events
-assert len(recorded_events) == 3
-
-# - allocated stream positions are zero-based and gapless
-assert recorded_events[0].stream_position == 0
-assert recorded_events[1].stream_position == 1
-assert recorded_events[2].stream_position == 2
-
-# - event attribute values are recorded faithfully
-assert recorded_events[0].type == "OrderCreated"
-assert recorded_events[0].data == b'{"order_number": "123456"}'
-assert recorded_events[0].id == event1.id
-
-assert recorded_events[1].type == "OrderSubmitted"
-assert recorded_events[1].data == b'{}'
-assert recorded_events[1].id == event2.id
-
-assert recorded_events[2].type == "OrderCancelled"
-assert recorded_events[2].data == b'{}'
-assert recorded_events[2].id == event3.id
-
-
-# Start a catch-up subscription from last recorded position.
-# This method returns a "catch-up subscription" iterator,
-# which returns recorded events. The iterator will not stop
-# when there are no more recorded events to be returned, but
-# will block, and continue when further events are recorded.
-
-catchup_subscription = client.subscribe_to_all()
-
-
-# Iterate over the catch-up subscription. Process each recorded
-# event in turn. Within an atomic database transaction, record
-# the event's "commit position" along with any new state generated
-# by processing the event. Use the component's last recorded commit
-# position when restarting the catch-up subscription.
-
-received_events = []
-for event in catchup_subscription:
-    received_events.append(event)
-
-    if event.commit_position == commit_position2:
-        # Break so we can continue with the example.
-        break
-
-
-# - events are received in the order they were recorded
-assert received_events[-3].type == "OrderCreated"
-assert received_events[-3].data == b'{"order_number": "123456"}'
-assert received_events[-3].id == event1.id
-
-assert received_events[-2].type == "OrderSubmitted"
-assert received_events[-2].data == b'{}'
-assert received_events[-2].id == event2.id
-
-assert received_events[-1].type == "OrderCancelled"
-assert received_events[-1].data == b'{}'
-assert received_events[-1].id == event3.id
-
-
-# Stop the catch-up subscription iterator.
-
-catchup_subscription.stop()
-
-
-# Close the client's gRPC connection.
-
-client.close()
-```
-
-See below for more details.
+The test suite has 100% line and branch coverage. The code has typing annotations
+checked strictly with mypy. The code is formatted with black and isort, and checked
+with flake8. Poetry is used for package management during development, and for
+building and publishing distributions to [PyPI](https://pypi.org/project/kurrentdbclient/).
 
 For an example of usage, see the [eventsourcing-eventstoredb](
 https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
 
-## Table of contents
 
 <!-- TOC -->
+* [Synopsis](#synopsis)
 * [Install package](#install-package)
   * [From PyPI](#from-pypi)
   * [With Poetry](#with-poetry)
-* [EventStoreDB server](#eventstoredb-server)
+* [KurrentDB server](#kurrentdb-server)
   * [Run container](#run-container)
   * [Stop container](#stop-container)
-* [EventStoreDB client](#eventstoredb-client)
+* [KurrentDB client](#kurrentdb-client)
   * [Import class](#import-class)
   * [Construct client](#construct-client)
 * [Connection strings](#connection-strings)
@@ -221,7 +59,7 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [Idempotent append operations](#idempotent-append-operations)
   * [Read stream events](#read-stream-events)
   * [Get current version](#get-current-version)
-  * [How to implement snapshotting with EventStoreDB](#how-to-implement-snapshotting-with-eventstoredb)
+  * [How to implement snapshotting with KurrentDB](#how-to-implement-snapshotting-with-kurrentdb)
   * [Read all events](#read-all-events)
   * [Get commit position](#get-commit-position)
   * [Get stream metadata](#get-stream-metadata)
@@ -245,6 +83,19 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [List subscriptions](#list-subscriptions)
   * [List subscriptions to stream](#list-subscriptions-to-stream)
   * [Delete subscription](#delete-subscription)
+* [Projections](#projections)
+  * [Create projection](#create-projection)
+  * [Get projection state](#get-projection-state)
+  * [Update projection](#update-projection)
+  * [Get projection statistics](#get-projection-statistics)
+  * [List all projection statistics](#list-all-projection-statistics)
+  * [List continuous projection statistics](#list-continuous-projection-statistics)
+  * [Disable projection](#disable-projection)
+  * [Enable projection](#enable-projection)
+  * [Abort projection](#abort-projection)
+  * [Reset projection](#reset-projection)
+  * [Delete projection](#delete-projection)
+  * [Restart projections subsystem](#restart-projections-subsystem)
 * [Call credentials](#call-credentials)
   * [Construct call credentials](#construct-call-credentials)
 * [Connection](#connection)
@@ -252,9 +103,13 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [Close](#close)
 * [Asyncio client](#asyncio-client)
   * [Synopsis](#synopsis-1)
+  * [FastAPI](#fastapi)
 * [Notes](#notes)
   * [Regular expression filters](#regular-expression-filters)
   * [Reconnect and retry method decorators](#reconnect-and-retry-method-decorators)
+* [Instrumentation](#instrumentation)
+  * [OpenTelemetry](#open-telemetry)
+* [Communities](#communities)
 * [Contributors](#contributors)
   * [Install Poetry](#install-poetry)
   * [Setup for PyCharm users](#setup-for-pycharm-users)
@@ -262,51 +117,211 @@ https://github.com/pyeventsourcing/eventsourcing-eventstoredb) package.
   * [Project Makefile commands](#project-makefile-commands)
 <!-- TOC -->
 
-## Install package
+## Synopsis<a id="synopsis"></a>
+
+The `KurrentDBClient` class can be imported from the `kurrentdbclient` package.
+
+Probably the three most useful methods of `KurrentDBClient` are:
+
+* `append_to_stream()` This method can be used to record new events in a particular
+"stream". This is useful, for example, when executing a command in an application
+that mutates an aggregate. This method is "atomic" in that either all or none of
+the events will be recorded.
+
+* `get_stream()` This method can be used to retrieve all the recorded
+events in a "stream". This is useful, for example, when reconstructing
+an aggregate from recorded events before executing a command in an
+application that creates new events.
+
+* `subscribe_to_all()` This method can be used to receive all recorded events in
+the database. This is useful, for example, in event-processing components because
+it supports processing events with "exactly-once" semantics.
+
+The example below uses an "insecure" KurrentDB server running locally on port 2113.
+
+```python
+import uuid
+
+from kurrentdbclient import KurrentDBClient, NewEvent, StreamState
+
+# Construct KurrentDBClient with a KurrentDB URI. The
+# connection string URI specifies that the client should
+# connect to an "insecure" server running on port 2113.
+
+client = KurrentDBClient(
+    uri="kdb://localhost:2113?Tls=false"
+)
+
+# Generate new events. Typically, domain events of different
+# types are generated in a domain model, and then serialized
+# into NewEvent objects. An aggregate ID may be used as the
+# name of a stream in KurrentDB.
+
+stream_name1 = str(uuid.uuid4())
+event1 = NewEvent(
+    type='OrderCreated',
+    data=b'{"order_number": "123456"}'
+)
+event2 = NewEvent(
+    type='OrderSubmitted',
+    data=b'{}'
+)
+event3 = NewEvent(
+    type='OrderCancelled',
+    data=b'{}'
+)
+
+# Append new events to a new stream. The value returned
+# from the append_to_stream() method is the overall
+# "commit position" in the database of the last new event
+# recorded by this operation. The returned "commit position"
+# may be used in a user interface to poll an eventually
+# consistent event-processing component until it can
+# present an up-to-date materialized view. New events are
+# each allocated a "stream position", which is the next
+# available position in the stream, starting from 0.
+
+commit_position1 = client.append_to_stream(
+    stream_name=stream_name1,
+    current_version=StreamState.NO_STREAM,
+    events=[event1, event2],
+)
+
+# Append events to an existing stream. The "current version"
+# is the "stream position" of the last recorded event in a
+# stream. We have recorded two new events, so the "current
+# version" is 1. The exception 'WrongCurrentVersionError' will be
+# raised if an incorrect value is given.
+
+commit_position2 = client.append_to_stream(
+    stream_name=stream_name1,
+    current_version=1,
+    events=[event3],
+)
+
+# - allocated commit positions increase monotonically
+assert commit_position2 > commit_position1
+
+# Get events recorded in a stream. This method returns
+# a sequence of recorded event objects. The recorded
+# event objects may be deserialized to domain event
+# objects of different types and used to reconstruct
+# an aggregate in a domain model.
+
+recorded_events = client.get_stream(
+    stream_name=stream_name1
+)
+
+# - stream 'stream_name1' now has three events
+assert len(recorded_events) == 3
+
+# - allocated stream positions are zero-based and gapless
+assert recorded_events[0].stream_position == 0
+assert recorded_events[1].stream_position == 1
+assert recorded_events[2].stream_position == 2
+
+# - event attribute values are recorded faithfully
+assert recorded_events[0].type == "OrderCreated"
+assert recorded_events[0].data == b'{"order_number": "123456"}'
+assert recorded_events[0].id == event1.id
+
+assert recorded_events[1].type == "OrderSubmitted"
+assert recorded_events[1].data == b'{}'
+assert recorded_events[1].id == event2.id
+
+assert recorded_events[2].type == "OrderCancelled"
+assert recorded_events[2].data == b'{}'
+assert recorded_events[2].id == event3.id
+
+# Start a catch-up subscription from last recorded position.
+# This method returns a "catch-up subscription" object,
+# which can be iterated over to obtain recorded events.
+# The iterator will not stop when there are no more recorded
+# events to be returned, but instead will block, and then continue
+# when further events are recorded. It can be used as a context
+# manager so that the underlying streaming gRPC call to the database
+# can be cancelled cleanly in case of any error.
+
+received_events = []
+with client.subscribe_to_all(commit_position=0) as subscription:
+    # Iterate over the catch-up subscription. Process each recorded
+    # event in turn. Within an atomic database transaction, record
+    # the event's "commit position" along with any new state generated
+    # by processing the event. Use the component's last recorded commit
+    # position when restarting the catch-up subscription.
+
+    for event in subscription:
+        received_events.append(event)
+
+        if event.commit_position == commit_position2:
+            # Break so we can continue with the example.
+            break
+
+# - events are received in the order they were recorded
+assert received_events[-3].type == "OrderCreated"
+assert received_events[-3].data == b'{"order_number": "123456"}'
+assert received_events[-3].id == event1.id
+
+assert received_events[-2].type == "OrderSubmitted"
+assert received_events[-2].data == b'{}'
+assert received_events[-2].id == event2.id
+
+assert received_events[-1].type == "OrderCancelled"
+assert received_events[-1].data == b'{}'
+assert received_events[-1].id == event3.id
+
+# Close the client's gRPC connection.
+
+client.close()
+```
+
+
+## Install package<a id="install-package"></a>
 
 It is recommended to install Python packages into a Python virtual environment.
 
-### From PyPI
+### From PyPI<a id="from-pypi"></a>
 
 You can use pip to install this package directly from
-[the Python Package Index](https://pypi.org/project/esdbclient/).
+[the Python Package Index](https://pypi.org/project/kurrentdbclient/).
 
-    $ pip install esdbclient
+    $ pip install kurrentdbclient
 
-### With Poetry
+### With Poetry<a id="with-poetry"></a>
 
 You can use Poetry to add this package to your pyproject.toml and install it.
 
-    $ poetry add esdbclient
+    $ poetry add kurrentdbclient
 
-## EventStoreDB server
+## KurrentDB server<a id="kurrentdb-server"></a>
 
-The EventStoreDB server can be run locally using the official Docker container image.
+The KurrentDB server can be run locally using the official Docker container image.
 
-### Run container
+### Run container<a id="run-container"></a>
 
-For development, you can run a "secure" EventStoreDB server using the following command.
+For development, you can run a "secure" KurrentDB server using the following command.
 
-    $ docker run -d --name eventstoredb-secure -it -p 2113:2113 --env "HOME=/tmp" eventstore/eventstore:21.10.9-buster-slim --dev
+    $ docker run -d --name kurrentdb-secure -it -p 2113:2113 --env "HOME=/tmp" docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim --dev
 
-As we will see, your client will need an EventStoreDB connection string URI as the value
-of its `uri` constructor argument. The connection string for this "secure" EventStoreDB
+As we will see, your client will need a KurrentDB connection string URI as the value
+of its `uri` constructor argument. The connection string for this "secure" KurrentDB
 server would be:
 
-    esdb://admin:changeit@localhost:2113
+    kdb://admin:changeit@localhost:2113
 
 To connect to a "secure" server, you will usually need to include a "username"
 and a "password" in the connection string, so that the server can authenticate the
-client. With EventStoreDB, the default username is "admin" and the default password
+client. With KurrentDB, the default username is "admin" and the default password
 is "changeit".
 
-When connecting to a "secure" server, your client will also need an SSL/TLS certificate
-as the value of its `root_certificates` constructor argument. The client uses the
-SSL/TLS certificate to authenticate the server. For development, you can either use the
-SSL/TLS certificate of the certificate authority used to create the server's certificate,
-or when using a single-node cluster, you can use the server certificate itself. You can
-get the server certificate with the following Python code.
-
+When connecting to a "secure" server, you may also need to provide an SSL/TLS certificate
+as the value of the `root_certificates` constructor argument. If the server certificate
+is publicly signed, the root certificates of the certificate authority may be installed
+locally and picked up by the grpc package from a default location. The client uses the
+root SSL/TLS certificate to authenticate the server. For development, you can either
+use the SSL/TLS certificate of a self-signing certificate authority used to create the
+server's certificate. Or, when using a single-node cluster, you can just use the server
+certificate itself, getting the server certificate with the following Python code.
 
 ```python
 import ssl
@@ -316,11 +331,11 @@ server_certificate = ssl.get_server_certificate(addr=('localhost', 2113))
 
 Alternatively, you can start an "insecure" server using the following command.
 
-    $ docker run -d --name eventstoredb-insecure -it -p 2113:2113 eventstore/eventstore:21.10.9-buster-slim --insecure
+    $ docker run -d --name kurrentdb-insecure -it -p 2113:2113 docker.eventstore.com/kurrent-latest/kurrentdb:25.0.0-x64-8.0-bookworm-slim --insecure
 
 The connection string URI for this "insecure" server would be:
 
-    esdb://localhost:2113?Tls=false
+    kdb://localhost:2113?Tls=false
 
 As we will see, when connecting to an "insecure" server, there is no need to include
 a "username" and a "password" in the connection string. If you do, these values will
@@ -329,147 +344,162 @@ be ignored by the client, so that they are not sent over an insecure channel.
 Please note, the "insecure" connection string uses a query string with the field-value
 `Tls=false`. The value of this field is by default `true`.
 
-### Stop container
+### Stop container<a id="stop-container"></a>
 
 To stop and remove the "secure" container, use the following Docker commands.
 
-    $ docker stop eventstoredb-secure
-	$ docker rm eventstoredb-secure
+    $ docker stop kurrentdb-secure
+	$ docker rm kurrentdb-secure
 
 To stop and remove the "insecure" container, use the following Docker commands.
 
-    $ docker stop eventstoredb-insecure
-	$ docker rm eventstoredb-insecure
+    $ docker stop kurrentdb-insecure
+	$ docker rm kurrentdb-insecure
 
 
-## EventStoreDB client
+## KurrentDB client<a id="kurrentdb-client"></a>
 
-This EventStoreDB client is implemented in the `esdbclient` package with
-the `EventStoreDBClient` class.
+This KurrentDB client is implemented in the `kurrentdbclient` package with
+the `KurrentDBClient` class.
 
-### Import class
+### Import class<a id="import-class"></a>
 
-The `EventStoreDBClient` class can be imported from the `esdbclient` package.
+The `KurrentDBClient` class can be imported from the `kurrentdbclient` package.
 
 ```python
-from esdbclient import EventStoreDBClient
+from kurrentdbclient import KurrentDBClient
 ```
 
-### Construct client
+### Construct client<a id="construct-client"></a>
 
-The `EventStoreDBClient` class has one required constructor argument, `uri`, and one
-optional constructor argument, `root_certificates`.
+The `KurrentDBClient` class has one required constructor argument, `uri`, and three
+optional constructor argument, `root_certificates`, `private_key`, and `certificate_chain`.
 
-The `uri` argument is expected to be an EventStoreDB connection string URI that
-conforms with the standard EventStoreDB "esdb" or "esdb+discover" URI schemes.
-
-For example, the following connection string specifies that the client should
-attempt to create a "secure" connection to port 2113 on "localhost", and use the
-client credentials "username" and "password" when making calls to the server.
-
-    esdb://username:password@localhost:2113?Tls=true
+The `uri` argument is expected to be a KurrentDB connection string URI that
+conforms with the standard KurrentDB "kdb" or "kdb+discover" URI schemes.
 
 The client must be configured to create a "secure" connection to a "secure" server,
 or alternatively an "insecure" connection to an "insecure" server. By default, the
 client will attempt to create a "secure" connection. And so, when connecting to an
 "insecure" server, the connection string must specify that the client should attempt
-to make an "insecure" connection.
+to make an "insecure" connection by using the URI query string field-value `Tls=false`.
 
-The following connection string specifies that the client should
-attempt to create an "insecure" connection to port 2113 on "localhost".
-When connecting to an "insecure" server, the client will ignore any
-username and password information included in the connection string,
-so that usernames and passwords are not sent over an "insecure" connection.
+The optional `root_certificates` argument can be either a Python `str` or a Python `bytes`
+object containing PEM encoded SSL/TLS certificate(s), and is used to authenticate the
+server to the client. When connecting to an "insecure" service, the value of this
+argument will be ignored. When connecting to a "secure" server, it may be necessary to
+set this argument. Typically, the value of this argument would be the public certificate
+of the certificate authority that was responsible for generating the certificate used by
+the KurrentDB server. It is unnecessary to set this value in this case if certificate
+authority certificates are installed locally, such that the Python grpc library can pick
+them up from a default location. Alternatively, for development, you can use the server's
+certificate itself. The value of this argument is passed directly to `grpc.ssl_channel_credentials()`.
 
-    esdb://localhost:2113?Tls=false
+An alternative way to supply the `root_certificates` argument is through the `tlsCaFile` field-value of the connection string URI query string (see below). If the `tlsCaFile` field-value is specified, the `root_certificates` argument will be ignored.
 
-Please note, the "insecure" connection string uses a query string with the field-value
-`Tls=false`. The value of this field is by default `true`. Unless the connection string
-URI includes the field-value `Tls=false` in the query string, the `root_certificates`
-constructor argument is also required.
+The optional `private_key` and `certificate_chain` arguments are both either a Python
+`str` or a Python `bytes` object. These arguments may be used to authenticate the client
+to the server. It is necessary to provide correct values for these arguments when connecting
+to a "secure" server that is running the commercial edition of KurrentDB with the
+User Certificates plugin enabled. The value of `private_key` should be the X.509 user
+certificate's private key in PEM format. The value of `certificate_chain` should be the
+X.509 user certificate itself in PEM format. The values of these arguments are passed
+directly to `grpc.ssl_channel_credentials()`. When connecting to an "insecure" service,
+the values of these arguments will be ignored. Please note, an alternative way of
+supplying the client with a user certificate and private key is to use the `UserCertFile`
+and `UserKeyFile` field-values of the connection string URI query string (see below).
+If the `UserCertFile` field-value is specified, the `certificate_chain` argument will be
+ignored. If the `UserKeyFile` field-value is specified, the `public_key` argument will be
+ignored.
 
-When connecting to a "secure" server, the `root_certificates` argument is expected to
-be a Python `str` containing PEM encoded SSL/TLS root certificates. This value is
-passed directly to `grpc.ssl_channel_credentials()`. It is used for authenticating the
-server to the client. It is commonly the certificate of the certificate authority that
-was responsible for generating the SSL/TLS certificate used by the EventStoreDB server.
-But, alternatively for development, you can use the server's certificate itself.
-
-In the example below, the constructor argument values are taken from the operating
-system environment. This is a typical arrangement in a production environment. It is
-done this way here so that the code in this documentation can be tested with both
-a "secure" and an "insecure" server.
+In the example below, constructor argument values for `uri` and `root_certificates` are
+taken from the operating system environment.
 
 ```python
 import os
 
-client = EventStoreDBClient(
-    uri=os.getenv("ESDB_URI"),
-    root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
+client = KurrentDBClient(
+    uri=os.getenv("KDB_URI"),
+    root_certificates=os.getenv("KDB_ROOT_CERTIFICATES"),
 )
 ```
 
-## Connection strings
+## Connection strings<a id="connection-strings"></a>
 
-An EventStoreDB connection string is a URI that conforms with one of two possible
-schemes: either the "esdb" scheme, or the "esdb+discover" scheme.
+A KurrentDB connection string is a URI that conforms with one of two possible
+schemes: either the "kdb" scheme, or the "kdb+discover" scheme.
 
-The syntax and semantics of the EventStoreDB URI schemes are described below. The
+The syntax and semantics of the KurrentDB URI schemes are described below. The
 syntax is defined using [EBNF](https://en.wikipedia.org/wiki/Extended_Backus–Naur_form).
 
-### Two schemes
+Please note, also supported are "kurrentdb" and "esdb" which are synonyms for the "kdb"
+scheme, and "kurrentdb+discover" and "esdb+disover" which are synonyms for the "kdb+discover"
+scheme.
 
-The "esdb" URI scheme can be defined in the following way.
+### Two schemes<a id="two-schemes"></a>
 
-    esdb-uri = "esdb://" , [ user-info , "@" ] , grpc-target, { "," , grpc-target } , [ "?" , query-string ] ;
+The "kdb" URI scheme can be defined in the following way.
 
-In the "esdb" URI scheme, after the optional user info string, there must be at least
+    kdb-uri = "kdb://" , [ user-info , "@" ] , grpc-target, { "," , grpc-target } , [ "?" , query-string ] ;
+
+In the "kdb" URI scheme, after the optional user info string, there must be at least
 one gRPC target. If there are several gRPC targets, they must be separated from each
-other with the "," character. Each gRPC target should indicate an EventStoreDB gRPC
-server socket, by specifying a host and a port number separated with the ":" character.
-The host may be a hostname that can be resolved to an IP address, or an IP address.
+other with the "," character.
+
+Each gRPC target should indicate a KurrentDB gRPC server socket, all in the same
+KurrentDB cluster, by specifying a host and a port number separated with the ":"
+character. The host may be a hostname that can be resolved to an IP address, or an IP
+address.
 
     grpc-target = ( hostname | ip-address ) , ":" , port-number ;
 
+If there is one gRPC target, the client will simply attempt to connect to this
+server, and it will use this connection when recording and retrieving events.
 
-The "esdb+discover" URI scheme can be defined in the following way.
+If there are two or more gRPC targets, the client will attempt to connect to the
+Gossip API of each in turn, attempting to obtain information about the cluster from
+it, until information about the cluster is obtained. A member of the cluster is then
+selected by the client according to the "node preference" specified by the connection
+string URI. The client will then close its connection and connect to the selected node
+without the 'round robin' load balancing strategy. If the "node preference" is "leader",
+and after connecting to a leader, if the leader becomes a follower, the client will
+reconnect to the new leader.
 
-    esdb-discover-uri = "esdb+discover://" , [ user-info, "@" ] , cluster-domainname , [ "?" , query-string ] ;
 
-In the "esdb+discover" URI scheme, after the optional user info string, there must be a
-domain name which should identify a cluster of EventStoreDB servers. The client will use
-a DNS server to resolve the domain name to a list of addresses of EventStoreDB servers,
-by querying for 'A' records. In this case, the port number "2113" will be used to
-construct gRPC targets from the addresses obtained from 'A' records provided by the
-DNS server. Therefore, if you want to use the "esdb+discover" URI scheme, you will
-need to configure DNS when setting up your EventStoreDB cluster.
+The "kdb+discover" URI scheme can be defined in the following way.
 
-With both the "esdb" and "esdb+discover" URI schemes, the client firstly obtains
-a list of gRPC targets: either directly from "esdb" connection strings; or indirectly
-from "esdb+discover" connection strings via DNS. This list of targets is known as the
-"gossip seed". The client will then attempt to connect to each gRPC target in turn,
-attempting to call the EventStoreDB Gossip API to obtain information about the
-EventStoreDB cluster. A member of the cluster is selected by the client, according
-to the "node preference" option. The client may then need to close its
-connection and reconnect to the selected server.
+    kdb-discover-uri = "kdb+discover://" , [ user-info, "@" ] , cluster-domainname, [ ":" , port-number ] , [ "?" , query-string ] ;
 
-### User info string
+In the "kdb+discover" URI scheme, after the optional user info string, there should be
+a domain name which identifies a cluster of KurrentDB servers. Individual nodes in
+the cluster should be declared with DNS 'A' records.
 
-In both the "esdb" and "esdb+discover" schemes, the URI may include a user info string.
+The client will use the cluster domain name with the gRPC library's 'round robin' load
+balancing strategy to call the Gossip APIs of addresses discovered from DNS 'A' records.
+Information about the KurrentDB cluster is obtained from the Gossip API. A member of
+the cluster is then selected by the client according to the "node preference" option.
+The client will then close its connection and connect to the selected node without the
+'round robin' load balancing strategy. If the "node preference" is "leader",
+and after connecting to a leader, if the leader becomes a follower, the client will
+reconnect to the new leader.
+
+### User info string<a id="user-info-string"></a>
+
+In both the "kdb" and "kdb+discover" schemes, the URI may include a user info string.
 If it exists in the URI, the user info string must be separated from the rest of the URI
 with the "@" character. The user info string must include a username and a password,
 separated with the ":" character.
 
     user-info = username , ":" , password ;
 
-The user info is sent by the client as "call credentials" in each call to a "secure"
-server, in a "basic auth" authorization header. This authorization header is used by
-the server to authenticate the client. The authorization header is not sent to
+The user info is sent by the client in a "basic auth" authorization header in each gRPC
+call to a "secure" server. This authorization header is used by the server to authenticate
+the client. The Python gRPC library does not allow call credentials to be transferred to
 "insecure" servers.
 
-### Query string
+### Query string<a id="query-string"></a>
 
-In both the "esdb" and "esdb+discover" schemes, the optional query string must be one
+In both the "kdb" and "kdb+discover" schemes, the optional query string must be one
 or many field-value arguments, separated from each other with the "&" character.
 
     query-string = field-value, { "&", field-value } ;
@@ -485,11 +515,13 @@ appropriate value, separated with the "=" character.
                 | ( "GossipTimeout", "=" , integer )
                 | ( "MaxDiscoverAttempts", "=" , integer )
                 | ( "DiscoveryInterval", "=" , integer )
-                | ( "MaxDiscoverAttempts", "=" , integer )
                 | ( "KeepAliveInterval", "=" , integer )
-                | ( "KeepAliveInterval", "=" , integer ) ;
+                | ( "KeepAliveTimeout", "=" , integer ) ;
+                | ( "TlsCaFile", "=" , string ) ;
+                | ( "UserCertFile", "=" , string ) ;
+                | ( "UserKeyFile", "=" , string ) ;
 
-The table below describes the query field-values supported by this client.
+The table below describes the query string field-values supported by this client.
 
 | Field               | Value                                                                 | Description                                                                                                                                                       |
 |---------------------|-----------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -501,50 +533,11 @@ The table below describes the query field-values supported by this client.
 | GossipTimeout       | integer (default: 5)                                                  | The default value (in seconds) of the `timeout` argument of gossip read methods, such as `read_gossip()`.                                                         |
 | MaxDiscoverAttempts | integer (default: 10)                                                 | The number of attempts to read gossip when connecting or reconnecting to a cluster member.                                                                        |
 | DiscoveryInterval   | integer (default: 100)                                                | How long to wait (in milliseconds) between gossip retries.                                                                                                        |
-| KeepAliveInterval   | integer (default: `None`)                                             | The value of the "grpc.keepalive_ms" gRPC channel option.                                                                                                         |
-| KeepAliveTimeout    | integer (default: `None`)                                             | The value of the "grpc.keepalive_timeout_ms" gRPC channel option.                                                                                                 |
-
-
-### Examples
-
-Here are some examples of EventStoreDB connection string URIs.
-
-The following URI will cause the client to connect to, and get
-cluster info, from "secure" server socket `localhost:2113`. And
-then to connect to a "leader" node. And also to use "admin" and
-"changeit" as the username and password when making calls to
-EventStoreDB API methods.
-
-    esdb://admin:changeit@localhost:2113
-
-
-The following URI will cause the client to get cluster info from
-"insecure" server socket 127.0.0.1:2113.  And then to connect to
-a "leader" node.
-
-    esdb://127.0.0.1:2113?Tls=false
-
-
-The following URI will cause the client to get cluster info from
-addresses in DNS 'A' records for cluster1.example.com. And then
-to connect to a "leader" node. And use a default deadline of 5
-seconds when making calls to EventStore API "write" methods.
-
-    esdb+discover://admin:changeit@cluster1.example.com?DefaultDeadline=5
-
-
-The following URI will cause the client to get cluster info from either
-localhost:2111, or localhost:2112, or localhost:2113. And then to connect
-to a "follower" node.
-
-    esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=follower
-
-
-The following URI will cause the client to get cluster info from addresses in
-DNS 'A' records for cluster1.example.com. And to configure "keep alive" timeout
-and interval in the gRPC channel.
-
-    esdb+discover://admin:changeit@cluster1.example.com?KeepAliveInterval=10000&KeepAliveTimeout=10000
+| KeepAliveInterval   | integer (default: `None`)                                             | The value (in milliseconds) of the "grpc.keepalive_ms" gRPC channel option.                                                                                       |
+| KeepAliveTimeout    | integer (default: `None`)                                             | The value (in milliseconds) of the "grpc.keepalive_timeout_ms" gRPC channel option.                                                                               |
+| TlsCaFile           | string (default: `None`)                                              | Absolute filesystem path to file containing the CA certicate in PEM format. This will be used to verify the server's certificate.                                 |
+| UserCertFile        | string (default: `None`)                                              | Absolute filesystem path to file containing the X.509 user certificate in PEM format.                                                                             |
+| UserKeyFile         | string (default: `None`)                                              | Absolute filesystem path to file containing the X.509 user certificate's private key in PEM format.                                                               |
 
 
 Please note, the client is insensitive to the case of fields and values. If fields are
@@ -553,33 +546,86 @@ the connection options used by the client will use the value of the first field.
 the other field-values in the query string with the same field name will be ignored.
 Fields without values will also be ignored.
 
-If the client's node preference is "leader" and the node becomes a
-"follower", the client will attempt to reconnect to the current leader when a method
-is called that expects to call a leader. Methods which mutate the state of the database
-expect to call a leader. For such methods, the HTTP header "requires-leader" is set to
-"true", and this header is observed by the server, and so a node which is not a leader
-that receives such a request will return an error. This error is detected by the client,
-which will then close the current gRPC connection and create a new connection to the
-leader. The request will then be retried with the leader.
-
 If the client's node preference is "follower" and there are no follower
 nodes in the cluster, then the client will raise an exception. Similarly, if the
 client's node preference is "readonlyreplica" and there are no read-only replica
 nodes in the cluster, then the client will also raise an exception.
 
 The gRPC channel option "grpc.max_receive_message_length" is automatically
-configured to the value `17 * 1024 * 1024`. This value cannot be changed.
+configured to the value `17 * 1024 * 1024`. This value cannot be configured.
 
 
-## Event objects
+### Examples<a id="examples"></a>
+
+Here are some examples of KurrentDB connection string URIs.
+
+The following URI will cause the client to make an "insecure" connection to
+gRPC target `'localhost:2113'`. Because the client's node preference is "follower",
+methods that can be called on a follower should complete successfully, methods that
+require a leader will raise a `NodeIsNotLeaderError` exception.
+
+    kdb://127.0.0.1:2113?Tls=false&NodePreference=follower
+
+The following URI will cause the client to make an "insecure" connection to
+gRPC target `'localhost:2113'`. Because the client's node preference is "leader",
+if this node is not a leader, then a `NodeIsNotLeaderError` exception will be raised by
+all methods.
+
+    kdb://127.0.0.1:2113?Tls=false&NodePreference=leader
+
+The following URI will cause the client to make a "secure" connection to
+gRPC target `'localhost:2113'` with username `'admin'` and password `'changeit'`
+as the default call credentials when making calls to the KurrentDB gRPC API.
+Because the client's node preference is "leader", by default, if this node is not
+a leader, then a `NodeIsNotLeaderError` exception will be raised by all methods.
+
+    kdb://admin:changeit@localhost:2113
+
+The following URI will cause the client to make "secure" connections, firstly to
+get cluster info from either `'localhost:2111'`, or `'localhost:2112'`, or `'localhost:2113'`.
+Because the client's node preference is "leader", the client will select the leader
+node from the cluster info and reconnect to the leader. If the "leader" node becomes
+a "follower" and another node becomes "leader", then the client will reconnect to the
+new leader.
+
+    kdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=leader
+
+
+The following URI will cause the client to make "secure" connections, firstly to
+get cluster info from either `'localhost:2111'`, or `'localhost:2112'`, or `'localhost:2113'`.
+Because the client's node preference is "follower", the client will select a follower
+node from the cluster info and reconnect to this follower. Please note, if the "follower"
+node becomes the "leader", the client will not reconnect to a follower -- such behavior
+may be implemented in a future version of the client and server.
+
+    kdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?NodePreference=follower
+
+
+The following URI will cause the client to make "secure" connections, firstly to get
+cluster info from addresses in DNS 'A' records for `'cluster1.example.com'`, and then
+to connect to a "leader" node. The client will use a default timeout
+of 5 seconds when making calls to KurrentDB API "write" methods.
+
+    kdb+discover://admin:changeit@cluster1.example.com?DefaultDeadline=5
+
+
+The following URI will cause the client to make "secure" connections, firstly to get
+cluster info from addresses in DNS 'A' records for `'cluster1.example.com'`, and then
+to connect to a "leader" node. It will configure gRPC connections with a "keep alive
+interval" and a "keep alive timeout".
+
+    kdb+discover://admin:changeit@cluster1.example.com?KeepAliveInterval=10000&KeepAliveTimeout=10000
+
+
+## Event objects<a id="event-objects"></a>
 
 This package defines a `NewEvent` class and a `RecordedEvent` class. The
 `NewEvent` class should be used when writing events to the database. The
 `RecordedEvent` class is used when reading events from the database.
 
-### New events
+### New events<a id="new-events"></a>
 
-The `NewEvent` class should be used when writing events to an EventStoreDB database.
+The `NewEvent` class should be used when writing events to a KurrentDB database.
 You will need to construct new event objects before calling `append_to_stream()`.
 
 The `NewEvent` class is a frozen Python dataclass. It has two required constructor
@@ -631,17 +677,21 @@ assert new_event2.content_type == 'application/octet-stream'
 assert new_event2.id == event_id
 ```
 
-### Recorded events
+### Recorded events<a id="recorded-events"></a>
 
-The `RecordedEvent` class is used when reading events from an EventStoreDB
+The `RecordedEvent` class is used when reading events from a KurrentDB
 database. The client will return event objects of this type from all methods
 that return recorded events, such as `get_stream()`, `subscribe_to_all()`,
 and `read_subscription_to_all()`. You do not need to construct recorded event objects.
 
-Like `NewEvent`, the `RecordedEvent` class is also a frozen Python dataclass. It has
+Like `NewEvent`, the `RecordedEvent` class is a frozen Python dataclass. It has
 all the attributes that `NewEvent` has (`type`, `data`, `metadata`, `content_type`, `id`)
-and some additional attributes that follow from the fact that an event was recorded
-(`stream_name`, `stream_position`, `commit_position`).
+that follow from an event having been recorded, and some additional attributes that follow
+from the recording of an event (`stream_name`, `stream_position`, `commit_position`,
+`recorded_at`). It also has a `link` attribute, which is `None` unless the recorded
+event is a "link event" that has been "resolved" to the linked event. And it has a
+`retry_count` which has an integer value when receiving recorded events from persistence
+subscriptions, otherwise the value of `retry_count` is `None`.
 
 The `type` attribute is a Python `str`, used to indicate the type of an event
 that was recorded.
@@ -665,7 +715,7 @@ stream in which an event was recorded.
 The `stream_position` attribute is a Python `int`, used to indicate the position in a
 stream at which an event was recorded.
 
-In EventStoreDB, a "stream position" is an integer representing the position of a
+In KurrentDB, a "stream position" is an integer representing the position of a
 recorded event in a stream. Each recorded event is recorded at a position in a stream.
 Each stream position is occupied by only one recorded event. New events are recorded at the
 next unoccupied position. All sequences of stream positions are zero-based and gapless.
@@ -673,40 +723,106 @@ next unoccupied position. All sequences of stream positions are zero-based and g
 The `commit_position` attribute is a Python `int`, used to indicate the position in the
 database at which an event was recorded.
 
-In EventStoreDB, a "commit position" is an integer representing the position of a
+In KurrentDB, a "commit position" is an integer representing the position of a
 recorded event in the database. Each recorded event is recorded at a position in the
 database. Each commit position is occupied by only one recorded event. Commit positions
 are zero-based and increase monotonically as new events are recorded. But, unlike stream
 positions, the sequence of successive commit positions is not gapless. Indeed, there are
 usually large differences between the commit positions of successively recorded events.
 
-Please note, in EventStoreDB 21.10, the `commit_position` of all `RecordedEvent` objects
+Please note, in KurrentDB 21.10, the `commit_position` of all `RecordedEvent` objects
 obtained from `read_stream()` is `None`, whereas those obtained from `read_all()` have
 the actual commit position of the recorded event. This was changed in version 22.10, so
 that event objects obtained from both `get_stream()` and `read_all()` have the actual
 commit position. The `commit_position` attribute of the `RecordedEvent` class is
 annotated with the type `Optional[int]` for this reason only.
 
+The `recorded_at` attribute is a Python `datetime`, used to indicate when an event was
+recorded by the database.
+
+The `link` attribute is an optional `RecordedEvent` that carries information about
+a "link event" that has been "resolved" to the linked event. This allows access to
+the link event attributes when link events have been resolved, for example access
+to the correct event ID to be used when acknowledging or negatively acknowledging
+link events. Link events are "resolved" when the `resolve_links` argument is `True`
+and when replaying parked events (negatively acknowledging an event received from
+a persistent subscription with the `'park'` action will create a link event, and
+when parked event are replayed they are received as resolved events). The
+`ack_id` property helps with obtaining the correct event ID to use when acknowledging
+or negatively acknowledging events received from persistent subscriptions.
+
+The `retry_count` is a Python `int`, used to indicate the number of times a persistent
+subscription has retried sending the event to a consumer.
+
 
 ```python
-from esdbclient.events import RecordedEvent
+from dataclasses import dataclass
+from datetime import datetime
 
-recorded_event = RecordedEvent(
-    type='OrderCreated',
-    data=b'{}',
-    metadata=b'',
-    content_type='application/json',
-    id=uuid.uuid4(),
-    stream_name='stream1',
-    stream_position=0,
-    commit_position=512,
-)
+@dataclass(frozen=True)
+class RecordedEvent:
+    """
+    Encapsulates event data that has been recorded in KurrentDB.
+    """
+
+    type: str
+    data: bytes
+    metadata: bytes
+    content_type: str
+    id: UUID
+    stream_name: str
+    stream_position: int
+    commit_position: Optional[int]
+    recorded_at: Optional[datetime] = None
+    link: Optional["RecordedEvent"] = None
+    retry_count: Optional[int] = None
+
+    @property
+    def ack_id(self) -> UUID:
+        if self.link is not None:
+            return self.link.id
+        else:
+            return self.id
+
+    @property
+    def is_system_event(self) -> bool:
+        return self.type.startswith("$")
+
+    @property
+    def is_link_event(self) -> bool:
+        return self.type == "$>"
+
+    @property
+    def is_resolved_event(self) -> bool:
+        return self.link is not None
+
+    @property
+    def is_checkpoint(self) -> bool:
+        return False
 ```
 
+The property `ack_id` can be used to obtain the correct event ID to `ack()` or `nack()`
+events received when reading persistent subscriptions. The returned value is either the
+value of the `id` attribute of the `link` attribute, if `link` is not `None`, otherwise
+it is the value of the `id` attribute.
 
-## Streams
+The property `is_system_event` indicates whether the event is a "system event". System
+events have a `type` value that starts with `'$'`.
 
-In EventStoreDB, a "stream" is a sequence of recorded events that all have
+The property `is_link_event` indicates whether the event is a "link event". Link
+events have a `type` value of `'$>'`.
+
+The property `is_resolve_event` indicates whether the event has been resolved from a
+"link event". The returned value is `True` if `link` is not `None`.
+
+The property `is_checkpoint` is `False`. This can be used to identify `Checkpoint`
+instances returned when receiving events from `include_checkpoints=True`.
+
+
+
+## Streams<a id="streams"></a>
+
+In KurrentDB, a "stream" is a sequence of recorded events that all have
 the same "stream name". There will normally be many streams in a database,
 each with many recorded events. Each recorded event has a position in its stream
 (the "stream position"), and a position in the database (the "commit position").
@@ -716,7 +832,7 @@ but are not gapless.
 The methods `append_to_stream()`, `get_stream()` and `read_all()` can
 be used to read and record in the database.
 
-### Append events
+### Append events<a id="append-events"></a>
 
 *requires leader*
 
@@ -735,7 +851,7 @@ that indicates the stream position of the last recorded event in the stream, or
 `StreamState.NO_STREAM` if the stream does not yet exist or has been deleted. The
 stream positions are zero-based and gapless, so that if a stream has two events, the
 `current_version` should be 1. If an incorrect value is given, this method will raise a
-`WrongCurrentVersion` exception. This behavior is designed to provide concurrency
+`WrongCurrentVersionError` exception. This behavior is designed to provide concurrency
 control when recording new events. The correct value of `current_version` for any stream
 can be obtained by calling `get_current_version()`. However, the typical approach is to
 reconstruct an aggregate from the recorded events, so that the version of the aggregate
@@ -744,19 +860,21 @@ events, and then use the current version of the aggregate as the value of the
 `current_version` argument when appending the new aggregate events. This ensures
 the consistency of the recorded aggregate events, because operations that generate
 new aggregate events can be retried with a freshly reconstructed aggregate if
-a `WrongCurrentVersion` exception is encountered when recording new events. This
-controlling behavior can be disabled by setting the value of the `current_version`
-argument to the constant `StreamState.ANY`.
+a `WrongCurrentVersionError` exception is encountered when recording new events. This
+controlling behavior can be entirely disabled by setting the value of the `current_version`
+argument to the constant `StreamState.ANY`. More selectively, this behaviour can be
+disabled for existing streams by setting the value of the `current_version`
+argument to the constant `StreamState.EXISTS`.
 
 The required `events` argument is expected to be a sequence of new event objects. The
 `NewEvent` class should be used to construct new event objects. The `append_to_stream()`
 operation is atomic, so that either all or none of the new events will be recorded. It
-is not possible with EventStoreDB atomically to record new events in more than one stream.
+is not possible with KurrentDB atomically to record new events in more than one stream.
 
-This method also has an optional `timeout` argument, which is a Python `float`
-that sets a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 In the example below, a new event, `event1`, is appended to a new stream. The stream
@@ -764,7 +882,7 @@ does not yet exist, so `current_version` is `StreamState.NO_STREAM`.
 
 ```python
 # Construct a new event object.
-event1 = NewEvent(type='OrderCreated', data=b'data1')
+event1 = NewEvent(type='OrderCreated', data=b'{}')
 
 # Define a new stream name.
 stream_name1 = str(uuid.uuid4())
@@ -781,8 +899,8 @@ In the example below, two subsequent events are appended to an existing
 stream. The stream has one recorded event, so `current_version` is `0`.
 
 ```python
-event2 = NewEvent(type='OrderUpdated', data=b'data2')
-event3 = NewEvent(type='OrderDeleted', data=b'data3')
+event2 = NewEvent(type='OrderUpdated', data=b'{}')
+event3 = NewEvent(type='OrderDeleted', data=b'{}')
 
 commit_position2 = client.append_to_stream(
     stream_name=stream_name1,
@@ -806,31 +924,45 @@ downstream component until it has processed the newly recorded events, and then 
 an up-to-date view to the user.
 
 
-### Idempotent append operations
+### Idempotent append operations<a id="idempotent-append-operations"></a>
 
-The `append_to_stream()` method is "idempotent", in that if called with new events whose
-`id` attribute values equal those of recorded events in the named stream immediately
-after the stream position specified by the value of the `current_version` argument, then
-it will return the commit position of the last new event, without making any changes to
-the database.
+The `append_to_stream()` method is "idempotent" with respect to the `id` value of a
+`NewEvent` object. That is to say, if `append_to_stream()` is called with events
+whose `id` values are equal to those already recorded in the stream, then the
+method call will successfully return, with the commit position of the last new event,
+without making any changes to the database.
 
-Sometimes it may happen, when calling `append_to_stream()`, that the new events are
-successfully recorded but somehow a connection issue occurs before the successful call
-can return successfully to the client. We cannot be sure if the events were recorded
-or not, and so we may wish to retry. If the events were in fact successfully recorded,
-it is convenient for the retried operation to return successfully without raising an
-exception. If those new events were in fact not recorded, and in the meantime no other
-new events were recorded in that stream, then it makes sense that the new events will
-be recorded when the append operation is retried. Of course, if a `WrongCurrentVersion`
-exception is raised when retrying the operation, then an application command which
-generated the new events in the context of already recorded events may need to be
-executed again. Alternatively, a suitable error might be displayed by the application,
-with an up-to-date view of the recorded data, giving a user of the application an
-opportunity to decide if they still wish to proceed with their original intention.
+This is because sometimes it may happen, when calling `append_to_stream()`, that the new
+events are successfully recorded, but somehow something bad happens before the method call
+can return successfully to the caller. In this case, we cannot be sure that the events have
+in fact been recorded, and so we may wish to retry.
 
-The example below shows the `append_to_stream()` method being called again with
-`event3` and `current_version=0`. We can see that repeating the call to
-`append_to_stream()` returns successfully.
+If the events were in fact successfully recorded, it is convenient for the retried method call
+to return successfully, and without either raising an exception (when `current_version`
+is either `StreamState.NO_STREAM` an integer value) or creating further event records
+(when `current_version` is `StreamState.ANY` or `StreamState.EXISTS`), as it would
+if the `append_to_stream()` method were not idempotent.
+
+If the method call initially failed and the new events were not in fact recorded, it
+makes good sense, when the method call is retried, that the new events are recorded
+and that the method call returns successfully. If the concurrency controls have not been disabled,
+that is if the `current version` is either `StreamState.NO_STREAM` or an integer value, and
+if a `WrongCurrentVersionError` exception is raised when retrying the method call, then we can assume
+both that the initial method call did not in fact successfully record the events, and also
+that subsequent events have in the meantime been recorded by somebody else. In this case,
+an application command which generated the new events may need to be executed again. And
+the user of the application may need to be given an opportunity to decide if they still wish to
+proceed with their original intention, by displaying a suitable error with an up-to-date view of
+the recorded state. In the case where concurrency controls have been disabled, by using `StreamState.ANY` or
+`StreamState.EXISTS` as the value of `current_version`, retrying a method call that failed to
+return successfully will, more simply, just attempt to ensure the new events are recorded, regardless
+of their resulting stream positions. In either case, when the method call does return successfully, we
+can be sure the events have been recorded.
+
+The example below shows the `append_to_stream()` method being called again with events
+`event2` and `event3`, and with `current_version=0`. We can see that repeating the call
+to `append_to_stream()` returns successfully without raising a `WrongCurrentVersionError`
+exception, as it would if the `append_to_stream()` operation were not idempotent.
 
 ```python
 # Retry appending event3.
@@ -847,8 +979,25 @@ We can see that the same commit position is returned as above.
 assert commit_position_retry == commit_position2
 ```
 
-By calling `get_stream()`, we can also see the stream has been unchanged
-despite the `append_to_stream()` method having been called twice with the same arguments.
+The example below shows the `append_to_stream()` method being called again with events
+`event2` and `event3`, with and `current_version=StreamState.ANY`.
+
+```python
+# Retry appending event3.
+commit_position_retry = client.append_to_stream(
+    stream_name=stream_name1,
+    current_version=0,
+    events=[event2, event3],
+)
+```
+
+We can see that the same commit position is returned as above.
+
+```python
+assert commit_position_retry == commit_position2
+```
+
+By calling `get_stream()`, we can also see the stream has been unchanged.
 That is, there are still only three events in the stream.
 
 ```python
@@ -860,12 +1009,12 @@ assert len(events) == 3
 ```
 
 This idempotent behaviour depends on the `id` attribute of the `NewEvent` class.
-This attribute, by default, is assigned a new and unique version-4 UUID when an
-instance of `NewEvent` is constructed. The `id` argument can be used when
-constructing `NewEvent` objects to set the value of this attribute.
+This attribute is, by default, assigned a new and unique version-4 UUID when an
+instance of `NewEvent` is constructed. To set the `id` value of a `NewEvent`,
+the optional `id` constructor argument can be used when constructing `NewEvent` objects.
 
 
-### Read stream events
+### Read stream events<a id="read-stream-events"></a>
 
 The `read_stream()` method can be used to get events that have been appended
 to a stream. This method returns a "read response" object.
@@ -888,8 +1037,8 @@ The `read_stream()` and `get_stream()` methods have one required argument, `stre
 The required `stream_name` argument is a Python `str` that uniquely identifies a
 stream from which recorded events will be returned.
 
-The `read_stream()` and `get_stream()` methods also have four optional arguments,
-`stream_position`, `backwards`, `limit`, and `timeout`.
+The `read_stream()` and `get_stream()` methods also have six optional arguments,
+`stream_position`, `backwards`, `resolve_links`, `limit`, `timeout`, and `credentials`.
 
 The optional `stream_position` argument is a Python `int` that can be used to
 indicate the position in the stream from which to start reading. The default value
@@ -907,14 +1056,20 @@ returned in the order they were recorded, starting from the first recorded event
 `backwards` is `True` and `stream_position` is `None`, the stream's events will be
 returned in reverse order, starting from the last recorded event.
 
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
+
 The optional `limit` argument is a Python `int` which restricts the number of events
 that will be returned. The default value of `limit` is `sys.maxint`.
 
-The optional `timeout` argument is a Python `float` which sets a deadline for
-the completion of the gRPC operation.
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
-override call credentials derived from the connection string URI.
+The optional `credentials` argument can be used to override call credentials derived
+from the connection string URI. A suitable value for this argument can be constructed
+by calling the client method `construct_call_credentials()`.
 
 The example below shows the default behavior, which is to return all the recorded
 events of a stream forwards from the first recorded events to the last.
@@ -925,9 +1080,9 @@ events = client.get_stream(
 )
 
 assert len(events) == 3
-assert events[0].id == event1.id
-assert events[1].id == event2.id
-assert events[2].id == event3.id
+assert events[0] == event1
+assert events[1] == event2
+assert events[2] == event3
 ```
 
 The example below shows how to use the `stream_position` argument to read a stream
@@ -942,8 +1097,8 @@ events = client.get_stream(
 )
 
 assert len(events) == 2
-assert events[0].id == event2.id
-assert events[1].id == event3.id
+assert events[0] == event2
+assert events[1] == event3
 ```
 
 The example below shows how to use the `backwards` argument to read a stream backwards.
@@ -955,9 +1110,9 @@ events = client.get_stream(
 )
 
 assert len(events) == 3
-assert events[0].id == event3.id
-assert events[1].id == event2.id
-assert events[2].id == event1.id
+assert events[0] == event3
+assert events[1] == event2
+assert events[2] == event1
 ```
 
 The example below shows how to use the `limit` argument to read a limited number of
@@ -970,20 +1125,19 @@ events = client.get_stream(
 )
 
 assert len(events) == 2
-assert events[0].id == event1.id
-assert events[1].id == event2.id
+assert events[0] == event1
+assert events[1] == event2
 ```
 
-The `read_stream()` and `get_stream()` methods will raise a `NotFound` exception if the
+The `read_stream()` and `get_stream()` methods will raise a `NotFoundError` exception if the
 named stream has never existed or has been deleted.
 
 ```python
-from esdbclient.exceptions import NotFound
-
+from kurrentdbclient.exceptions import NotFoundError
 
 try:
     client.get_stream('does-not-exist')
-except NotFound:
+except NotFoundError:
     pass  # The stream does not exist.
 else:
     raise Exception("Shouldn't get here")
@@ -998,14 +1152,14 @@ when iterating over the "read response" starts, which means that the method retu
 before the streaming starts, and so there is no chance for any decorators to catch
 any connection issues.
 
-For the same reason, `read_stream()` will not raise a `NotFound` exception when
+For the same reason, `read_stream()` will not raise a `NotFoundError` exception when
 the stream does not exist, until iterating over the "read response" object begins.
 
 If you are reading a very large stream, then you might prefer to call `read_stream()`,
 and begin iterating through the recorded events whilst they are being streamed from
 the server, rather than both waiting and having them all accumulate in memory.
 
-### Get current version
+### Get current version<a id="get-current-version"></a>
 
 The `get_current_version()` method is a convenience method that essentially calls
 `get_stream()` with `backwards=True` and `limit=1`. This method returns
@@ -1019,11 +1173,10 @@ This method has one required argument, `stream_name`.
 The required `stream_name` argument is a Python `str` that uniquely identifies a
 stream from which a stream position will be returned.
 
-This method also has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 In the example below, the last stream position of `stream_name1` is obtained.
@@ -1051,23 +1204,23 @@ current_version = client.get_current_version(
 assert current_version is StreamState.NO_STREAM
 ```
 
-### How to implement snapshotting with EventStoreDB
+### How to implement snapshotting with KurrentDB<a id="how-to-implement-snapshotting-with-kurrentdb"></a>
 
 Snapshots can improve the performance of aggregates that would otherwise be
 reconstructed from very long streams. However, it is generally recommended to design
 aggregates to have a finite lifecycle, and so to have relatively short streams,
 thereby avoiding the need for snapshotting. This "how to" section is intended merely
-to show how snapshotting of aggregates can be implemented with EventStoreDB using
+to show how snapshotting of aggregates can be implemented with KurrentDB using
 this Python client.
 
 Event-sourced aggregates are typically reconstructed from recorded events by calling
 a mutator function for each recorded event, evolving from an initial state
 `None` to the current state of the aggregate. The function `get_aggregate()` shows
 how this can be done. The aggregate ID is used as a stream name. The exception
-`AggregateNotFound` is raised if the aggregate stream is not found.
+`AggregateNotFoundError` is raised if the aggregate stream is not found.
 
 ```python
-class AggregateNotFound(Exception):
+class AggregateNotFoundError(Exception):
     """Raised when an aggregate is not found."""
 
 
@@ -1080,8 +1233,8 @@ def get_aggregate(aggregate_id, mutator_func):
             stream_name=stream_name,
             stream_position=None
         )
-    except NotFound as e:
-        raise AggregateNotFound(aggregate_id) from e
+    except NotFoundError as e:
+        raise AggregateNotFoundError(aggregate_id) from e
     else:
         # Reconstruct aggregate from recorded events.
         aggregate = None
@@ -1140,7 +1293,7 @@ def get_aggregate(aggregate_id, mutator_func):
             backwards=True,
             limit=1
         )
-    except NotFound:
+    except NotFoundError:
         stream_position = None
     else:
         assert len(snapshots) == 1
@@ -1154,8 +1307,8 @@ def get_aggregate(aggregate_id, mutator_func):
             stream_name=stream_name,
             stream_position=stream_position
         )
-    except NotFound as e:
-        raise AggregateNotFound(aggregate_id) from e
+    except NotFoundError as e:
+        raise AggregateNotFoundError(aggregate_id) from e
     else:
         recorded_events += events
 
@@ -1373,7 +1526,7 @@ periods, after a particular type of event, immediately after events are
 appended, or as a background process.
 
 
-### Read all events
+### Read all events<a id="read-all-events"></a>
 
 The `read_all()` method can be used to get all recorded events
 in the database in the order they were recorded. This method returns
@@ -1387,7 +1540,7 @@ The streaming of events, and hence the iterator, can also be stopped by calling
 the `stop()` method on the "read response" object. The recorded event objects
 are instances of the `RecordedEvent` class.
 
-This method has eight optional arguments, `commit_position`, `backwards`,
+This method has nine optional arguments, `commit_position`, `backwards`, `resolve_links`,
 `filter_exclude`, `filter_include`, `filter_by_stream_name`, `limit`, `timeout`,
 and `credentials`.
 
@@ -1409,10 +1562,15 @@ This is the default behavior of `read_all()`. If `backwards` is `True` and
 `commit_position` is `None`, the database's events will be returned in reverse order,
 starting from the last recorded event.
 
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
+
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -1430,12 +1588,12 @@ The optional `limit` argument is an integer which restricts the number of events
 will be returned. The default value is `sys.maxint`.
 
 The optional `timeout` argument is a Python `float` which sets a
-deadline for the completion of the gRPC operation.
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
-The filtering of events is done on the EventStoreDB server. The
+The filtering of events is done on the KurrentDB server. The
 `limit` argument is applied on the server after filtering.
 
 The example below shows how to get all the events we have recorded in the database
@@ -1471,9 +1629,9 @@ read_response = client.read_all(
 )
 
 # Step through the "read response" iterator.
-assert next(read_response).id == event1.id
-assert next(read_response).id == event2.id
-assert next(read_response).id == event3.id
+assert next(read_response) == event1
+assert next(read_response) == event2
+assert next(read_response) == event3
 
 # Stop the iterator.
 read_response.stop()
@@ -1513,7 +1671,7 @@ events = tuple(
 )
 
 assert len(events) == 1
-assert events[0].id == event1.id
+assert events[0] == event1
 ```
 
 The example below shows how to read a limited number of the recorded events
@@ -1540,7 +1698,7 @@ events from the server only starts when iterating over the "read response" start
 means that the method returns before the streaming starts, and so there is no chance for
 any decorators to catch any connection issues.
 
-### Get commit position
+### Get commit position<a id="get-commit-position"></a>
 
 The `get_commit_position()` method can be used to get the commit position of the
 last recorded event in the database. It simply calls `read_all()` with
@@ -1558,8 +1716,8 @@ This method has five optional arguments, `filter_exclude`, `filter_include`,
 The optional `filter_exclude`, `filter_include` and `filter_by_stream_name` arguments
 work in the same way as they do in the `read_all()` method.
 
-The optional `timeout` argument is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to override call credentials
 derived from the connection string URI.
@@ -1572,7 +1730,7 @@ event in a downstream component. In this case, the value of the `filter_exclude`
 by the downstream component to obtain recorded events.
 
 
-### Get stream metadata
+### Get stream metadata<a id="get-stream-metadata"></a>
 
 The `get_stream_metadata()` method returns the metadata for a stream, along
 with the version of the stream metadata.
@@ -1580,8 +1738,8 @@ with the version of the stream metadata.
 This method has one required argument, `stream_name`, which is a Python `str` that
 uniquely identifies a stream for which a stream metadata will be obtained.
 
-This method has an optional `timeout` argument, which is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
 This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
@@ -1597,7 +1755,7 @@ value is either an `int` if the stream exists, or `StreamState.NO_STREAM` if the
 does not exist and no metadata has been set. These values can be used as the arguments
 of `set_stream_metadata()`.
 
-### Set stream metadata
+### Set stream metadata<a id="set-stream-metadata"></a>
 
 *requires leader*
 
@@ -1607,8 +1765,8 @@ can be set before appending events to a stream.
 This method has one required argument, `stream_name`, which is a Python `str` that
 uniquely identifies a stream for which a stream metadata will be set.
 
-This method has an optional `timeout` argument, which is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
 This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
@@ -1629,10 +1787,10 @@ client.set_stream_metadata(
 The `current_version` argument should be the current version of the stream metadata
 obtained from `get_stream_metadata()`.
 
-Please refer to the EventStoreDB documentation for more information about stream
+Please refer to the KurrentDB documentation for more information about stream
 metadata.
 
-### Delete stream
+### Delete stream<a id="delete-stream"></a>
 
 *requires leader*
 
@@ -1646,8 +1804,8 @@ stream to which a sequence of events will be appended.
 The required `current_version` argument is expected to be either a Python `int`
 that indicates the stream position of the last recorded event in the stream.
 
-This method has an optional `timeout` argument, which is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
 This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
@@ -1662,7 +1820,7 @@ After deleting a stream, it's still possible to append new events. Reading from 
 deleted stream will return only events that have been appended after it was
 deleted.
 
-### Tombstone stream
+### Tombstone stream<a id="tombstone-stream"></a>
 
 *requires leader*
 
@@ -1676,8 +1834,8 @@ stream to which a sequence of events will be appended.
 The required `current_version` argument is expected to be either a Python `int`
 that indicates the stream position of the last recorded event in the stream.
 
-This method has an optional `timeout` argument, which is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
 This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
@@ -1691,7 +1849,7 @@ commit_position = client.tombstone_stream(stream_name=stream_name1, current_vers
 After tombstoning a stream, it's not possible to append new events.
 
 
-## Catch-up subscriptions
+## Catch-up subscriptions<a id="catch-up-subscriptions"></a>
 
 A "catch-up" subscription can be used to receive events that have already been
 recorded and events that are recorded subsequently. A catch-up subscription can
@@ -1721,14 +1879,15 @@ immediately streamed to the client, and the iteration will then continue. The st
 of events, and hence the iteration, can be stopped by calling the `stop()` method on the
 "catch-up subscription" object.
 
-### Subscribe to all events
+### Subscribe to all events<a id="subscribe-to-all-events"></a>
 
 The`subscribe_to_all()` method can be used to start a catch-up subscription
 from which all events recorded in the database can be obtained in the order
 they were recorded. This method returns a "catch-up subscription" iterator.
 
-This method also has six optional arguments, `commit_position`, `filter_exclude`,
-`filter_include`, `filter_by_stream_name`, `timeout` and `credentials`.
+This method also has ten optional arguments, `commit_position`, `from_end`, `resolve_links`,
+`filter_exclude`, `filter_include`, `filter_by_stream_name`, `include_checkpoints`,
+`include_caught_up`, `timeout` and `credentials`.
 
 The optional `commit_position` argument specifies a commit position. The default
 value of `commit_position` is `None`, which means the catch-up subscription will
@@ -1736,10 +1895,21 @@ start from the first recorded event in the database. If a commit position is giv
 it must match an actually existing commit position in the database. Only events
 recorded after that position will be obtained.
 
+The optional `from_end` argument specifies whether or not the catch-up subscription
+will start from the last recorded event in the database. By default, this argument
+is `False`. If `from_end` is `True`, only events recorded after the subscription
+is started will be obtained. This argument will be disregarded if `commit_position`
+is not `None`.
+
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
+
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -1753,8 +1923,19 @@ whether the filtering will apply to event types or stream names. By default, thi
 value is `False` and so the filtering will apply to the event type strings of
 recorded events.
 
+The optional `include_checkpoints` argument is a Python `bool` which indicates
+whether "checkpoint" messages should be included when recorded events are received.
+Checkpoints have a `commit_position` value that can be used by an event processing component to
+update its recorded commit position value, so that, when lots of events are being
+filter out, the subscriber does not have to start from the same old position when
+the event processing component is restarted.
+
+The optional `include_caught_up` argument is a Python `bool` which indicates
+whether "caught up" messages should be included when recorded events are
+received. The default value of `include_caught_up` is `False`.
+
 The optional `timeout` argument is a Python `float` which sets a
-deadline for the completion of the gRPC operation.
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -1778,7 +1959,7 @@ from threading import Thread
 
 # Append a new event to a new stream.
 stream_name2 = str(uuid.uuid4())
-event4 = NewEvent(type='OrderCreated', data=b'data4')
+event4 = NewEvent(type='OrderCreated', data=b'{}')
 
 client.append_to_stream(
     stream_name=stream_name2,
@@ -1795,10 +1976,10 @@ def receive_events():
         received_events.append(event)
 
 
-def wait_for_event(event_id):
+def wait_for_event(event):
     for _ in range(100):
-        for event in reversed(received_events):
-            if event.id == event_id:
+        for received in reversed(received_events):
+            if event == received:
                 return
         else:
             sleep(0.1)
@@ -1810,10 +1991,10 @@ thread = Thread(target=receive_events, daemon=True)
 thread.start()
 
 # Wait to receive event4.
-wait_for_event(event4.id)
+wait_for_event(event4)
 
 # Append another event whilst the subscription is running.
-event5 = NewEvent(type='OrderUpdated', data=b'data5')
+event5 = NewEvent(type='OrderUpdated', data=b'{}')
 client.append_to_stream(
     stream_name=stream_name2,
     current_version=0,
@@ -1821,7 +2002,7 @@ client.append_to_stream(
 )
 
 # Wait for the subscription to block.
-wait_for_event(event5.id)
+wait_for_event(event5)
 
 # Stop the subscription.
 catchup_subscription.stop()
@@ -1830,16 +2011,16 @@ thread.join()
 
 The example below shows how to subscribe to events recorded after a
 particular commit position, in this case from the commit position of
-the last recorded event that was received above. Another event is
-recorded before the subscription is restarted. Further events are
-recorded whilst the subscription is running. The events we appended
-are received in the order they were recorded.
+the last recorded event that was received above. Then, another event is
+recorded before the subscription is restarted. And three more events are
+recorded whilst the subscription is running. These four events are
+received in the order they were recorded.
 
 
 ```python
 
 # Append another event.
-event6 = NewEvent(type='OrderDeleted', data=b'data6')
+event6 = NewEvent(type='OrderDeleted', data=b'{}')
 client.append_to_stream(
     stream_name=stream_name2,
     current_version=1,
@@ -1856,13 +2037,13 @@ thread = Thread(target=receive_events, daemon=True)
 thread.start()
 
 # Wait for event6.
-wait_for_event(event6.id)
+wait_for_event(event6)
 
 # Append three more events to a new stream.
 stream_name3 = str(uuid.uuid4())
-event7 = NewEvent(type='OrderCreated', data=b'data7')
-event8 = NewEvent(type='OrderUpdated', data=b'data8')
-event9 = NewEvent(type='OrderDeleted', data=b'data9')
+event7 = NewEvent(type='OrderCreated', data=b'{}')
+event8 = NewEvent(type='OrderUpdated', data=b'{}')
+event9 = NewEvent(type='OrderDeleted', data=b'{}')
 
 client.append_to_stream(
     stream_name=stream_name3,
@@ -1870,10 +2051,10 @@ client.append_to_stream(
     events=[event7, event8, event9],
 )
 
-# Wait for events.
-wait_for_event(event7.id)
-wait_for_event(event8.id)
-wait_for_event(event9.id)
+# Wait for events 7, 8 and 9.
+wait_for_event(event7)
+wait_for_event(event8)
+wait_for_event(event9)
 
 # Stop the subscription.
 catchup_subscription.stop()
@@ -1884,7 +2065,7 @@ The catch-up subscription call is ended as soon as the subscription object's
 `stop()` method is called. This happens automatically when it goes out of scope,
 or when it is explicitly deleted from memory using the Python `del` keyword.
 
-### Subscribe to stream events
+### Subscribe to stream events<a id="subscribe-to-stream-events"></a>
 
 The `subscribe_to_stream()` method can be used to start a catch-up subscription
 from which events recorded in a single stream can be obtained. This method
@@ -1893,16 +2074,31 @@ returns a "catch-up subscription" iterator.
 This method has a required `stream_name` argument, which specifies the name of the
 stream from which recorded events will be received.
 
-This method also has three optional arguments, `stream_position`, `timeout` and `credentials`.
+This method also has six optional arguments, `stream_position`, `from_end`,
+`resolve_links`, `include_caught_up`, `timeout` and `credentials`.
 
-The optional `stream_position` argument specifies a position in the stream. The
-default value of `stream_position` is `None`, which means that all events
-recorded in the stream will be obtained in the order they were recorded.
-If a stream position is given, then only events recorded after that position
-will be obtained.
+The optional `stream_position` argument specifies a position in the stream from
+which to start subscribing. The default value of `stream_position` is `None`,
+which means that all events recorded in the stream will be obtained in the
+order they were recorded, unless `from_end` is set to `True`. If a stream
+position is given, then only events recorded after that position will be obtained.
 
-The optional `timeout` argument is a Python `float` that sets
-a deadline for the completion of the gRPC operation.
+The optional `from_end` argument specifies that the subscription will start
+from the last position in the stream. The default value of `from_end` is `False`.
+If `from_end` is `True`, then only events recorded after the subscription was
+created will be obtained. This argument if ignored is `stream_position` is set.
+
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
+
+The optional `include_caught_up` argument is a Python `bool` which indicates
+whether "caught up" messages should be included when recorded events are
+received. The default value of `include_caught_up` is `False`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -1926,7 +2122,7 @@ subscription = client.subscribe_to_stream(
 )
 ```
 
-### How to implement exactly-once event processing
+### How to implement exactly-once event processing<a id="how-to-implement-exactly-once-event-processing"></a>
 
 The commit positions of recorded events that are received and processed by a
 downstream component are usefully recorded by the downstream component, so that
@@ -1938,7 +2134,7 @@ to subscribe when processing is resumed. Since this commit position will represe
 position of the last successfully processed event in a downstream component, so it
 will be usual to want the next event after this position, because that is the next
 event that has not yet been processed. For this reason, when subscribing for events
-from a specific commit position using a catch-up subscription in EventStoreDB, the
+from a specific commit position using a catch-up subscription in KurrentDB, the
 recorded event at the specified commit position will NOT be included in the sequence
 of recorded events that are received.
 
@@ -1975,18 +2171,16 @@ unique, so that transactions will be rolled back when there is a conflict, you w
 prevent the results of any duplicate processing of a recorded event being committed.
 
 Recorded events received from a catch-up subscription cannot be acknowledged back
-to the EventStoreDB server. Acknowledging events, however, is an aspect of "persistent
+to the KurrentDB server. Acknowledging events, however, is an aspect of "persistent
 subscriptions". Hoping to rely on acknowledging events to an upstream
 component is an example of dual writing.
 
 
-## Persistent subscriptions
+## Persistent subscriptions<a id="persistent-subscriptions"></a>
 
-In EventStoreDB, "persistent" subscriptions are similar to catch-up subscriptions,
+In KurrentDB, "persistent" subscriptions are similar to catch-up subscriptions,
 in that reading a persistent subscription will block when there are no more recorded
 events to be received, and then continue when new events are subsequently recorded.
-
-Persistent subscriptions can
 
 Persistent subscriptions can be consumed by a group of consumers operating with one
 of the supported "consumer strategies".
@@ -2009,7 +2203,7 @@ rely on their idempotent handling of duplicate messages, and their resilience to
 out-of-order delivery.
 
 
-### Create subscription to all
+### Create subscription to all<a id="create-subscription-to-all"></a>
 
 *requires leader*
 
@@ -2019,26 +2213,33 @@ to all the recorded events in the database across all streams.
 This method has a required `group_name` argument, which is the
 name of a "group" of consumers of the subscription.
 
-This method also has eight optional arguments, `from_end`, `commit_position`,
+This method has nineteen optional arguments, `from_end`, `commit_position`, `resolve_links`,
 `filter_exclude`, `filter_include`, `filter_by_stream_name`, `consumer_strategy`,
-`timeout` and `credentials`.
+`message_timeout`, `max_retry_count`, `min_checkpoint_count`, `max_checkpoint_count`,
+`checkpoint_after`, `max_subscriber_count`, `live_buffer_size`, `read_batch_size`,
+`history_buffer_size`, `extra_statistics`, `timeout` and `credentials`.
 
 The optional `from_end` argument can be used to specify that the group of consumers
 of the subscription should only receive events that were recorded after the subscription
 was created.
 
 Alternatively, the optional `commit_position` argument can be used to specify a commit
-position from which commit position the group of consumers of the subscription should
+position from which the group of consumers of the subscription should
 receive events. Please note, the recorded event at the specified commit position might
 be included in the recorded events received by the group of consumers.
 
-If neither `from_end` or `commit_position` are specified, the group of consumers
+If neither `from_end` nor `commit_position` are specified, the group of consumers
 of the subscription will potentially receive all recorded events in the database.
+
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
 
 The optional `filter_exclude` argument is a sequence of regular expressions that
 specifies which recorded events should be returned. This argument is ignored
 if `filter_include` is set to a non-empty sequence. The default value of this
-argument matches the event types of EventStoreDB "system events", so that system
+argument matches the event types of KurrentDB "system events", so that system
 events will not normally be included. See the Notes section below for more
 information about filter expressions.
 
@@ -2057,8 +2258,48 @@ the consumer strategy for this persistent subscription. The value of this argume
 can be `'DispatchToSingle'`, `'RoundRobin'`, `'Pinned'`, or `'PinnedByCorrelation'`. The
 default value is `'DispatchToSingle'`.
 
+The optional `message_timeout` argument is a Python `float` which sets a maximum duration,
+in seconds, from the server sending a recorded event to a consumer of the persistent
+subscription until either an "acknowledgement" (ack) or a "negative acknowledgement"
+(nack) is received by the server, after which the server will retry to send the event.
+The default value of `message_timeout` is `30.0`.
+
+The optional `max_retry_count` argument is a Python `int` which sets the number of times
+the server will retry to send an event. The default value of `max_retry_count` is `10`.
+
+The optional `min_checkpoint_count` argument is a Python `int` which sets the minimum
+number of "acknowledgements" (acks) received by the server before the server may record
+the acknowledgements. The default value of `min_checkpoint_count` is `10`.
+
+The optional `max_checkpoint_count` argument is a Python `int` which sets the maximum
+number of "acknowledgements" (acks) received by the server before the server must
+record the acknowledgements. The default value of `max_checkpoint_count` is `1000`.
+
+The optional `checkpoint_after` argument is a Python `float` which sets the maximum
+duration in seconds between recording "acknowledgements" (acks). The default value of
+`checkpoint_after` is `2.0`.
+
+The optional `max_subscriber_count` argument is a Python `int` which sets the maximum
+number of concurrent readers of the persistent subscription, beyond which attempts to
+read the persistent subscription will raise a `MaximumSubscriptionsReachedError` exception.
+
+The optional `live_buffer_size` argument is a Python `int` which sets the size of the
+buffer (in-memory) holding newly recorded events. The default value of `live_buffer_size`
+is 500.
+
+The optional `read_batch_size` argument is a Python `int` which sets the number of
+recorded events read from disk when catching up. The default value of `read_batch_size`
+is 200.
+
+The optional `history_buffer_size` argument is a Python `int` which sets the number of
+recorded events to cache in memory when catching up. The default value of `history_buffer_size`
+is 500.
+
+The optional `extra_statistics` argument is a Python `bool` which enables tracking of
+extra statistics on this subscription. The default value of `extra_statistics` is `False`.
+
 The optional `timeout` argument is a Python `float` which sets a
-deadline for the completion of the gRPC operation.
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -2075,7 +2316,7 @@ group_name1 = f"group-{uuid.uuid4()}"
 client.create_subscription_to_all(group_name=group_name1)
 ```
 
-### Read subscription to all
+### Read subscription to all<a id="read-subscription-to-all"></a>
 
 *requires leader*
 
@@ -2087,11 +2328,10 @@ This method has a required `group_name` argument, which is
 the name of a "group" of consumers of the subscription specified
 when `create_subscription_to_all()` was called.
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 This method returns a `PersistentSubscription` object, which is an iterator
@@ -2102,15 +2342,21 @@ methods.
 subscription = client.read_subscription_to_all(group_name=group_name1)
 ```
 
-The `ack()` method should be used by a consumer to indicate to the server that it
-has received and successfully processed a recorded event. This will prevent that
+The `ack()` method should be used by a consumer to "acknowledge" to the server that
+it has received and successfully processed a recorded event. This will prevent that
 recorded event being received by another consumer in the same group. The `ack()`
-method takes an `event_id` argument, which is the ID of the recorded event that
-has been received.
+has an `item` argument which can be either a `RecordedEvent` or a `UUID`. If you pass
+in a `RecordedEvent`, the value of its `ack_id` attribute will be used to acknowledge
+the event to the server. If you pass in a UUID, then used the value of the `ack_id`
+of the `RecordedEvent` that is being acknowledged, in case the event has been resolved
+from a link event (which can happen both when persistent subscription setting
+`resolve_links` is `True` and also when replaying parked events regardless of the
+`resolve_links` setting).
 
-The example below iterates over the subscription object, and calls `ack()`. The
-`stop()` method is called when we have received the last event, so that we can
-continue with the examples below.
+The example below iterates over the subscription object, and calls `ack()` with the
+received `RecordedEvent` objects. The subscription's `stop()` method is called when
+we have received `event9`, stopping the iteration, so that we can continue with the
+examples below.
 
 ```python
 received_events = []
@@ -2119,29 +2365,22 @@ for event in subscription:
     received_events.append(event)
 
     # Acknowledge the received event.
-    subscription.ack(event_id=event.id)
+    subscription.ack(event)
 
     # Stop when 'event9' has been received.
-    if event.id == event9.id:
+    if event == event9:
         subscription.stop()
 ```
 
-The events are not guaranteed to be received in the order they were recorded. But
-we will have received `event9`.
+The `nack()` should be used by a consumer to "negatively acknowledge" to the server that
+it has received but not successfully processed a recorded event. The `nack()` method has
+an `item` argument that works in the same way as `ack()`. Use the recorded event or its
+`ack_id` attribute. The `nack()` method also has an `action` argument, which should be
+a Python `str`: either `'unknown'`, `'park'`, `'retry'`, `'skip'` or `'stop'`.
 
-```python
-assert event9.id in [e.id for e in received_events]
-```
+The `stop()` method can be used to stop the gRPC streaming operation.
 
-The `PersistentSubscription` object also has an `nack()` method that should be used
-by a consumer to negatively acknowledge to the server that it has received but not
-successfully processed a recorded event. The `nack()` method has an `event_id`
-argument, which is the ID of the recorded event that has been received. The `nack()`
-method also has an `action` argument, which should be a Python `str`: either
-`'unknown'`, `'park'`, `'retry'`, `'skip'` or `'stop'`.
-
-
-### How to write a persistent subscription consumer
+### How to write a persistent subscription consumer<a id="how-to-write-a-persistent-subscription-consumer"></a>
 
 The reading of a persistent subscription can be encapsulated in a "consumer" that calls
 a "policy" function when a recorded event is received and then automatically calls
@@ -2151,6 +2390,8 @@ perhaps retrying the event for a certain number of times before parking the even
 The simple example below shows how this might be done. We can see that 'event9' is
 acknowledged before 'event5' is finally parked.
 
+The  number of time a `RecordedEvent` has been retried is presented by the its
+`retry_count` attribute.
 
 ```python
 acked_events = {}
@@ -2158,37 +2399,34 @@ nacked_events = {}
 
 
 class ExampleConsumer:
-    def __init__(self, subscription, max_retries, final_action):
+    def __init__(self, subscription, max_retry_count, final_action):
         self.subscription = subscription
-        self.max_retries = max_retries
+        self.max_retry_count = max_retry_count
         self.final_action = final_action
         self.error = None
 
     def run(self):
-        try:
+        with self.subscription:
             for event in self.subscription:
                 try:
                     self.policy(event)
                 except Exception:
-                    if event.retry_count < self.max_retries:
+                    if event.retry_count < self.max_retry_count:
                         action = "retry"
                     else:
                         action = self.final_action
-                    self.subscription.nack(event.id, action=action)
+                    self.subscription.nack(event, action)
                     self.after_nack(event, action)
                 else:
-                    self.subscription.ack(event.id)
+                    self.subscription.ack(event)
                     self.after_ack(event)
-        except Exception:
-            self.stop()
-            raise
 
     def stop(self):
         self.subscription.stop()
 
     def policy(self, event):
         # Raise an exception when we see "event5".
-        if event.id == event5.id:
+        if event == event5:
             raise Exception()
 
     def after_ack(self, event):
@@ -2214,7 +2452,7 @@ subscription = client.read_subscription_to_all(group_name)
 # Construct consumer.
 consumer = ExampleConsumer(
     subscription=subscription,
-    max_retries=5,
+    max_retry_count=5,
     final_action="park",
 )
 
@@ -2231,35 +2469,34 @@ assert event9.id in acked_events
 assert event9.id not in nacked_events
 ```
 
-### Update subscription to all
+### Update subscription to all<a id="update-subscription-to-all"></a>
 
 *requires leader*
 
 The `update_subscription_to_all()` method can be used to update a
-"persistent subscription".
+"persistent subscription". Please note, the filter options and consumer
+strategy cannot be adjusted.
 
 This method has a required `group_name` argument, which is the
 name of a "group" of consumers of the subscription.
 
-This method also has three optional arguments, `from_end`, `commit_position`, `timeout`
-and `credentials`.
+This method also has sixteen optional arguments, `from_end`, `commit_position`,
+`resolve_links`, `consumer_strategy`, `message_timeout`, `max_retry_count`,
+`min_checkpoint_count`, `max_checkpoint_count`, `checkpoint_after`,
+`max_subscriber_count`, `live_buffer_size`, `read_batch_size`, `history_buffer_size`,
+`extra_statistics`, `timeout` and `credentials`.
 
-The optional `from_end` argument can be used to specify that the group of consumers
-of the subscription should only receive events that were recorded after the subscription
-was updated.
-
-Alternatively, the optional `commit_position` argument can be used to specify a commit
-position from which commit position the group of consumers of the subscription should
-receive events. Please note, the recorded event at the specified commit position might
-be included in the recorded events received by the group of consumers.
-
-If neither `from_end` or `commit_position` are specified, the group of consumers
-of the subscription will potentially receive all recorded events in the database.
-
-Please note, the filter options and consumer strategy cannot be adjusted.
+The optional arguments `from_end`, `commit_position`,
+`resolve_links`, `consumer_strategy`, `message_timeout`, `max_retry_count`,
+`min_checkpoint_count`, `max_checkpoint_count`, `checkpoint_after`,
+`max_subscriber_count`, `live_buffer_size`, `read_batch_size`, `history_buffer_size`,
+amd `extra_statistics` can be used to adjust the values set on previous calls to
+`create_subscription_to_all()` and `update_subscription_to_all()`. If any of
+these arguments are not mentioned in a call to `update_subscription_to_all()`,
+the corresponding settings of the persistent subscription will be unchanged.
 
 The optional `timeout` argument is a Python `float` which sets a
-deadline for the completion of the gRPC operation.
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -2274,7 +2511,7 @@ database.
 client.update_subscription_to_all(group_name=group_name1, from_end=True)
 ```
 
-### Create subscription to stream
+### Create subscription to stream<a id="create-subscription-to-stream"></a>
 
 *requires leader*
 
@@ -2287,8 +2524,11 @@ from this subscription. The `stream_name` argument specifies which stream
 the subscription will follow. The values of both these arguments are expected
 to be Python `str` objects.
 
-This method also has five optional arguments, `stream_position`, `from_end`,
-`consumer_strategy`, `timeout` and `credentials`.
+This method also has sixteen optional arguments, `stream_position`, `from_end`,
+`resolve_links`, `consumer_strategy`, `message_timeout`, `max_retry_count`,
+`min_checkpoint_count`, `max_checkpoint_count`, `checkpoint_after`,
+`max_subscriber_count`, `live_buffer_size`, `read_batch_size`, `history_buffer_size`,
+`extra_statistics`, `timeout` and `credentials`.
 
 The optional `stream_position` argument specifies a stream position from
 which to subscribe. The recorded event at this stream
@@ -2300,13 +2540,58 @@ to `True`, reading from the subscription will receive only events
 recorded after the subscription was created. That is, it is not inclusive
 of the current stream position.
 
+The optional `resolve_links` argument is a Python `bool`. The default value of `resolve_links`
+is `False`, which means any event links will not be resolved, so that the events that are
+returned may represent event links. If `resolve_links` is `True`, any event links will
+be resolved, so that the linked events will be returned instead of the event links.
+
 The optional `consumer_strategy` argument is a Python `str` that defines
 the consumer strategy for this persistent subscription. The value of this argument
 can be `'DispatchToSingle'`, `'RoundRobin'`, `'Pinned'`, or `'PinnedByCorrelation'`. The
 default value is `'DispatchToSingle'`.
 
-The optional `timeout` argument is a Python `float` which sets a deadline
-for the completion of the gRPC operation.
+The optional `message_timeout` argument is a Python `float` which sets a maximum duration,
+in seconds, from the server sending a recorded event to a consumer of the persistent
+subscription until either an "acknowledgement" (ack) or a "negative acknowledgement"
+(nack) is received by the server, after which the server will retry to send the event.
+The default value of `message_timeout` is `30.0`.
+
+The optional `max_retry_count` argument is a Python `int` which sets the number of times
+the server will retry to send an event. The default value of `max_retry_count` is `10`.
+
+The optional `min_checkpoint_count` argument is a Python `int` which sets the minimum
+number of "acknowledgements" (acks) received by the server before the server may record
+the acknowledgements. The default value of `min_checkpoint_count` is `10`.
+
+The optional `max_checkpoint_count` argument is a Python `int` which sets the maximum
+number of "acknowledgements" (acks) received by the server before the server must
+record the acknowledgements. The default value of `max_checkpoint_count` is `1000`.
+
+The optional `checkpoint_after` argument is a Python `float` which sets the maximum
+duration in seconds between recording "acknowledgements" (acks). The default value of
+`checkpoint_after` is `2.0`.
+
+The optional `max_subscriber_count` argument is a Python `int` which sets the maximum
+number of concurrent readers of the persistent subscription, beyond which attempts to
+read the persistent subscription will raise a `MaximumSubscriptionsReachedError` exception.
+
+The optional `live_buffer_size` argument is a Python `int` which sets the size of the
+buffer (in-memory) holding newly recorded events. The default value of `live_buffer_size`
+is 500.
+
+The optional `read_batch_size` argument is a Python `int` which sets the number of
+recorded events read from disk when catching up. The default value of `read_batch_size`
+is 200.
+
+The optional `history_buffer_size` argument is a Python `int` which sets the number of
+recorded events to cache in memory when catching up. The default value of `history_buffer_size`
+is 500.
+
+The optional `extra_statistics` argument is a Python `bool` which enables tracking of
+extra statistics on this subscription. The default value of `extra_statistics` is `False`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -2325,7 +2610,7 @@ client.create_subscription_to_stream(
 )
 ```
 
-### Read subscription to stream
+### Read subscription to stream<a id="read-subscription-to-stream"></a>
 
 *requires leader*
 
@@ -2335,11 +2620,10 @@ subscription to a stream.
 This method has two required arguments, `group_name` and `stream_name`, which
 should match the values of arguments used when calling `create_subscription_to_stream()`.
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 This method returns a `PersistentSubscription` object, which is an iterator
@@ -2354,8 +2638,8 @@ subscription = client.read_subscription_to_stream(
 ```
 
 The example below iterates over the subscription object, and calls `ack()`.
-The for loop breaks when we have received the last event in the stream, so
-that we can finish the examples in this documentation.
+The subscription's `stop()` method is called when we have received `event6`,
+stopping the iteration, so that we can continue with the examples below.
 
 ```python
 events = []
@@ -2363,10 +2647,10 @@ for event in subscription:
     events.append(event)
 
     # Acknowledge the received event.
-    subscription.ack(event_id=event.id)
+    subscription.ack(event)
 
     # Stop when 'event6' has been received.
-    if event.id == event6.id:
+    if event == event6:
         subscription.stop()
 ```
 
@@ -2375,44 +2659,39 @@ in the examples above.
 
 ```python
 assert len(events) == 3
-assert events[0].stream_name == stream_name2
-assert events[0].id == event4.id
-assert events[1].stream_name == stream_name2
-assert events[1].id == event5.id
-assert events[2].stream_name == stream_name2
-assert events[2].id == event6.id
+assert events[0] == event4
+assert events[1] == event5
+assert events[2] == event6
 ```
 
-### Update subscription to stream
+### Update subscription to stream<a id="update-subscription-to-stream"></a>
 
 *requires leader*
 
-The `update_subscription_to_stream()` method can be used to update a
-persistent subscription to a stream.
+The `update_subscription_to_stream()` method can be used to update a persistent
+subscription to a stream. Please note, the consumer strategy cannot be adjusted.
 
 This method has a required `group_name` argument, which is the
 name of a "group" of consumers of the subscription, and a required
 `stream_name` argument, which is the name of a stream.
 
-This method also has four optional arguments, `from_end`, `stream_position`,
+This method also has sixteen optional arguments, `from_end`, `stream_position`,
+`resolve_links`, `consumer_strategy`, `message_timeout`, `max_retry_count`,
+`max_subscriber_count`, `live_buffer_size`, `read_batch_size`, `history_buffer_size`,
+`extra_statistics`, `min_checkpoint_count`, `max_checkpoint_count`, `checkpoint_after`,
 `timeout` and `credentials`.
 
-The optional `from_end` argument can be used to specify that the group of consumers
-of the subscription should only receive events that were recorded after the subscription
-was updated.
-
-Alternatively, the optional `stream_position` argument can be used to specify a stream
-position from which commit position the group of consumers of the subscription should
-receive events. Please note, the recorded event at the specified stream position might
-be included in the recorded events received by the group of consumers.
-
-If neither `from_end` or `commit_position` are specified, the group of consumers
-of the subscription will potentially receive all recorded events in the stream.
-
-Please note, the consumer strategy cannot be adjusted.
+The optional arguments `from_end`, `stream_position`,
+`resolve_links`, `consumer_strategy`, `message_timeout`, `max_retry_count`,
+`min_checkpoint_count`, `max_checkpoint_count`, `checkpoint_after`,
+`max_subscriber_count`, `live_buffer_size`, `read_batch_size`, `history_buffer_size`,
+and `extra_statistics` can be used to adjust the values set on previous calls to
+`create_subscription_to_stream()` and `update_subscription_to_stream()`. If any of
+these arguments are not mentioned in a call to `update_subscription_to_stream()`,
+the corresponding settings of the persistent subscription will be unchanged.
 
 The optional `timeout` argument is a Python `float` which sets a
-deadline for the completion of the gRPC operation.
+maximum duration, in seconds, for the completion of the gRPC operation.
 
 The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
@@ -2431,7 +2710,7 @@ client.update_subscription_to_stream(
 )
 ```
 
-### Replay parked events
+### Replay parked events<a id="replay-parked-events"></a>
 
 *requires leader*
 
@@ -2444,11 +2723,10 @@ This method has a required `group_name` argument and an optional `stream_name`
 argument. The values of these arguments should match those used when calling
 `create_subscription_to_all()` or `create_subscription_to_stream()`.
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 The example below replays parked events for group `group_name1`.
@@ -2468,7 +2746,7 @@ client.replay_parked_events(
 )
 ```
 
-### Get subscription info
+### Get subscription info<a id="get-subscription-info"></a>
 
 *requires leader*
 
@@ -2479,11 +2757,10 @@ This method has a required `group_name` argument and an optional `stream_name`
 argument, which should match the values of arguments used when calling either
 `create_subscription_to_all()` or `create_subscription_to_stream()`.
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 The example below gets information for the persistent subscription `group_name1` which
@@ -2507,7 +2784,7 @@ subscription_info = client.get_subscription_info(
 
 The returned value is a `SubscriptionInfo` object.
 
-### List subscriptions
+### List subscriptions<a id="list-subscriptions"></a>
 
 *requires leader*
 
@@ -2515,11 +2792,10 @@ The `list_subscriptions()` method can be used to get information for all
 existing persistent subscriptions, both "subscriptions to all" and
 "subscriptions to stream".
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 The example below lists all the existing persistent subscriptions.
@@ -2531,7 +2807,7 @@ subscriptions = client.list_subscriptions()
 The returned value is a list of `SubscriptionInfo` objects.
 
 
-### List subscriptions to stream
+### List subscriptions to stream<a id="list-subscriptions-to-stream"></a>
 
 *requires leader*
 
@@ -2540,10 +2816,10 @@ the persistent subscriptions to a stream.
 
 This method has one required argument, `stream_name`.
 
-This method has an optional `timeout` argument, that is expected to be a
-Python `float`, which sets a deadline for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 ```python
@@ -2555,7 +2831,7 @@ subscriptions = client.list_subscriptions_to_stream(
 The returned value is a list of `SubscriptionInfo` objects.
 
 
-### Delete subscription
+### Delete subscription<a id="delete-subscription"></a>
 
 *requires leader*
 
@@ -2566,11 +2842,10 @@ This method has a required `group_name` argument and an optional `stream_name`
 argument, which should match the values of arguments used when calling either
 `create_subscription_to_all()` or `create_subscription_to_stream()`.
 
-This method has an optional `timeout` argument, that
-is expected to be a Python `float`, which sets a deadline
-for the completion of the gRPC operation.
+This method has an optional `timeout` argument, which is a Python `float`
+that sets a maximum duration, in seconds, for the completion of the gRPC operation.
 
-This method also has an optional `credentials` argument, which can be used to
+This method has an optional `credentials` argument, which can be used to
 override call credentials derived from the connection string URI.
 
 The example below deletes the persistent subscription `group_name1` which
@@ -2592,7 +2867,400 @@ client.delete_subscription(
 )
 ```
 
-### Call credentials
+
+## Projections<a id="projections"></a>
+
+Please refer to the [KurrentDB documentation](https://docs.kurrent.io/server/v24.10/features/projections/)
+for more information on projections in KurrentDB.
+
+### Create projection<a id="create-projection"></a>
+
+*requires leader*
+
+The `create_projection()` method can be used to create a "continuous" projection.
+
+This method has two required arguments, `name` and `query`.
+
+This required `name` argument is a Python `str` that specifies the name of the projection.
+
+This required `query` argument is a Python `str` that defines what the projection will do.
+
+This method also has four optional arguments, `emit_enabled`,
+`track_emitted_streams`, `timeout`, and `credentials`.
+
+The optional `emit_enabled` argument is a Python `bool` which specifies whether a
+projection will be able to emit events. If a `True` value is specified, the projection
+will be able to emit events, otherwise the projection will not be able to emit events.
+The default value of `emit_enabled` is `False`.
+
+Please note, `emit_enabled` must be `True` if your projection query includes a call to
+`emit()`, otherwise the projection will not run.
+
+The optional `track_emitted_streams` argument is a Python `bool` which specifies whether
+a projection will have its emitted streams tracked. If a `True` value is specified, the
+projection will have its emitted streams tracked, otherwise the projection will not
+have its emitted streams tracked. The default value of `track_emitted_streams` is `False`.
+
+The purpose of tracking emitted streams is that they can optionally be deleted when
+a projection is deleted (see the `delete_projection()` method for more details).
+
+Please note, if you set `track_emitted_streams` to `True`, then you must also set
+`emit_enabled` to `True`, otherwise an error will be raised by this method.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+In the example below, a projection is created that processes events appended to
+`stream_name2`. The "state" of the projection is initialised to have a "count" that
+is incremented once for each event.
+
+```python
+projection_name = str(uuid.uuid4())
+
+projection_query = """fromStream('%s')
+.when({
+  $init: function(){
+    return {
+      count: 0
+    };
+  },
+  OrderCreated: function(s,e){
+    s.count += 1;
+  },
+  OrderUpdated: function(s,e){
+    s.count += 1;
+  },
+  OrderDeleted: function(s,e){
+    s.count += 1;
+  }
+})
+.outputState()
+"""  % stream_name2
+
+client.create_projection(
+    name=projection_name,
+    query=projection_query,
+)
+```
+
+Please note, the `outputState()` call is optional, and causes the state of the
+projection to be persisted in a "result" stream. If `outputState()` is called, an
+event representing the state of the projection will immediately be written to a
+"result" stream.
+
+The default name of the "result" stream for a projection with name `projection_name`
+is `$projections-{projection_name}-result`. This stream name can be used to read from
+and subscribe to the "result" stream, with the `get_stream()`, or `read_stream()`,
+or `subscribe_to_stream()`, or `create_subscription_to_stream()` and
+`read_subscription_to_stream()` methods.
+
+If your projection does not call `outputState()`, then you won't be able to read or
+subscribe to a "result" stream, but you will still be able to get the projection
+"state" using the `get_projection_state()` method.
+
+The "type" string of events recorded in "result" streams is `'Result'`. You may want to
+include this in a `filter_exclude` argument when filtering events by type whilst reading
+or subscribing to "all" events recorded in the database (with `read_all()`,
+`subscribe_to_all()`, etc).
+
+Additionally, and in any case, from time to time the state of the projection will be
+recorded in a "state" stream, and also the projection will write to a "checkpoint"
+stream. The "state" stream, the "checkpoint" stream, and all "emitted" streams that
+have been "tracked" (as a consequence of the `track_emitted_streams` argument having
+been `True`) can optionally be deleted when the projection is deleted. See
+`delete_projection()` for details.
+
+Unlike the "result" and "emitted" streams, the "state" and the "checkpoint" streams
+cannot be read or subscribed to by users, or viewed in the "stream browser" view of
+KurrentDB's Web interface.
+
+### Get projection state<a id="get-projection-state"></a>
+
+*requires leader*
+
+The `get_projection_state()` method can be used to get a projection's "state".
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of a projection.
+
+This method also has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+In the example below, after sleeping for 1 second to allow the projection
+to process all the recorded events, the projection "state" is obtained.
+We can see that the projection has processed three events.
+
+```python
+sleep(1)  # allow time for projection to process recorded events
+
+projection_state = client.get_projection_state(name=projection_name)
+
+assert projection_state.value == {'count': 3}
+```
+
+### Update projection<a id="update-projection"></a>
+
+*requires leader*
+
+The `update_projection()` method can be used to update a projection.
+
+This method has two required arguments, `name` and `query`.
+
+The required `name` argument is a Python `str` which specifies the name of the projection
+to be updated.
+
+The required `query` argument is a Python `str` which defines what the projection will do.
+
+This method also has three optional arguments, `emit_enabled`, `timeout`, and `credentials`.
+
+The optional `emit_enabled` argument is a Python `bool` which specifies whether a
+projection will be able to emit events. If a `True` value is specified, the projection
+will be able to emit events. If a `False` value is specified, the projection will not
+be able to emit events. The default value of `emit_enabled` is `False`.
+
+Please note, `emit_enabled` must be `True` if your projection query includes a call
+to `emit()`, otherwise the projection will not run.
+
+Please note, it is not possible to update `track_emitted_streams` via the gRPC API.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.update_projection(name=projection_name, query=projection_query)
+```
+
+### Get projection statistics<a id="get-projection-statistics"></a>
+
+*requires leader*
+
+The `get_projection_statistics()` method can be used to get projection statistics.
+
+This method has a required `name` argument, which is a Python `str` that specifies the
+name of a projection.
+
+This method also has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+This method returns a `ProjectionStatistics` object that represents
+the named projection.
+
+```python
+statistics = client.get_projection_statistics(name=projection_name)
+```
+
+A `ProjectionStatistics` object is returned. The attributes of this object
+have values that represent the progress of the projection.
+
+
+### List all projection statistics<a id="list-all-projection-statistics"></a>
+
+*requires leader*
+
+The `list_all_projection_statistics()` method can be used to get a list of projection statistics for all projections.
+
+This method has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+This method returns a list of `ProjectionStatistics` objects that each represent
+a projection.
+
+```python
+statistics = client.list_all_projection_statistics()
+```
+
+### List continuous projection statistics<a id="list-continuous-projection-statistics"></a>
+
+*requires leader*
+
+The `list_continuous_projection_statistics()` method can be used to get a list of projection statistics for all continuous projections.
+
+This method has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+This method returns a list of `ProjectionStatistics` objects that each represent
+a projection.
+
+```python
+statistics = client.list_continuous_projection_statistics()
+```
+
+### Disable projection<a id="disable-projection"></a>
+
+*requires leader*
+
+The `disable_projection()` method can be used to disable (stop running) a projection.
+When a projection is stopped using this method, a checkpoint will be written.
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be disabled.
+
+This method also has two optional arguments, `timeout`, and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.disable_projection(name=projection_name)
+```
+
+### Enable projection<a id="enable-projection"></a>
+
+*requires leader*
+
+The `enable_projection()` method can be used to enable (start running) a projection
+that was previously disabled (stopped).
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be enabled.
+
+This method also has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.enable_projection(name=projection_name)
+```
+
+### Abort projection<a id="abort-projection"></a>
+
+*requires leader*
+
+The `abort_projection()` method can be used to abort (stop running) a projection.
+When a projection is stopped using this method, it will be stopped without writing
+a checkpoint.
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be disabled.
+
+This method also has two optional arguments, `timeout`, and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.abort_projection(name=projection_name)
+```
+
+### Reset projection<a id="reset-projection"></a>
+
+*requires leader*
+
+The `reset_projection()` method can be used to reset a projection.
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be reset.
+
+This method also has two optional arguments, `timeout`, and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.reset_projection(name=projection_name)
+```
+
+Please note, a projection must be disabled before it can be reset.
+
+
+### Delete projection<a id="delete-projection"></a>
+
+*requires leader*
+
+The `delete_projection()` method can be used to delete a projection.
+
+This method has a required `name` argument, which is a Python `str` that
+specifies the name of the projection to be deleted.
+
+This method also has five optional arguments, `delete_emitted_streams`,
+`delete_state_stream`, `delete_checkpoint_stream`, `timeout`, and `credentials`.
+
+The optional `delete_emitted_streams` argument is a Python `bool` which specifies
+that all "emitted" streams that have been tracked will be deleted. For emitted streams
+to be deleted, they must have been tracked (see the `track_emitted_streams` argument of
+the `create_projection()` method.)
+
+The optional `delete_state_stream` argument is a Python `bool` which specifies that
+the projection's "state" stream should also be deleted. The "state" stream is like
+the "result" stream, but events are written to the "state" stream occasionally, along
+with events written to the "checkpoint" stream, rather than being written immediately
+in the way a call `outputState()` immediately writes events to the "result" stream.
+
+The optional `delete_checkpoint_stream` argument is a Python `bool` which specifies
+that the projection's "checkpoint" stream should also be deleted.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.delete_projection(name=projection_name)
+```
+
+Please note, a projection must be disabled before it can be deleted.
+
+
+### Restart projections subsystem<a id="restart-projections-subsystem"></a>
+
+*requires leader*
+
+The `restart_projections_subsystem()` method can be used to restart the projections subsystem.
+
+This method also has two optional arguments, `timeout` and `credentials`.
+
+The optional `timeout` argument is a Python `float` which sets a
+maximum duration, in seconds, for the completion of the gRPC operation.
+
+The optional `credentials` argument can be used to
+override call credentials derived from the connection string URI.
+
+```python
+client.restart_projections_subsystem()
+```
+
+
+## Call credentials<a id="call-credentials"></a>
 
 Default call credentials are derived by the client from the user info part of the
 connection string URI.
@@ -2601,7 +3269,12 @@ Many of the client methods described above have an optional `credentials` argume
 which can be used to set call credentials for an individual method call that override
 those derived from the connection string URI.
 
-### Construct call credentials
+Call credentials are sent to "secure" servers in a "basic auth" authorization header.
+This authorization header is used by the server to authenticate the client. The
+authorization header is not sent to "insecure" servers.
+
+
+### Construct call credentials<a id="construct-call-credentials"></a>
 
 The client method `construct_call_credentials()` can be used to construct a call
 credentials object from a username and password.
@@ -2615,12 +3288,12 @@ call_credentials = client.construct_call_credentials(
 The call credentials object can be used as the value of the `credentials`
 argument in other client methods.
 
-## Connection
+## Connection<a id="connection"></a>
 
-### Reconnect
+### Reconnect<a id="reconnect"></a>
 
 The `reconnect()` method can be used to manually reconnect the client to a
-suitable EventStoreDB node. This method uses the same routine for reading the
+suitable KurrentDB node. This method uses the same routine for reading the
 cluster node states and then connecting to a suitable node according to the
 client's node preference that is specified in the connection string URI when
 the client is constructed. This method is thread-safe, in that when it is called
@@ -2632,16 +3305,16 @@ and then they will all return normally.
 client.reconnect()
 ```
 
-An example of when it might be desirable to reconnect manually is when (for performance
-reasons) the client's node preference is to be connected to a follower node in the
-cluster, and, after a cluster leader election, the follower becomes the leader.
-Reconnecting to a follower node in this case is currently beyond the capabilities of
-this client, but this behavior might be implemented in a future release.
-
 Reconnection will happen automatically in many cases, due to the `@autoreconnect`
 decorator.
 
-### Close
+An example of when it might be desirable to reconnect manually is when (for performance
+reasons) the client's node preference is to be connected to a follower node in the
+cluster, and, after a cluster leader election, the follower becomes the leader.
+Automatic reconnection to a follower node in this case is currently beyond the
+capabilities of this client, but this behavior might be implemented in a future release.
+
+### Close<a id="close"></a>
 
 The `close()` method can be used to cleanly close the client's gRPC connection.
 
@@ -2650,36 +3323,47 @@ client.close()
 ```
 
 
-## Asyncio client
+## Asyncio client<a id="asyncio-client"></a>
 
-The `esdbclient` package also includes an early version of an asynchronous I/O
-gRPC Python client. It follows exactly the same behaviors as the multithreaded
-`EventStoreDBClient`, but uses the `grpc.aio` package and the `asyncio` module, instead of
-`grpc` and `threading`.
+The `kurrentdbclient` package also provides an asynchronous I/O gRPC Python client for
+KurrentDB. It is functionally equivalent to the multithreaded client. It uses
+the `grpc.aio` package and the `asyncio` module, instead of `grpc` and `threading`.
 
-The async function `AsyncioEventStoreDBClient` constructs the client, and connects to
-a server. It can be imported from `esdbclient`, and can be called with the same
-arguments as `EventStoreDBClient`. It supports both the "esdb" and the "esdb+discover"
-connection string URI schemes, and can connect to both "secure" and "insecure"
-EventStoreDB servers. It reconnects or retries when connection issues or server
-errors are encountered.
+It supports both the "kdb" and the "kdb+discover" connection string URI schemes,
+and can connect to both "secure" and "insecure" KurrentDB servers.
 
-```python
-from esdbclient import AsyncioEventStoreDBClient
-```
+The class `AsyncKurrentDBClient` can be used to construct an instance of the
+asynchronous I/O gRPC Python client. It can be imported from `kurrentdbclient`. The
+async method `connect()` should be called after constructing the client.
 
-The asynchronous I/O client has the following methods: `append_to_stream()`,
-`get_stream()`, `read_all()`, `subscribe_to_all()`,
-`delete_stream()`, `tombstone_stream()`, and `reconnect()`.
+The asyncio client has exactly the same methods as the multithreaded `KurrentDBClient`.
+These methods are defined as `async def` methods, and so calls to these methods will
+return Python "awaitables" that must be awaited to obtain the method return values.
+The methods have the same behaviors, the same arguments and the same or equivalent
+return values. The methods are similarly decorated with reconnect and retry decorators,
+that selectively reconnect and retry when connection issues or server errors are
+encountered.
 
-These methods are equivalent to the methods on `EventStoreDBClient`. They have the same
-method signatures, and can be called with the same arguments, to the same effect.
-The methods which appear on `EventStoreDBClient` but not on `AsyncioEventStoreDBClient` will be
-added soon.
+When awaited, the methods `read_all()` and `read_stream()` return an `AsyncReadResponse`
+object. The methods `subscribe_to_all()` and `subscribe_to_stream()` return an
+`AsyncCatchupSubscription` object. The methods `read_subscription_to_all()` and
+`read_subscription_to_stream()` return an `AsyncPersistentSubscription` object.
+These objects are asyncio iterables, which you can iterate over with Python's `async for`
+syntax to obtain `RecordedEvent` objects. They are also asyncio context managers,
+supporting the `async with` syntax. They also have a `stop()` method which can be
+used to terminate the iterator in a way that actively cancels the streaming gRPC call
+to the server. When used as a context manager, the `stop()` method will be called when
+the context manager exits.
 
-### Synopsis
+The methods `read_subscription_to_all()` and `read_subscription_to_stream()` return
+instances of the class `AsyncPersistentSubscription`, which has async methods `ack()`,
+`nack()` that work in the same way as the methods on `PersistentSubscription`,
+supporting the acknowledgement and negative acknowledgement of recorded events that
+have been received from a persistent subscription. See above for details.
 
-The example below demonstrates the `append_to_stream()`, `get_stream()` and
+### Synopsis<a id="synopsis-1"></a>
+
+The example below demonstrates the async `append_to_stream()`, `get_stream()` and
 `subscribe_to_all()` methods. These are the most useful methods for writing
 an event-sourced application, allowing new aggregate events to be recorded, the
 recorded events of an aggregate to be obtained so aggregates can be reconstructed,
@@ -2689,13 +3373,18 @@ semantics.
 ```python
 import asyncio
 
-async def demonstrate_asyncio_client():
+from kurrentdbclient import AsyncKurrentDBClient
 
+
+async def demonstrate_async_client():
     # Construct client.
-    client = await AsyncioEventStoreDBClient(
-        uri=os.getenv("ESDB_URI"),
-        root_certificates=os.getenv("ESDB_ROOT_CERTIFICATES"),
+    client = AsyncKurrentDBClient(
+        uri=os.getenv("KDB_URI"),
+        root_certificates=os.getenv("KDB_ROOT_CERTIFICATES"),
     )
+
+    # Connect to KurrentDB.
+    await client.connect()
 
     # Append events.
     stream_name = str(uuid.uuid4())
@@ -2709,81 +3398,135 @@ async def demonstrate_asyncio_client():
         events=[event1, event2, event3]
     )
 
-    # Read stream events.
+    # Get stream events.
     recorded = await client.get_stream(stream_name)
     assert len(recorded) == 3
-    assert recorded[0].id == event1.id
-    assert recorded[1].id == event2.id
-    assert recorded[2].id == event3.id
+    assert recorded[0] == event1
+    assert recorded[1] == event2
+    assert recorded[2] == event3
 
-
-    # Subscribe all events.
+    # Subscribe to all events.
     received = []
-    async for event in await client.subscribe_to_all():
-        received.append(event)
-        if event.commit_position == commit_position:
-            break
-    assert received[-3].id == event1.id
-    assert received[-2].id == event2.id
-    assert received[-1].id == event3.id
-
+    async with await client.subscribe_to_all(commit_position=0) as subscription:
+        async for event in subscription:
+            received.append(event)
+            if event.commit_position == commit_position:
+                break
+    assert received[-3] == event1
+    assert received[-2] == event2
+    assert received[-1] == event3
 
     # Close the client.
     await client.close()
 
 
 # Run the demo.
-asyncio.get_event_loop().run_until_complete(
-    demonstrate_asyncio_client()
+asyncio.run(
+    demonstrate_async_client()
 )
 ```
 
-## Notes
+### FastAPI example<a id="fastapi"></a>
 
-### Regular expression filters
+The example below shows how to use `AsyncKurrentDBClient` with [FastAPI](https://fastapi.tiangolo.com).
+
+```python
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from kurrentdbclient import AsyncKurrentDBClient
+
+client: AsyncKurrentDBClient
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Construct the client.
+    global client
+    client = AsyncKurrentDBClient(
+        uri="kdb+discover://localhost:2113?Tls=false",
+    )
+    await client.connect()
+
+    yield
+
+    # Close the client.
+    await client.close()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/commit_position")
+async def commit_position():
+    commit_position = await client.get_commit_position()
+    return {"commit_position": commit_position}
+```
+
+If you put this code in a file called `fastapi_example.py` and then run command
+`uvicorn fastapi_example:app --host 0.0.0.0 --port 80`, then the FastAPI application
+will return something like `{"commit_position":628917}` when a browser is pointed
+to `http://localhost/commit_position`. Use Ctrl-c to exit the process.
+
+## Notes<a id="notes"></a>
+
+### Regular expression filters<a id="regular-expression-filters"></a>
 
 The `read_all()`, `subscribe_to_all()`, `create_subscription_to_all()`
 and `get_commit_position()` methods have `filter_exclude` and `filter_include`
 arguments. This section provides some more details about the values of these
 arguments.
 
-The first thing to note is that these arguments are sequences of regular expressions.
-They are concatenated together by the client as bracketed alternatives in a larger
+The first thing to note is that the values of these arguments should be sequences
+of regular expressions.
+
+Please note, they are concatenated together by the client as bracketed alternatives in a larger
 regular expression that is anchored to the start and end of the strings being
-matched. So you shouldn't include the `'^'` and `'$'` anchor characters, unless
-these characters are escaped as literal characters to be matched. But you should
-use wildcards if you want to match substrings, for example `'.*Snapshot'` to match
-all strings that end with `'Snapshot`'.
+matched. So there is no need to include the `'^'` and `'$'` anchor assertions.
 
-In all methods, the default value of the `filter_exclude` argument is the constant
-`DEFAULT_EXCLUDE_FILTER`, which is designed to exclude EventStoreDB "system" and
-"persistence subscription config" event types, which otherwise would be included.
+You should use wildcards if you want to match substrings, for example `'.*Snapshot'`
+to match all strings that end with `'Snapshot`', or `'Order.*'` to match all strings
+that start with `'Order'`.
 
-System events generated by EventStoreDB have `type` strings that start with
+System events generated by KurrentDB have `type` strings that start with
 the `$` sign. Persistence subscription events generated when manipulating
 persistence subscriptions have `type` strings that start with `PersistentConfig`.
 
-For example, to match the type of EventStoreDB system events, use the regular
-expression string `r'\$.+'`. Please note, the constant `ESDB_SYSTEM_EVENTS_REGEX` is
-set to this value. You can import this constant from `esdbclient` and use it when
+For example, to match the type of KurrentDB system events, use the regular
+expression string `r'\$.+'`. Please note, the constant `KDB_SYSTEM_EVENTS_REGEX` is
+set to this value. You can import this constant from `kurrentdbclient` and use it when
 building longer sequences of regular expressions.
 
-Similarly, to match the type of EventStoreDB persistence subscription events, use the
-regular expression `r'PersistentConfig\d+'`. The constant `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`
-is set to this value. You can import this constant from `esdbclient`  and use it when
+Similarly, to match the type of KurrentDB persistence subscription events, use the
+regular expression `r'PersistentConfig\d+'`. The constant `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`
+is set to this value. You can import this constant from `kurrentdbclient` and use it when
 building longer sequences of regular expressions.
 
 The constant `DEFAULT_EXCLUDE_FILTER` is a sequence of regular expressions that includes
-both `ESDB_SYSTEM_EVENTS_REGEX` and `ESDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
-as the default value of `filter_exclude` so that the events that EventStoreDB generates
-internally are excluded by default.
+both `KDB_SYSTEM_EVENTS_REGEX` and `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
+as the default value of `filter_exclude` so that the events generated internally by
+KurrentDB are excluded by default.
 
-For example, if you want to exclude snapshots and system events and persistent subscription
-events, then you may wish to use a appropriately extended copy of `DEFAULT_EXCLUDE_FILTER`
-as the value of the `filter_exclude` arguments, such as `DEFAULT_EXCLUDE_FILTER + ['.*Snapshot']`.
+In all methods that have a `filter_exclude` argument, the default value of the argument
+is the constant `DEFAULT_EXCLUDE_FILTER`, which is designed to match (and therefore
+to exclude) both "system" and "persistence subscription config" event types, which
+would otherwise be included.
+
+This value can be extended. For example, if you want to exclude system events and
+persistent subscription events and also events that have a type that ends with
+`'Snapshot'`, then you can use `(*DEFAULT_EXCLUDE_FILTER, '.*Snapshot')` as the
+`filter_exclude` argument.
+
+The `filter_include` and `filter_exclude` arguments are designed to have exactly
+the opposite effect from each other, so that a sequence of strings given to
+`filter_include` will return exactly those events which would be excluded if
+the same argument value were used with `filter_exclude`. And vice versa, so that
+a sequence of strings given to `filter_exclude` will return exactly those events
+that would not be included if the same argument value were used with `filter_include`.
 
 
-### Reconnect and retry method decorators
+### Reconnect and retry method decorators<a id="reconnect-and-retry-method-decorators"></a>
 
 Please note, nearly all the client methods are decorated with the `@autoreconnect` and
 the `@retrygrpc` decorators.
@@ -2796,16 +3539,16 @@ connected to a leader, but the node that the client has been connected to stops 
 the leader. In this case, the client will reconnect to the current leader. After
 reconnecting, the failed operation will be retried.
 
-The `@retrygrpc` decorator retries operations that have failed due to a deadline being
-reached (so that the operation times out), and in case the server throws an exception
-when handling a client request.
+The `@retrygrpc` decorator selectively retries gRPC operations that have failed due to
+a timeout, network error, or server error. It doesn't retry operations that fail due to
+bad requests that will certainly fail again.
 
 Please also note, the aspects not covered by the reconnect and retry decorator
 behaviours have to do with methods that return iterators. For example, consider
 the "read response" iterator returned from the `read_all()` method. The
 `read_all()` method will have returned, and the method decorators will therefore
 have exited, before iterating over the "read response" begins. Therefore, if a
-connection issues occurs whilst iterating over the "read response", it isn't possible
+connection issue occurs whilst iterating over the "read response", it isn't possible
 for any decorator on the `read_all()` method to trigger a reconnection.
 
 With the "catch-up subscription" objects, there is an initial "confirmation" response
@@ -2818,10 +3561,146 @@ need to be restarted. Similarly, when reading persistent subscriptions, if there
 connection issues whilst iterating over a successfully received response, the consumer
 will need to be restarted.
 
+## Instrumentation<a id="instrumentation"></a>
 
-## Contributors
+Instrumentation is the act of modifying software so that analysis can be performed on it.
+Instrumentation helps enterprises reveal areas or features where users frequently
+encounter errors or slowdowns in their software or platform.
 
-### Install Poetry
+Instrumentation helps you understand the inner state of your software systems.
+Instrumented applications measure what code is doing when it responds to active
+requests by collecting data such as metrics, events, logs, and traces.
+
+Instrumentation provides immediate visibility into your application, often using
+charts and graphs to illustrate what is going on “under the hood.”
+
+This package supports instrumenting the KurrentDB clients with OpenTelemetry.
+
+### OpenTelemetry<a id="open-telemetry"></a>
+
+The [OpenTelemetry](https://opentelemetry.io) project provides a collection of APIs,
+SDKs, and tools for instrumenting, generating, collecting, and exporting telemetry data,
+that can help you analyze your software’s performance and behavior. It is vendor-neutral,
+100% Free and Open Source, and adopted and supported by industry leaders in the
+observability space.
+
+This package provides OpenTelemetry instrumentors for both the `KurrentDBClient`
+and the `AsyncKurrentDBClient` clients. These instrumentors depend on various
+OpenTelemetry Python packages, which you will need to install, preferably with this
+project's "opentelemetry" package extra to ensure verified version compatibility.
+
+For example, you can install the "opentelemetry" package extra with pip.
+
+    $ pip install kurrentdbclient[opentelemetry]
+
+Or you can use Poetry to add it to your pyproject.toml file and install it.
+
+    $ poetry add kurrentdbclient[opentelemetry]
+
+
+You can then use the OpenTelemetry instrumentor `KurrentDBClientInstrumentor` to
+instrument the `KurrentDBClient`.
+
+```python
+from kurrentdbclient.instrumentation.opentelemetry import KurrentDBClientInstrumentor
+
+# Activate instrumentation.
+KurrentDBClientInstrumentor().instrument()
+
+# Deactivate instrumentation.
+KurrentDBClientInstrumentor().uninstrument()
+```
+
+You can also use the OpenTelemetry instrumentor `AsyncKurrentDBClientInstrumentor`
+to instrument the `AsyncKurrentDBClient`.
+
+```python
+from kurrentdbclient.instrumentation.opentelemetry import AsyncKurrentDBClientInstrumentor
+
+# Activate instrumentation.
+AsyncKurrentDBClientInstrumentor().instrument()
+
+# Deactivate instrumentation.
+AsyncKurrentDBClientInstrumentor().uninstrument()
+```
+
+The instrumentors use a global OpenTelemetry "tracer provider", which you will need to
+initialise in order to export telemetry data.
+
+For example, to export data to the console you will need to install the Python
+package `opentelemetry-sdk`, and use the class `TracerProvider`, `BatchSpanProcessor`,
+and `ConsoleSpanExporter` in the following way.
+
+```python
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.trace import set_tracer_provider
+
+resource = Resource.create(
+    attributes={
+        SERVICE_NAME: "kurrentdb",
+    }
+)
+provider = TracerProvider(resource=resource)
+provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+set_tracer_provider(provider)
+```
+
+Or to export to an OpenTelemetry compatible data collector, such as
+[Jaeger](https://www.jaegertracing.io), you will need to install the Python package
+`opentelemetry-exporter-otlp-proto-http`, and then use the class `OTLPSpanExporter`
+from the `opentelemetry.exporter.otlp.proto.http.trace_exporter` module, with an
+appropriate `endpoint` argument for your collector.
+
+```python
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import set_tracer_provider
+
+resource = Resource.create(
+    attributes={
+        SERVICE_NAME: "kurrentdb",
+    }
+)
+provider = TracerProvider(resource=resource)
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")))
+set_tracer_provider(provider)
+```
+
+You can start Jaeger locally by running the following command.
+
+    $ docker run -d -p 4318:4318 -p 16686:16686 --name jaeger jaegertracing/all-in-one:latest
+
+You can then navigate to `http://localhost:16686` to access the Jaeger UI. And telemetry
+data can be sent by an OpenTelemetry tracer provider to `http://localhost:4318/v1/traces`.
+
+At this time, the instrumented methods are `append_to_stream()`, `subscribe_to_stream()`
+`subscribe_to_all()`, `read_subscription_to_stream()`, `read_subscription_to_all()`.
+
+The `append_to_stream()` method is instrumented by spanning the method call with a
+"producer" span kind. It also adds span context information to the new event metadata
+so that consumers can associate "consumer" spans with the "producer" span.
+
+The subscription methods are instrumented by instrumenting the response iterators,
+creating a "consumer" span for each recorded event received. It extracts span
+context information from the recorded event metadata and associates the "consumer"
+spans with a "producer" span, by making the "consumer" span a child of the "producer"
+span.
+
+
+## Communities<a id="communities"></a>
+
+- [Issues](https://github.com/pyeventsourcing/kurrentdbclient/issues)
+- [Discuss](https://discuss.eventstore.com/)
+- [Discord (Event Store)](https://discord.gg/Phn9pmCw3t)
+
+
+## Contributors<a id="contributors"></a>
+
+### Install Poetry<a id="install-poetry"></a>
 
 The first thing is to check you have Poetry installed.
 
@@ -2839,7 +3718,7 @@ installer tells you where it has been installed, and how to configure your shell
 Please refer to the [Poetry docs](https://python-poetry.org/docs/) for guidance on
 using Poetry.
 
-### Setup for PyCharm users
+### Setup for PyCharm users<a id="setup-for-pycharm-users"></a>
 
 You can easily obtain the project files using PyCharm (menu "Git > Clone...").
 PyCharm will then usually prompt you to open the project.
@@ -2873,7 +3752,7 @@ just use the Python Standard Library's ``unittest`` module.
 You should also be able to open a terminal window in PyCharm, and run the project's
 Makefile commands from the command line (see below).
 
-### Setup from command line
+### Setup from command line<a id="setup-from-command-line"></a>
 
 Obtain the project files, using Git or suitable alternative.
 
@@ -2898,19 +3777,26 @@ issues (don't know why) which might be problematic. If you encounter such
 issues, you can resolve these issues by deleting the virtual environment
 and creating the Poetry virtual environment using PyCharm (see above).
 
-### Project Makefile commands
+### Install timeout command
 
-You can start EventStoreDB using the following command.
+If you are running on a Mac, you may need to install the timeout command. You
+can do this by installing GNU Coreutils with Homebrew.
 
-    $ make start-eventstoredb
+    $ brew install coreutils
 
-You can run tests using the following command (needs EventStoreDB to be running).
+### Project Makefile commands<a id="project-makefile-commands"></a>
+
+You can start KurrentDB using the following command.
+
+    $ make start-kurrentdb
+
+You can run tests using the following command (needs KurrentDB to be running).
 
     $ make test
 
-You can stop EventStoreDB using the following command.
+You can stop KurrentDB using the following command.
 
-    $ make stop-eventstoredb
+    $ make stop-kurrentdb
 
 You can check the formatting of the code using the following command.
 
@@ -2920,9 +3806,15 @@ You can reformat the code using the following command.
 
     $ make fmt
 
-Tests belong in `./tests`. Code-under-test belongs in `./esdbclient`.
+### Making changes
 
-Edit package dependencies in `pyproject.toml`. Update installed packages (and the
-`poetry.lock` file) using the following command.
+Tests belong in `./tests`.
+
+Code-under-test belongs in `./kurrentdbclient`.
+
+Edit package dependencies in `pyproject.toml`.
+
+Update the `poetry.lock` file, and the project's virtual environment, using the
+following command.
 
     $ make update-packages
