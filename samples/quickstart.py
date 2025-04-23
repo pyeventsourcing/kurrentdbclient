@@ -35,7 +35,7 @@ def handle_event(ev: RecordedEvent):
 """
 # region createClient
 client = KurrentDBClient(
-    uri="{connectionString}"
+    uri=connection_string
 )
 # endregion createClient
 """
