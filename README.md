@@ -740,13 +740,12 @@ to the correct event ID to be used when acknowledging or negatively acknowledgin
 link events. Link events are "resolved" when the `resolve_links` argument is `True`
 and when replaying parked events (negatively acknowledging an event received from
 a persistent subscription with the `'park'` action will create a link event, and
-when parked event are replayed they are received as resolved events). The
+when parked events are replayed they are received as resolved events). The
 `ack_id` property helps with obtaining the correct event ID to use when acknowledging
 or negatively acknowledging events received from persistent subscriptions.
 
 The `retry_count` is a Python `int`, used to indicate the number of times a persistent
 subscription has retried sending the event to a consumer.
-
 
 ```python
 from dataclasses import dataclass
