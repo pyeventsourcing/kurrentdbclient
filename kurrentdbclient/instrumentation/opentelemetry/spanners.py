@@ -121,7 +121,7 @@ class GetStreamMethod(Protocol):
         limit: int = sys.maxsize,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
-    ) -> Sequence[RecordedEvent]:
+    ) -> tuple[RecordedEvent, ...]:
         pass  # pragma: no cover
 
 
@@ -137,7 +137,7 @@ class AsyncGetStreamMethod(Protocol):
         limit: int = sys.maxsize,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
-    ) -> Sequence[RecordedEvent]:
+    ) -> tuple[RecordedEvent, ...]:
         pass  # pragma: no cover
 
 
@@ -155,7 +155,7 @@ def span_get_stream(
     limit: int = sys.maxsize,
     timeout: float | None = None,
     credentials: grpc.CallCredentials | None = None,
-) -> AsyncSpannerResponse[Sequence[RecordedEvent]]:
+) -> AsyncSpannerResponse[tuple[RecordedEvent, ...]]:
     pass  # pragma: no cover
 
 
@@ -173,7 +173,7 @@ def span_get_stream(
     limit: int = sys.maxsize,
     timeout: float | None = None,
     credentials: grpc.CallCredentials | None = None,
-) -> SpannerResponse[Sequence[RecordedEvent]]:
+) -> SpannerResponse[tuple[RecordedEvent, ...]]:
     pass  # pragma: no cover
 
 
@@ -190,7 +190,7 @@ def span_get_stream(
     limit: int = sys.maxsize,
     timeout: float | None = None,
     credentials: grpc.CallCredentials | None = None,
-) -> OverloadedSpannerResponse[Sequence[RecordedEvent], Sequence[RecordedEvent]]:
+) -> OverloadedSpannerResponse[tuple[RecordedEvent, ...], tuple[RecordedEvent, ...]]:
     span_name, span_kind = _get_span_name_and_kind(spanned_func)
 
     with _start_span(tracer, span_name, span_kind) as span:
