@@ -597,7 +597,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         limit: int = sys.maxsize,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
-    ) -> Sequence[RecordedEvent]:
+    ) -> tuple[RecordedEvent, ...]:
         """
         Returns a sequence of recorded events from the named stream.
         """

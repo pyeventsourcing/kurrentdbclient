@@ -362,7 +362,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         limit: int = sys.maxsize,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
-    ) -> Sequence[RecordedEvent]:
+    ) -> tuple[RecordedEvent, ...]:
         """
         Lists recorded events from the named stream.
         """
