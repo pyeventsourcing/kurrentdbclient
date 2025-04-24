@@ -333,7 +333,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         """
         Returns the current commit position of the database.
         """
-        recorded_events = await self.read_all(
+        read_response = await self.read_all(
             backwards=True,
             filter_exclude=filter_exclude,
             filter_include=filter_include,
@@ -342,13 +342,10 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
             timeout=timeout,
             credentials=credentials,
         )
-        async for ev in recorded_events:
-            assert ev.commit_position is not None
-            commit_position = ev.commit_position
-            break
-        else:
-            commit_position = 0
-        return commit_position
+        recorded_events = tuple([ev async for ev in read_response])
+        if recorded_events:
+            return recorded_events[0].commit_position
+        return 0
 
     @retrygrpc
     @autoreconnect
