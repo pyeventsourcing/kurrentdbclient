@@ -18,7 +18,12 @@ from grpc._channel import _MultiThreadedRendezvous, _RPCState
 from grpc._cython.cygrpc import IntegratedCall
 
 import kurrentdbclient.protos.Grpc.persistent_pb2 as grpc_persistent
-from kurrentdbclient import KDB_SYSTEM_EVENTS_REGEX, RecordedEvent, StreamState
+from kurrentdbclient import (
+    DEFAULT_EXCLUDE_FILTER,
+    KDB_SYSTEM_EVENTS_REGEX,
+    RecordedEvent,
+    StreamState,
+)
 from kurrentdbclient.client import KurrentDBClient
 from kurrentdbclient.common import (
     DEFAULT_PERSISTENT_SUB_CHECKPOINT_AFTER,
@@ -1532,7 +1537,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated. Should exclude event1.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "OrderCreated"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, "OrderCreated"),
             expected={
                 "OrderUpdated",
                 "OrderDeleted",
@@ -1546,11 +1551,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated and OrderDeleted. Should exclude event1 and event3.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[
-                KDB_SYSTEM_EVENTS_REGEX,
-                "OrderCreated",
-                "OrderDeleted",
-            ],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, "OrderCreated", "OrderDeleted"),
             expected={
                 "OrderUpdated",
                 "InvoiceCreated",
@@ -1563,7 +1564,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Order. Should exclude nothing.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, "Order"),
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1578,7 +1579,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Created. Should exclude nothing.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Created"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, "Created"),
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1593,7 +1594,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude Order.*. Should exclude event1, event2, event3.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, "Order.*"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, r"Order.*"),
             expected={
                 "InvoiceCreated",
                 "InvoiceUpdated",
@@ -1605,7 +1606,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude *.Created. Should exclude event1 and event4.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*Created"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, r".*Created"),
             expected={
                 "OrderUpdated",
                 "OrderDeleted",
@@ -1618,7 +1619,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude *.thing.*. Should exclude event7.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".*thing.*"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, r".*thing.*"),
             expected={
                 "OrderCreated",
                 "OrderUpdated",
@@ -1632,7 +1633,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Exclude OrderCreated.+. Should exclude nothing.
         self.assert_filtered_events(
             commit_position=commit_position,
-            filter_exclude=[KDB_SYSTEM_EVENTS_REGEX, r".OrderCreated.+"],
+            filter_exclude=(*DEFAULT_EXCLUDE_FILTER, r".OrderCreated.+"),
             expected={
                 "OrderCreated",
                 "OrderUpdated",
