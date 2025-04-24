@@ -670,8 +670,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[0].id, event1.id)
         self.assertEqual(events[0].stream_name, stream_name)
         self.assertEqual(events[0].stream_position, 0)
-        if events[0].commit_position is not None:  # v21.10 doesn't return this
-            self.assertEqual(events[0].commit_position, commit_position1)
+        self.assertEqual(events[0].commit_position, commit_position1)
 
         # Check we can't append another new event at initial position.
 
@@ -1077,11 +1076,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         assert commit_position2 > commit_position0
         assert commit_position2 == self.client.get_commit_position()
-        if events[1].commit_position is not None:
-            assert isinstance(events[0].commit_position, int)
-            assert events[0].commit_position > commit_position0
-            assert events[0].commit_position < commit_position2
-            assert events[1].commit_position == commit_position2
+
+        assert events[0].commit_position > commit_position0
+        assert events[0].commit_position < commit_position2
+        assert events[1].commit_position == commit_position2
 
         # Fail to append (stream already exists).
         event3 = NewEvent(type="OrderUpdated", data=random_data())
@@ -1127,11 +1125,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         assert commit_position2 > commit_position0
         assert commit_position2 == self.client.get_commit_position()
-        if events[1].commit_position is not None:
-            assert isinstance(events[0].commit_position, int)
-            assert events[0].commit_position > commit_position0
-            assert events[0].commit_position < commit_position2
-            assert events[1].commit_position == commit_position2
+
+        assert events[0].commit_position > commit_position0
+        assert events[0].commit_position < commit_position2
+        assert events[1].commit_position == commit_position2
 
         # Append another batch of new events.
         event3 = NewEvent(type="OrderUpdated", data=random_data())
@@ -1151,11 +1148,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         assert commit_position4 > commit_position2
         assert commit_position4 == self.client.get_commit_position()
 
-        if events[3].commit_position is not None:
-            assert isinstance(events[2].commit_position, int)
-            assert events[2].commit_position > commit_position2
-            assert events[2].commit_position < commit_position4
-            assert events[3].commit_position == commit_position4
+        assert events[2].commit_position > commit_position2
+        assert events[2].commit_position < commit_position4
+        assert events[3].commit_position == commit_position4
 
     def test_stream_append_events_with_stream_state_stream_exists(self) -> None:
         self.construct_esdb_client()
@@ -1184,11 +1179,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         assert commit_position1 > commit_position0
         assert commit_position1 == self.client.get_commit_position()
-        if events[1].commit_position is not None:
-            assert isinstance(events[0].commit_position, int)
-            assert events[0].commit_position > commit_position0
-            assert events[0].commit_position < commit_position1
-            assert events[1].commit_position == commit_position1
+
+        assert events[0].commit_position > commit_position0
+        assert events[0].commit_position < commit_position1
+        assert events[1].commit_position == commit_position1
 
         # Append another batch of new events.
         event3 = NewEvent(type="OrderUpdated", data=random_data())
@@ -1208,11 +1202,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         assert commit_position4 > commit_position1
         assert commit_position4 == self.client.get_commit_position()
 
-        if events[3].commit_position is not None:
-            assert isinstance(events[2].commit_position, int)
-            assert events[2].commit_position > commit_position1
-            assert events[2].commit_position < commit_position4
-            assert events[3].commit_position == commit_position4
+        assert events[2].commit_position > commit_position1
+        assert events[2].commit_position < commit_position4
+        assert events[3].commit_position == commit_position4
 
     def test_commit_position(self) -> None:
         self.construct_esdb_client()

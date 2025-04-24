@@ -346,15 +346,9 @@ def construct_recorded_event(
         # Sometimes never, e.g. when the test suite runs, don't know why.
         return None
 
+    # Used to get "no_position" with EventStoreDB < 22.10 when reading a stream.
     position_oneof = read_event.WhichOneof("position")
-    if position_oneof == "commit_position":
-        ignore_commit_position = False
-        # # Is this equality always true? Ans: Not when resolve_links=True.
-        # assert read_event.commit_position == event.commit_position
-    else:  # pragma: no cover
-        # We get here with KurrentDB < 22.10 when reading a stream.
-        assert position_oneof == "no_position", position_oneof
-        ignore_commit_position = True
+    assert position_oneof == "commit_position", position_oneof
 
     if isinstance(read_event, persistent_pb2.ReadResp.ReadEvent):
         retry_count: int | None = read_event.retry_count
@@ -380,8 +374,8 @@ def construct_recorded_event(
             content_type=link.metadata.get("content-type", ""),
             stream_name=link.stream_identifier.stream_name.decode("utf8"),
             stream_position=link.stream_revision,
-            commit_position=None if ignore_commit_position else link.commit_position,
-            prepare_position=None if ignore_commit_position else link.prepare_position,
+            commit_position=link.commit_position,
+            prepare_position=link.prepare_position,
             retry_count=retry_count,
             recorded_at=recorded_at,
         )
@@ -402,8 +396,8 @@ def construct_recorded_event(
         content_type=event.metadata.get("content-type", ""),
         stream_name=event.stream_identifier.stream_name.decode("utf8"),
         stream_position=event.stream_revision,
-        commit_position=None if ignore_commit_position else event.commit_position,
-        prepare_position=None if ignore_commit_position else event.prepare_position,
+        commit_position=event.commit_position,
+        prepare_position=event.prepare_position,
         retry_count=retry_count,
         link=recorded_event_link,
         recorded_at=recorded_at,

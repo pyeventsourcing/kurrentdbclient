@@ -714,7 +714,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Returns the current commit position of the database.
         """
-        recorded_events = self.streams.read(
+        read_response = self.streams.read(
             backwards=True,
             filter_exclude=filter_exclude,
             filter_include=filter_include,
@@ -724,13 +724,10 @@ class KurrentDBClient(BaseKurrentDBClient):
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,
         )
-        for ev in recorded_events:
-            assert ev.commit_position is not None
-            commit_position = ev.commit_position
-            break
-        else:
-            commit_position = 0
-        return commit_position
+        recorded_events = tuple(read_response)
+        if recorded_events:
+            return recorded_events[0].commit_position
+        return 0
 
     @retrygrpc
     @autoreconnect
