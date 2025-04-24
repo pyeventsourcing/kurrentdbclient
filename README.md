@@ -3504,7 +3504,8 @@ is set to this value. You can import this constant from `kurrentdbclient` and us
 building longer sequences of regular expressions.
 
 The constant `DEFAULT_EXCLUDE_FILTER` is a sequence of regular expressions that includes
-both `KDB_SYSTEM_EVENTS_REGEX` and `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`. It is used
+both `KDB_SYSTEM_EVENTS_REGEX` and `KDB_PERSISTENT_CONFIG_EVENTS_REGEX`, as well as
+`KDB_RESULT_EVENTS_REGEX` which matches projection "result" events. It is used
 as the default value of `filter_exclude` so that the events generated internally by
 KurrentDB are excluded by default.
 

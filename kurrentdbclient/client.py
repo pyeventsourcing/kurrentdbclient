@@ -88,10 +88,13 @@ if TYPE_CHECKING:
 KDB_SYSTEM_EVENTS_REGEX = r"\$.+"
 # Matches the 'type' of "PersistentConfig" events.
 KDB_PERSISTENT_CONFIG_EVENTS_REGEX = r"PersistentConfig\d+"
+# Matches the 'type' of projection "Result" events.
+KDB_RESULT_EVENTS_REGEX = r"Result"
 
 DEFAULT_EXCLUDE_FILTER = (
     KDB_SYSTEM_EVENTS_REGEX,
     KDB_PERSISTENT_CONFIG_EVENTS_REGEX,
+    KDB_RESULT_EVENTS_REGEX,
 )
 
 _TCallable = TypeVar("_TCallable", bound=Callable[..., Any])
