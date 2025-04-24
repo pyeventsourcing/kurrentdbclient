@@ -24,6 +24,8 @@ from kurrentdbclient.streams import (
     StreamState,
 )
 
+__version__ = "1.0.1"
+
 __all__ = [
     "DEFAULT_EXCLUDE_FILTER",
     "KDB_PERSISTENT_CONFIG_EVENTS_REGEX",

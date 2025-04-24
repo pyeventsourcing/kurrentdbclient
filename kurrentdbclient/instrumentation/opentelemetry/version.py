@@ -1,1 +1,3 @@
-__version__ = "1.0"
+import kurrentdbclient
+
+__version__ = kurrentdbclient.__version__
