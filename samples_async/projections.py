@@ -1,4 +1,4 @@
-# ruff: noqa: EM101
+# ruff: noqa: EM101, F704, PLE1142
 # https://github.com/EventStore/EventStore-Client-NodeJS/blob/master/packages/test/src/samples/projection-management.ts
 import sys
 import traceback
@@ -6,7 +6,7 @@ from time import sleep
 from uuid import uuid4
 
 from kurrentdbclient import (
-    KurrentDBClient,
+    AsyncKurrentDBClient,
     NewEvent,
     StreamState,
     exceptions,
@@ -14,21 +14,20 @@ from kurrentdbclient import (
 from tests.test_client import get_server_certificate
 
 DEBUG = False
-_print = print
-
 
 def print(*args):  # noqa: A001
     if DEBUG:
-        _print(*args)
+        sys.stdout.write(" ".join([repr(arg) for arg in args]) + "\n")
 
 
 KDB_TARGET = "localhost:2114"
 qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
-client = KurrentDBClient(
+client = AsyncKurrentDBClient(
     uri=f"kdb://admin:changeit@{KDB_TARGET}?{qs}",
     root_certificates=get_server_certificate(KDB_TARGET),
 )
+await client.connect()
 
 # region CreateContinuous
 projection_name = f"count_events_{uuid4()}"
@@ -46,7 +45,7 @@ projection_query = """fromAll()
 .outputState();
 """
 
-client.create_projection(
+await client.create_projection(
     name=projection_name,
     query=projection_query,
 )
@@ -54,7 +53,7 @@ client.create_projection(
 
 # region CreateContinuous_Conflict
 try:
-    client.create_projection(
+    await client.create_projection(
         name=projection_name,
         query=projection_query,
     )
@@ -66,27 +65,27 @@ else:
 
 
 # region Enable
-client.enable_projection(name=projection_name)
+await client.enable_projection(name=projection_name)
 # endregion Enable
 
 # region EnableNotFound
 try:
-    client.enable_projection(name="does-not-exist")
+    await client.enable_projection(name="does-not-exist")
 except exceptions.NotFoundError:
     print("projection not found")
     # endregion EnableNotFound
 else:
     raise Exception("Projection exists")
 
-client.append_event(
+await client.append_events(
     stream_name=str(uuid4()),
-    event=NewEvent(type="SampleEvent", data=b"{}"),
+    events=[NewEvent(type="SampleEvent", data=b"{}")],
     current_version=StreamState.NO_STREAM,
 )
 sleep(0.5)
 
 # region GetStatus
-statistics = client.get_projection_statistics(name=projection_name)
+statistics = await client.get_projection_statistics(name=projection_name)
 print("Projection name:", statistics.name)
 print("Projection status:", statistics.status)
 print("Projection checkpoint status", statistics.checkpoint_status)
@@ -96,7 +95,7 @@ print("Projection progress:", statistics.progress)
 
 try:
     # region ListAll
-    list_of_statistics = client.list_all_projection_statistics()
+    list_of_statistics = await client.list_all_projection_statistics()
     # endregion ListAll
     print(list_of_statistics)
 except exceptions.ExceptionThrownByHandlerError:
@@ -109,7 +108,7 @@ except exceptions.ExceptionThrownByHandlerError:
 try:
     # region ListContinuous
     list_of_statistics = (
-        client.list_continuous_projection_statistics()
+        await client.list_continuous_projection_statistics()
     )
     # endregion ListContinuous
     print(list_of_statistics)
@@ -122,23 +121,23 @@ except exceptions.ExceptionThrownByHandlerError:
 
 
 # region GetState
-state = client.get_projection_state(name=projection_name)
+state = await client.get_projection_state(name=projection_name)
 print(f"Counted {state.value['count']} events")
 # endregion GetState
 
 # region GetResult
-state = client.get_projection_state(name=projection_name)
+state = await client.get_projection_state(name=projection_name)
 print(f"Counted {state.value['count']} events")
 # endregion GetResult
 
 
 # region Disable
-client.disable_projection(name=projection_name)
+await client.disable_projection(name=projection_name)
 # endregion Disable
 
 # region DisableNotFound
 try:
-    client.disable_projection(name="does-not-exist")
+    await client.disable_projection(name="does-not-exist")
 except exceptions.NotFoundError:
     print("projection not found")
     # endregion DisableNotFound
@@ -146,12 +145,12 @@ else:
     raise Exception("Projection exists")
 
 # region Abort
-client.abort_projection(name=projection_name)
+await client.abort_projection(name=projection_name)
 # endregion Abort
 
 # region Abort_NotFound
 try:
-    client.abort_projection(name="does-not-exist")
+    await client.abort_projection(name="does-not-exist")
 except exceptions.NotFoundError:
     print("projection not found")
     # endregion Abort_NotFound
@@ -159,12 +158,12 @@ else:
     raise Exception("Projection exists")
 
 # region Reset
-client.reset_projection(name=projection_name)
+await client.reset_projection(name=projection_name)
 # endregion Reset
 
 # region Reset_NotFound
 try:
-    client.reset_projection(name="does-not-exist")
+    await client.reset_projection(name="does-not-exist")
 except exceptions.NotFoundError:
     print("projection not found")
     # endregion Reset_NotFound
@@ -186,7 +185,7 @@ projection_query = """fromAll()
 .outputState();
 """
 
-client.update_projection(
+await client.update_projection(
     name=projection_name,
     query=projection_query,
 )
@@ -194,7 +193,7 @@ client.update_projection(
 
 # region Update_NotFound
 try:
-    client.update_projection(
+    await client.update_projection(
         name="does-not-exist",
         query=projection_query,
     )
@@ -206,15 +205,15 @@ else:
 
 # region Delete
 # A projection must be disabled before it can be deleted.
-client.disable_projection(name=projection_name)
+await client.disable_projection(name=projection_name)
 
 # The projection can now be deleted
-client.delete_projection(name=projection_name)
+await client.delete_projection(name=projection_name)
 # endregion Delete
 
 # region DeleteNotFound
 try:
-    client.delete_projection(name="does-not-exist")
+    await client.delete_projection(name="does-not-exist")
 except exceptions.NotFoundError:
     print("projection not found")
     # endregion DeleteNotFound
@@ -223,7 +222,7 @@ else:
 
 
 # region RestartSubSystem
-client.restart_projections_subsystem()
+await client.restart_projections_subsystem()
 # endregion RestartSubSystem
 
-client.close()
+await client.close()

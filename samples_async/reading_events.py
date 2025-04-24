@@ -1,8 +1,9 @@
-# ruff: noqa: EM101, S106
+# ruff: noqa: EM101, S106, F704, PLE1142
+import sys
 from uuid import uuid4
 
 from kurrentdbclient import (
-    KurrentDBClient,
+    AsyncKurrentDBClient,
     NewEvent,
     StreamState,
     exceptions,
@@ -12,18 +13,17 @@ from tests.test_client import get_server_certificate
 KDB_TARGET = "localhost:2114"
 qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
 
-client = KurrentDBClient(
+client = AsyncKurrentDBClient(
     uri=f"kdb://admin:changeit@{KDB_TARGET}?{qs}",
     root_certificates=get_server_certificate(KDB_TARGET),
 )
+await client.connect()
 
 DEBUG = False
-_print = print
-
 
 def print(*args):  # noqa: A001
     if DEBUG:
-        _print(*args)
+        sys.stdout.write(" ".join([repr(arg) for arg in args]) + "\n")
 
 
 stream_name = str(uuid4())
@@ -35,14 +35,14 @@ event_data = NewEvent(
 
 
 for _ in range(1):
-    client.append_to_stream(
+    await client.append_to_stream(
         stream_name=stream_name,
         current_version=StreamState.ANY,
         events=event_data,
     )
 
 # region read-from-stream
-events = client.get_stream(
+events = await client.get_stream(
     stream_name=stream_name,
     stream_position=0,
     limit=100,
@@ -62,7 +62,7 @@ credentials = client.construct_call_credentials(
     password="changeit",
 )
 
-events = client.get_stream(
+events = await client.get_stream(
     stream_name=stream_name,
     credentials=credentials,
 )
@@ -70,7 +70,7 @@ events = client.get_stream(
 
 
 # region read-from-stream-position
-events = client.get_stream(
+events = await client.get_stream(
     stream_name=stream_name,
     stream_position=10,
 )
@@ -78,7 +78,7 @@ events = client.get_stream(
 
 
 # region reading-backwards
-events = client.get_stream(
+events = await client.get_stream(
     stream_name=stream_name,
     backwards=True,
 )
@@ -89,7 +89,7 @@ unknown_stream_name = str(uuid4())
 
 # region checking-for-stream-presence
 try:
-    events = client.get_stream(
+    events = await client.get_stream(
         stream_name=unknown_stream_name,
         limit=1,
     )
@@ -101,7 +101,7 @@ else:
 
 
 # region read-from-all-stream
-events = client.read_all(
+events = await client.read_all(
     commit_position=0,
     limit=100,
 )
@@ -109,13 +109,13 @@ events = client.read_all(
 
 
 # region read-from-all-stream-iterate
-for event in events:
+async for event in events:
     print(f"Event: {event}")
 # endregion read-from-all-stream-iterate
 
 
 # region read-from-all-stream-resolving-link-Tos
-events = client.read_all(
+events = await client.read_all(
     commit_position=0,
     limit=100,
     resolve_links=True,
@@ -129,7 +129,7 @@ credentials = client.construct_call_credentials(
     password="changeit",
 )
 
-events = client.read_all(
+events = await client.read_all(
     commit_position=0,
     limit=100,
     credentials=credentials,
@@ -138,7 +138,7 @@ events = client.read_all(
 
 
 # region read-from-all-stream-backwards
-events = client.read_all(
+events = await client.read_all(
     backwards=True,
     limit=100,
 )
@@ -146,21 +146,21 @@ events = client.read_all(
 
 # Is this actually used?
 # region read-from-all-stream-backwards-iterate
-for event in events:
+async for event in events:
     print(f"Event: {event.type}")
 # endregion read-from-all-stream-backwards-iterate
 
 
 # region ignore-system-events
-events = client.read_all(
+events = await client.read_all(
     filter_exclude=[],  # system events are excluded by default
 )
 
-for event in events:
+async for event in events:
     if event.type.startswith("$"):
         continue
 
     print(f"Event: {event.type}")
 # endregion ignore-system-events
 
-client.close()
+await client.close()
