@@ -41,8 +41,8 @@ class RecordedEvent:
     id: UUID
     stream_name: str
     stream_position: int
-    commit_position: int | None
-    prepare_position: int | None
+    commit_position: int
+    prepare_position: int
     recorded_at: datetime | None = None
     link: RecordedEvent | None = None
     retry_count: int | None = None

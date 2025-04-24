@@ -730,13 +730,6 @@ are zero-based and increase monotonically as new events are recorded. But, unlik
 positions, the sequence of successive commit positions is not gapless. Indeed, there are
 usually large differences between the commit positions of successively recorded events.
 
-Please note, in KurrentDB 21.10, the `commit_position` of all `RecordedEvent` objects
-obtained from `read_stream()` is `None`, whereas those obtained from `read_all()` have
-the actual commit position of the recorded event. This was changed in version 22.10, so
-that event objects obtained from both `get_stream()` and `read_all()` have the actual
-commit position. The `commit_position` attribute of the `RecordedEvent` class is
-annotated with the type `Optional[int]` for this reason only.
-
 The `recorded_at` attribute is a Python `datetime`, used to indicate when an event was
 recorded by the database.
 
