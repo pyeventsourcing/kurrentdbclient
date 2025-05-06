@@ -24,39 +24,41 @@ install-poetry:
 	@pipx install --suffix="@$(POETRY_VERSION)" "poetry==$(POETRY_VERSION)"
 	$(POETRY) --version
 
-.PHONY: install-packages
-install-packages:
-	$(POETRY) --version
-	$(POETRY) install --no-root -vv $(opts)
-
 .PHONY: install
 install:
-	$(POETRY) --version
-	$(POETRY) install -vv $(opts)
+	$(POETRY) sync --all-extras $(opts)
 
-.PHONY: poetry-python-version
-poetry-python-version:
-	$(POETRY) run python --version
+.PHONY: update
+update: update-lock install
 
-.PHONY: install-pre-commit-hooks
-install-pre-commit-hooks:
-ifeq ($(opts),)
-	$(POETRY) run pre-commit install
-endif
+.PHONY: update-lock
+update-lock:
+	$(POETRY) update --lock -v
 
-.PHONY: uninstall-pre-commit-hooks
-uninstall-pre-commit-hooks:
-ifeq ($(opts),)
-	$(POETRY) run pre-commit uninstall
-endif
+.PHONY: fmt
+fmt: fmt-isort fmt-black fmt-ruff
 
-.PHONY: lock-packages
-lock-packages:
-	$(POETRY) lock -vv --no-update
+.PHONY: fmt-black
+fmt-black:
+	$(POETRY) run black --extend-exclude=samples .
+	$(POETRY) run black --line-length=$(SAMPLES_LINE_LENGTH) ./samples
 
-.PHONY: update-packages
-update-packages:
-	$(POETRY) update -vv
+.PHONY: fmt-ruff
+fmt-ruff:
+	$(POETRY) run ruff --fix kurrentdbclient tests
+
+.PHONY: fmt-ruff-unsafe
+fmt-ruff-unsafe:
+	$(POETRY) run ruff --fix --unsafe-fixes kurrentdbclient tests
+
+
+.PHONY: fmt-isort
+fmt-isort:
+	$(POETRY) run isort --extend-skip=samples .
+	$(POETRY) run isort --line-length=$(SAMPLES_LINE_LENGTH) samples
+
+.PHONY: lint
+lint: lint-python
 
 .PHONY: lint-black
 lint-black:
@@ -82,31 +84,6 @@ lint-mypy:
 
 .PHONY: lint-python
 lint-python: lint-black lint-ruff lint-isort lint-mypy
-
-.PHONY: lint
-lint: lint-python
-
-.PHONY: fmt-black
-fmt-black:
-	$(POETRY) run black --extend-exclude=samples .
-	$(POETRY) run black --line-length=$(SAMPLES_LINE_LENGTH) ./samples
-
-.PHONY: fmt-ruff
-fmt-ruff:
-	$(POETRY) run ruff --fix kurrentdbclient tests
-
-.PHONY: fmt-ruff-unsafe
-fmt-ruff-unsafe:
-	$(POETRY) run ruff --fix --unsafe-fixes kurrentdbclient tests
-
-
-.PHONY: fmt-isort
-fmt-isort:
-	$(POETRY) run isort --extend-skip=samples .
-	$(POETRY) run isort --line-length=$(SAMPLES_LINE_LENGTH) samples
-
-.PHONY: fmt
-fmt: fmt-isort fmt-black fmt-ruff
 
 .PHONY: test
 test:
