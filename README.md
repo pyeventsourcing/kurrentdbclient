@@ -3755,12 +3755,7 @@ to the root folder of the project files. There should be a Makefile
 in this folder.
 
 Use the Makefile to create a new Poetry virtual environment for the
-project and install the project's package dependencies into it,
-using the following command.
-
-    $ make install-packages
-
-It's also possible to also install the project in 'editable mode'.
+project and install the project.
 
     $ make install
 
@@ -3806,9 +3801,7 @@ Tests belong in `./tests`.
 
 Code-under-test belongs in `./kurrentdbclient`.
 
-Edit package dependencies in `pyproject.toml`.
+Edit package dependencies in `pyproject.toml`. Update the `poetry.lock` file, and
+the project's virtual environment, with the following command.
 
-Update the `poetry.lock` file, and the project's virtual environment, using the
-following command.
-
-    $ make update-packages
+    $ make update
