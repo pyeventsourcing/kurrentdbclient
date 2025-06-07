@@ -2978,7 +2978,11 @@ The `get_projection_state()` method can be used to get a projection's "state".
 This method has a required `name` argument, which is a Python `str` that
 specifies the name of a projection.
 
-This method also has two optional arguments, `timeout` and `credentials`.
+This method also has three optional arguments, `partition`, `timeout` and
+`credentials`.
+
+The optional `partition` argument is a Python `str` which can be used to read
+the state of a particular partition.
 
 The optional `timeout` argument is a Python `float` which sets a
 maximum duration, in seconds, for the completion of the gRPC operation.

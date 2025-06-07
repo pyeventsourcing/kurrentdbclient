@@ -1890,6 +1890,7 @@ class KurrentDBClient(BaseKurrentDBClient):
     def get_projection_state(
         self,
         name: str,
+        partition: str | None = None,
         *,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
@@ -1898,10 +1899,11 @@ class KurrentDBClient(BaseKurrentDBClient):
         Gets projection state.
         """
         timeout = timeout if timeout is not None else self._default_deadline
+        partition = partition if partition is not None else ""
 
         return self.projections.get_state(
             name=name,
-            partition="",
+            partition=partition,
             timeout=timeout,
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,
