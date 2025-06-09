@@ -6443,8 +6443,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         projection_query = (
             """
             fromStream('"""
-                + stream_name
-                + """')
+            + stream_name
+            + """')
             .partitionBy(function(event) {
                 return event.data.partition;
             })
@@ -6478,7 +6478,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.create_projection(query=projection_query, name=projection_name)
 
         statistics = self.client.get_projection_statistics(name=projection_name)
-        
+
         # Wait for four events to have been processed.
         for _ in range(100):
             if statistics.events_processed_after_restart < 3:
@@ -6487,7 +6487,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 continue
             break
         else:
-            self.fail("Timed out waiting for three events to be processed by projection")
+            self.fail(
+                "Timed out waiting for three events to be processed by projection"
+            )
 
         state = self.client.get_projection_state(name=projection_name, partition="1")
         self.assertEqual(1, state.value["count"])
@@ -6495,7 +6497,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(1, state.value["count"])
         state = self.client.get_projection_state(name=projection_name, partition="3")
         self.assertEqual(2, state.value["count"])
-        
+
     # def test_get_projection_result(self) -> None:
     #     self.construct_esdb_client()
     #     projection_name = str(uuid4())
