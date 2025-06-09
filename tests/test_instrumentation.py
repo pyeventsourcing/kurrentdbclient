@@ -16,7 +16,6 @@ from typing import (
 from unittest import IsolatedAsyncioTestCase, TestCase
 from uuid import uuid4
 
-# import opentelemetry.instrumentation.version as instrumentation_version
 import opentelemetry.instrumentation.grpc.version as instrumentation_grpc_version
 import opentelemetry.sdk.trace as trace_sdk
 import opentelemetry.sdk.version as sdk_version
@@ -27,16 +26,15 @@ from opentelemetry.instrumentation.grpc import (
     GrpcAioInstrumentorClient,
     GrpcInstrumentorClient,
 )
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.resources import Resource  # type: ignore[attr-defined]
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
     SimpleSpanProcessor,
     SpanExporter,
 )
-
-# from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.semconv.attributes.service_attributes import SERVICE_NAME
 from opentelemetry.trace import (
     INVALID_SPAN_CONTEXT,
     SpanContext,
@@ -46,6 +44,7 @@ from opentelemetry.trace import (
     set_tracer_provider,
 )
 
+import kurrentdbclient
 from kurrentdbclient import (
     AsyncKurrentDBClient,
     KurrentDBClient,
@@ -62,6 +61,7 @@ from kurrentdbclient.exceptions import (
 from kurrentdbclient.instrumentation.opentelemetry import (
     AsyncKurrentDBClientInstrumentor,
     KurrentDBClientInstrumentor,
+    version,
 )
 from kurrentdbclient.instrumentation.opentelemetry.spanners import (
     _enrich_span,
@@ -1034,7 +1034,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
         instrumentation_scope_name: str = (
             "kurrentdbclient.instrumentation.opentelemetry"
         ),
-        instrumentation_scope_version: str = "1.0",
+        instrumentation_scope_version: str = version.__version__,
         span_attributes: dict[str, Any] | None = None,
         error: Exception | None = None,
         server_port: str | None = None,
@@ -1345,7 +1345,9 @@ class TestUtils(
     KurrentDBClientInstrumentorTestCase, BaseUtilsTestCase[KurrentDBClient]
 ):
     def test_span_helpers(self) -> None:
-        tracer = get_tracer("kurrentdbclient.instrumentation.opentelemetry", "1.0")
+        tracer = get_tracer(
+            kurrentdbclient.instrumentation.opentelemetry.__name__, version.__version__
+        )
         client = self.construct_client()
         self.check_spans(num_spans=0)
         with _start_span(tracer, "test_enrich_span1", SpanKind.INTERNAL) as span:
