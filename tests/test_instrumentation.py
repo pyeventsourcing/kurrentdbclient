@@ -26,7 +26,7 @@ from opentelemetry.instrumentation.grpc import (
     GrpcAioInstrumentorClient,
     GrpcInstrumentorClient,
 )
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.resources import Resource  # type: ignore[attr-defined]
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
@@ -34,6 +34,7 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
 )
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.semconv.attributes.service_attributes import SERVICE_NAME
 from opentelemetry.trace import (
     INVALID_SPAN_CONTEXT,
     SpanContext,
