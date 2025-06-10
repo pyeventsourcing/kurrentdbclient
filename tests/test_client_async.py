@@ -2669,6 +2669,77 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         state = await self.client.get_projection_state(name=projection_name, timeout=1)
         self.assertEqual(state.value, {})
 
+    async def test_get_projection_state_partition(self) -> None:
+        stream_name = "stream-partitioned-projection-" + str(uuid4())
+        projection_name = str(uuid4())
+        projection_query = (
+            """
+            fromStream('"""
+            + stream_name
+            + """')
+            .partitionBy(function(event) {
+                return event.data.partition;
+            })
+            .when({
+                $init: function(){
+                    return {
+                        count: 0
+                    };
+                },
+                PartitionedEvent: function(state, event){
+                    state.count += 1;
+                    return state;
+                }
+            });
+            """
+        )
+
+        events = [
+            NewEvent(type="PartitionedEvent", data=b'{"partition": 1}'),
+            NewEvent(type="PartitionedEvent", data=b'{"partition": 2}'),
+            NewEvent(type="PartitionedEvent", data=b'{"partition": 3}'),
+            NewEvent(type="PartitionedEvent", data=b'{"partition": 3}'),
+        ]
+        await self.client.append_events(
+            stream_name=stream_name,
+            events=events,
+            current_version=StreamState.ANY,
+        )
+
+        # Create named projection (query is an empty string).
+        await self.client.create_projection(
+            query=projection_query, name=projection_name
+        )
+
+        statistics = await self.client.get_projection_statistics(name=projection_name)
+
+        # Wait for four events to have been processed.
+        for _ in range(100):
+            if statistics.events_processed_after_restart < 3:
+                await asyncio.sleep(0.1)
+                statistics = await self.client.get_projection_statistics(
+                    name=projection_name
+                )
+                continue
+            break
+        else:
+            self.fail(
+                "Timed out waiting for three events to be processed by projection"
+            )
+
+        state = await self.client.get_projection_state(
+            name=projection_name, partition="1"
+        )
+        self.assertEqual(1, state.value["count"])
+        state = await self.client.get_projection_state(
+            name=projection_name, partition="2"
+        )
+        self.assertEqual(1, state.value["count"])
+        state = await self.client.get_projection_state(
+            name=projection_name, partition="3"
+        )
+        self.assertEqual(2, state.value["count"])
+
     # async def test_get_projection_result(self) -> None:
     #     projection_name = str(uuid4())
     #

@@ -1469,8 +1469,8 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
     @autoreconnect
     async def get_projection_statistics(
         self,
-        *,
         name: str,
+        *,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
     ) -> ProjectionStatistics:
@@ -1617,6 +1617,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
     async def get_projection_state(
         self,
         name: str,
+        partition: str = "",
         *,
         timeout: float | None = None,
         credentials: grpc.CallCredentials | None = None,
@@ -1628,7 +1629,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
 
         return await self._connection.projections.get_state(
             name=name,
-            partition="",
+            partition=partition,
             timeout=timeout,
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,

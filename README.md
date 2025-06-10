@@ -2997,7 +2997,7 @@ We can see that the projection has processed three events.
 ```python
 sleep(1)  # allow time for projection to process recorded events
 
-projection_state = client.get_projection_state(name=projection_name)
+projection_state = client.get_projection_state(projection_name)
 
 assert projection_state.value == {'count': 3}
 ```
@@ -3034,7 +3034,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.update_projection(name=projection_name, query=projection_query)
+client.update_projection(projection_name, query=projection_query)
 ```
 
 ### Get projection statistics<a id="get-projection-statistics"></a>
@@ -3058,7 +3058,7 @@ This method returns a `ProjectionStatistics` object that represents
 the named projection.
 
 ```python
-statistics = client.get_projection_statistics(name=projection_name)
+statistics = client.get_projection_statistics(projection_name)
 ```
 
 A `ProjectionStatistics` object is returned. The attributes of this object
@@ -3126,7 +3126,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.disable_projection(name=projection_name)
+client.disable_projection(projection_name)
 ```
 
 ### Enable projection<a id="enable-projection"></a>
@@ -3148,7 +3148,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.enable_projection(name=projection_name)
+client.enable_projection(projection_name)
 ```
 
 ### Abort projection<a id="abort-projection"></a>
@@ -3171,7 +3171,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.abort_projection(name=projection_name)
+client.abort_projection(projection_name)
 ```
 
 ### Reset projection<a id="reset-projection"></a>
@@ -3192,7 +3192,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.reset_projection(name=projection_name)
+client.reset_projection(projection_name)
 ```
 
 Please note, a projection must be disabled before it can be reset.
@@ -3231,7 +3231,7 @@ The optional `credentials` argument can be used to
 override call credentials derived from the connection string URI.
 
 ```python
-client.delete_projection(name=projection_name)
+client.delete_projection(projection_name)
 ```
 
 Please note, a projection must be disabled before it can be deleted.
