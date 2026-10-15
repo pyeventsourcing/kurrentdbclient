@@ -214,12 +214,21 @@ class BaseKurrentDBClient(ABC):
         )
         if self.connection_spec.options.keep_alive_interval is not None:
             self.grpc_options += (
-                ("grpc.keepalive_ms", self.connection_spec.options.keep_alive_interval),
+                (
+                    "grpc.keepalive_time_ms",
+                    self.connection_spec.options.keep_alive_interval,
+                ),
             )
         if self.connection_spec.options.keep_alive_timeout is not None:
             self.grpc_options += (
                 (
                     "grpc.keepalive_timeout_ms",
+                    self.connection_spec.options.keep_alive_timeout,
+                ),
+                # gRPC closes a connection whose ping is not answered after
+                # this time (default 60s), not after keepalive_timeout_ms.
+                (
+                    "grpc.http2.ping_timeout_ms",
                     self.connection_spec.options.keep_alive_timeout,
                 ),
             )

@@ -8708,8 +8708,10 @@ class TestGrpcOptions(TestCase):
             options_dict["grpc.max_receive_message_length"],
             17 * 1024 * 1024,
         )
-        self.assertEqual(options_dict["grpc.keepalive_ms"], 1234)
+        self.assertEqual(options_dict["grpc.keepalive_time_ms"], 1234)
+        self.assertNotIn("grpc.keepalive_ms", options_dict)
         self.assertEqual(options_dict["grpc.keepalive_timeout_ms"], 5678)
+        self.assertEqual(options_dict["grpc.http2.ping_timeout_ms"], 5678)
 
 
 class TestRequiresLeaderHeader(TimedTestCase):
