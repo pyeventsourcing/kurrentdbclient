@@ -24,7 +24,26 @@
 #KURRENTDB_DOCKER_IMAGE ?= docker.kurrent.io/kurrent-latest/kurrentdb:25.0.1-x64-8.0-bookworm-slim
 #KURRENTDB_DOCKER_IMAGE ?= docker.kurrent.io/kurrent-latest/kurrentdb:25.1.0-x64-8.0-bookworm-slim
 #KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.0.2   # somehow test suite doesn't complete (hangs on creating a projection in docs/api/projections.md line 159 when run with full test suite)
-KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.0
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.0
+
+
+# What's in Docker Hub on 16th October 2026:
+#KURRENTDB_DOCKER_IMAGE ?= eventstore/eventstore:23.10.8-bookworm-slim
+#KURRENTDB_DOCKER_IMAGE ?= eventstore/eventstore:24.10.16
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.0.1
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.1.4
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.0.3
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.3
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.2.2
+
+# Verified locally on 16th October 2026:
+#KURRENTDB_DOCKER_IMAGE ?= eventstore/eventstore:23.10.8-bookworm-slim
+#KURRENTDB_DOCKER_IMAGE ?= eventstore/eventstore:24.10.16
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.0.1
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.1.4
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.0.3
+KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.3
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.2.2  # cluster requires licence
 
 PYTHONUNBUFFERED=1
 PYTHONPATH=./tests
@@ -153,6 +172,7 @@ start-kurrentdb-insecure:
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
     --env "EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true" \
+    --env "EVENTSTORE_TELEMETRY_OPTOUT=true" \
     --name my-kurrentdb-insecure \
     $(KURRENTDB_DOCKER_IMAGE) \
     --insecure
@@ -171,6 +191,7 @@ start-kurrentdb-secure:
     --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2114" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
     --env "EVENTSTORE_START_STANDARD_PROJECTIONS=true" \
+    --env "EVENTSTORE_TELEMETRY_OPTOUT=true" \
     --name my-kurrentdb-secure \
     $(KURRENTDB_DOCKER_IMAGE) \
     --dev

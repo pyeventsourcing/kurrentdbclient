@@ -107,9 +107,13 @@ if TYPE_CHECKING:
 started = datetime.datetime.now()
 last = datetime.datetime.now()
 
+# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "23.10")
+# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "24.10")
+# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.0")
 # KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.1")
 # KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.0")
 KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.1")
+# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.2")
 
 if "21.9" in KURRENTDB_DOCKER_IMAGE:
     SERVER_VERSION = (21, 9)
@@ -131,6 +135,8 @@ elif "26.0" in KURRENTDB_DOCKER_IMAGE:
     SERVER_VERSION = (26, 0)
 elif "26.1" in KURRENTDB_DOCKER_IMAGE:
     SERVER_VERSION = (26, 1)
+elif "26.2" in KURRENTDB_DOCKER_IMAGE:
+    SERVER_VERSION = (26, 2)
 else:
     msg = "Couldn't extract server version from KURRENTDB_DOCKER_IMAGE"
     raise ValueError(msg)
