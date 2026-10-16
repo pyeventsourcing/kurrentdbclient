@@ -25,7 +25,7 @@ features are presented in an easy-to-use interface.
 These clients have been tested to work with KurrentDB versions 25.0, 25.1, 26.0,
 and 26.1, and EventStoreDB versions 23.10 and 24.10, with and without SSL/TLS,
 in both single-server and cluster modes, across Python versions 3.10, 3.11, 3.12,
-3.13, and 3.14.
+3.13, 3.14, and 3.15.
 
 The test suite has 100% line and branch coverage. The code has typing annotations
 checked strictly with mypy. The code is formatted with black and isort, and checked
