@@ -208,6 +208,7 @@ class BaseKurrentDBClient(ABC):
 
         self._default_deadline = self.connection_spec.options.default_deadline
 
+        # GRPC options ref: https://grpc.github.io/grpc/core/group__grpc__arg__keys.html
         self.grpc_options: GrpcOptions = (
             ("grpc.max_receive_message_length", 17 * 1024 * 1024),
         )
