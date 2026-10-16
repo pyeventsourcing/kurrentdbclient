@@ -21,6 +21,7 @@ from weakref import WeakValueDictionary
 
 import grpc
 import grpc.aio
+from grpc.aio import AioRpcError
 from grpc_status import rpc_status
 from typing_extensions import Self
 
@@ -627,16 +628,23 @@ class AsyncRecordedEventIterator(
         self._is_context_manager_active = False
         await self.stop(timeout=5)
 
-    def _set_iter_error_for_testing(self) -> None:
+    def _set_iter_error_for_testing(self, msg: str) -> None:
         # This, because I can't find a good way to inspire an error during iterating
         # with catchup and persistent subscriptions after successfully
         # receiving confirmation response, tried closing the channel
         # but the async streaming response continues (unlike with sync call). Needed
         # to inspire this error to test instrumentation span error during iteration.
-        self._iter_error_for_testing = True
+        self._iter_error_for_testing = msg
 
-    def _has_iter_error_for_testing(self) -> bool:
-        return getattr(self, "_iter_error_for_testing", False)
+    def _check_iter_error_for_testing(self) -> None:
+        if msg := getattr(self, "_iter_error_for_testing", ""):
+            raise AioRpcError(
+                grpc.StatusCode.INTERNAL,
+                grpc.aio.Metadata(),
+                grpc.aio.Metadata(),
+                msg,
+                "",
+            )
 
 
 class AbstractAsyncReadResponse(AsyncRecordedEventIterator):

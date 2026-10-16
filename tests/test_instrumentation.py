@@ -34,7 +34,10 @@ from opentelemetry.sdk.trace.export import (  # ConsoleSpanExporter,
     SpanExporter,
 )
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.semconv.attributes.service_attributes import SERVICE_NAME
+from opentelemetry.semconv.attributes.service_attributes import (
+    SERVICE_INSTANCE_ID,
+    SERVICE_NAME,
+)
 from opentelemetry.trace import (
     INVALID_SPAN_CONTEXT,
     SpanContext,
@@ -95,6 +98,16 @@ if TYPE_CHECKING:
 
 _in_memory_span_exporter = InMemorySpanExporter()
 
+RESOURCE_SERVICE_INSTANCE_ID = "test-instance"
+RESOURCE_SERVICE_NAME = "kurrentdb"
+EXPECTED_RESOURCE_ATTRIBUTES = {
+    "telemetry.sdk.language": "python",
+    "telemetry.sdk.name": "opentelemetry",
+    "telemetry.sdk.version": sdk_version.__version__,
+    "service.instance.id": RESOURCE_SERVICE_INSTANCE_ID,
+    "service.name": RESOURCE_SERVICE_NAME,
+}
+
 
 def init_tracer_provider(
     span_exporters: Sequence[SpanExporter] = (),
@@ -104,7 +117,8 @@ def init_tracer_provider(
 ) -> None:
     resource = Resource.create(
         attributes={
-            SERVICE_NAME: "kurrentdb",
+            SERVICE_INSTANCE_ID: RESOURCE_SERVICE_INSTANCE_ID,
+            SERVICE_NAME: RESOURCE_SERVICE_NAME,
         }
     )
     provider = TracerProvider(resource=resource)
@@ -916,13 +930,7 @@ class TestApplySpanner(IsolatedAsyncioTestCase):
         self.assertIn(__name__, span.instrumentation_scope.name)
 
         # Check the span's resource attributes.
-        resource_attributes = {
-            "service.name": "kurrentdb",
-            "telemetry.sdk.language": "python",
-            "telemetry.sdk.name": "opentelemetry",
-            "telemetry.sdk.version": sdk_version.__version__,
-        }
-        self.assertEqual(resource_attributes, span.resource.attributes)
+        self.assertEqual(EXPECTED_RESOURCE_ATTRIBUTES, span.resource.attributes)
 
         # Check span parent.
         if parent_span_index is not None:
@@ -1037,7 +1045,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
             "kurrentdbclient.instrumentation.opentelemetry"
         ),
         instrumentation_scope_version: str = version.__version__,
-        span_attributes: dict[str, Any] | None = None,
+        expected_span_attributes: dict[str, Any] | None = None,
         error: Exception | None = None,
         server_port: str | None = None,
         rpc_service: str = "",
@@ -1086,19 +1094,16 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
         )
 
         # Check the span's resource attributes.
-        resource_attributes = {
-            "service.name": "kurrentdb",
-            "telemetry.sdk.language": "python",
-            "telemetry.sdk.name": "opentelemetry",
-            "telemetry.sdk.version": sdk_version.__version__,
-        }
-        self.assertEqual(resource_attributes, span.resource.attributes)
+        self.assertEqual(EXPECTED_RESOURCE_ATTRIBUTES, span.resource.attributes)
 
         # Check the span attributes.
-
-        span_attributes = {} if span_attributes is None else deepcopy(span_attributes)
+        expected_span_attributes = (
+            {}
+            if expected_span_attributes is None
+            else deepcopy(expected_span_attributes)
+        )
         if rpc_service == "":
-            span_attributes.update(
+            expected_span_attributes.update(
                 {
                     "db.system": "kurrentdb",
                     "db.user": "admin",
@@ -1107,7 +1112,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
                 }
             )
         else:
-            span_attributes.update(
+            expected_span_attributes.update(
                 {
                     "rpc.grpc.status_code": rpc_status_code,
                     "rpc.method": rpc_method,
@@ -1118,7 +1123,7 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
 
         self.assertIsNotNone(span.attributes)
         assert span.attributes is not None  # for mypy
-        self.assertEqual(span_attributes, dict(span.attributes))
+        self.assertEqual(expected_span_attributes, dict(span.attributes))
 
         # Check span status and span events.
         if error is None:
@@ -1241,7 +1246,7 @@ class KurrentDBClientInstrumentorTestCase(BaseKurrentDBClientTestCase[KurrentDBC
                 parent_span_index=parent_span_index,
                 span_name="streams.subscribe",
                 span_kind=trace_api.SpanKind.CONSUMER,
-                span_attributes={
+                expected_span_attributes={
                     "db.operation": "streams.subscribe",
                     "db.kurrentdb.event.id": str(recorded_event.id),
                     "db.kurrentdb.event.type": recorded_event.type,
@@ -1322,7 +1327,7 @@ class AsyncKurrentDBClientInstrumentorTestCase(
                 parent_span_index=parent_span_index,
                 span_name="streams.subscribe",
                 span_kind=trace_api.SpanKind.CONSUMER,
-                span_attributes={
+                expected_span_attributes={
                     "db.operation": "streams.subscribe",
                     "db.kurrentdb.event.id": str(recorded_event.id),
                     "db.kurrentdb.event.type": recorded_event.type,
@@ -1364,7 +1369,7 @@ class TestUtils(
             span_index=0,
             span_name="test_enrich_span1",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.operation": "test1"},
+            expected_span_attributes={"db.operation": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span2", SpanKind.INTERNAL) as span:
@@ -1379,7 +1384,7 @@ class TestUtils(
             span_index=1,
             span_name="test_enrich_span2",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.kurrentdb.stream": "test1"},
+            expected_span_attributes={"db.kurrentdb.stream": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span3", SpanKind.INTERNAL) as span:
@@ -1394,7 +1399,7 @@ class TestUtils(
             span_index=2,
             span_name="test_enrich_span3",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.kurrentdb.subscription.id": "test1"},
+            expected_span_attributes={"db.kurrentdb.subscription.id": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span4", SpanKind.INTERNAL) as span:
@@ -1409,7 +1414,7 @@ class TestUtils(
             span_index=3,
             span_name="test_enrich_span4",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.kurrentdb.event.id": "test1"},
+            expected_span_attributes={"db.kurrentdb.event.id": "test1"},
         )
 
         with _start_span(tracer, "test_enrich_span5", SpanKind.INTERNAL) as span:
@@ -1424,7 +1429,7 @@ class TestUtils(
             span_index=4,
             span_name="test_enrich_span5",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={"db.kurrentdb.event.type": "test1"},
+            expected_span_attributes={"db.kurrentdb.event.type": "test1"},
         )
 
         # Check doesn't enrich when span has ended.
@@ -1451,7 +1456,7 @@ class TestUtils(
             span_index=5,
             span_name="test_enrich_span6",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={},
+            expected_span_attributes={},
         )
 
         # Check doesn't enrich when span has ended.
@@ -1478,7 +1483,7 @@ class TestUtils(
             span_index=6,
             span_name="test_enrich_span7",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={},
+            expected_span_attributes={},
         )
 
         # Check _set_span_error.
@@ -1498,7 +1503,7 @@ class TestUtils(
             span_index=7,
             span_name="test_enrich_span8",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={},
+            expected_span_attributes={},
             error=error,
         )
 
@@ -1542,7 +1547,7 @@ class TestUtils(
             span_index=10,
             span_name="test_enrich_span11",
             span_kind=SpanKind.INTERNAL,
-            span_attributes={},
+            expected_span_attributes={},
         )
 
     def test_propagate_context_via_events(self) -> None:
@@ -1687,7 +1692,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1742,7 +1747,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1762,7 +1767,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1811,7 +1816,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1866,7 +1871,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1886,7 +1891,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -1941,7 +1946,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -1993,7 +1998,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -2015,7 +2020,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -2078,7 +2083,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
@@ -2094,7 +2099,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2160,7 +2165,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
@@ -2176,7 +2181,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2249,7 +2254,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
@@ -2266,7 +2271,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2339,7 +2344,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
@@ -2355,7 +2360,7 @@ class TestWhatAlexeyAskedFor(KurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2408,7 +2413,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -2464,7 +2469,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -2484,7 +2489,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -2530,7 +2535,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -2584,7 +2589,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -2606,7 +2611,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.multi-append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.multi-append",
                 # "db.kurrentdb.stream": stream_name,
             },
@@ -2657,28 +2662,35 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         # Check wrapper supports stop().
         await subscription.stop()
 
-        # Check there are still four spans.
+        # Check there are still three spans.
         self.check_spans(num_spans=3)
 
         # Check span after error during iteration.
         subscription = await client.subscribe_to_stream(stream_name)
-        subscription._set_iter_error_for_testing()
-        await self.async_break_client_connection(client)
+        subscription._set_iter_error_for_testing("injected_subscribe_to_stream_error")
 
         with self.assertRaises(GrpcError) as cm:
             await subscription.__anext__()
+
+        self.assertEqual(
+            "injected_subscribe_to_stream_error",
+            str(cm.exception),
+        )
 
         self.check_spans(
             num_spans=4,
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
+
+        # Break the connection.
+        await self.async_break_client_connection(client)
 
         # Check span after error during method call.
         with self.assertRaises(ServiceUnavailableError) as cm:
@@ -2689,7 +2701,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2740,28 +2752,35 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         # Check wrapper supports stop().
         await subscription.stop()
 
-        # Check there are still four spans.
+        # Check there are still three spans.
         self.check_spans(num_spans=3)
 
         # Check span after error during iteration.
         subscription = await client.subscribe_to_all(commit_position=commit_position)
-        subscription._set_iter_error_for_testing()
-        await self.async_break_client_connection(client)
+        subscription._set_iter_error_for_testing("injected_subscribe_to_all_error")
 
         with self.assertRaises(GrpcError) as cm:
             await subscription.__anext__()
+
+        self.assertEqual(
+            "injected_subscribe_to_all_error",
+            str(cm.exception),
+        )
 
         self.check_spans(
             num_spans=4,
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
+
+        # Break the client connection.
+        await self.async_break_client_connection(client)
 
         # Check span after error during method call.
         with self.assertRaises(ServiceUnavailableError) as cm:
@@ -2772,7 +2791,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2835,17 +2854,24 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         group_name = "instrumentation-test-" + str(uuid4())
         await client.create_subscription_to_stream(group_name, stream_name)
         subscription = await client.read_subscription_to_stream(group_name, stream_name)
-        subscription._set_iter_error_for_testing()
+        subscription._set_iter_error_for_testing(
+            "injected_read_subscription_to_stream_error"
+        )
 
         with self.assertRaises(GrpcError) as cm:
             await subscription.__anext__()
+
+        self.assertEqual(
+            "injected_read_subscription_to_stream_error",
+            str(cm.exception),
+        )
 
         self.check_spans(
             num_spans=4,
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
@@ -2853,6 +2879,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         )
         await subscription.stop()
 
+        # Break the client connection.
         await self.async_break_client_connection(client)
 
         # Check span after error during method call.
@@ -2864,7 +2891,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2927,24 +2954,34 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
         group_name = "instrumentation-test-" + str(uuid4())
         await client.create_subscription_to_all(group_name)
         subscription = await client.read_subscription_to_all(group_name)
-        subscription._set_iter_error_for_testing()
+        subscription._set_iter_error_for_testing(
+            "injected_read_subscription_to_all_error"
+        )
+
         with self.assertRaises(GrpcError) as cm:
             await subscription.__anext__()
+
+        self.assertEqual(
+            "injected_read_subscription_to_all_error",
+            str(cm.exception),
+        )
 
         self.check_spans(
             num_spans=4,
             span_index=3,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
                 "db.kurrentdb.subscription.id": subscription.subscription_id,
             },
             error=cm.exception,
         )
 
-        # Check span after error during method call.
+        # Break the client connection.
         await self.async_break_client_connection(client)
+
+        # Check span after error during method call.
         with self.assertRaises(ServiceUnavailableError) as cm:
             await client.read_subscription_to_all(group_name)
 
@@ -2953,7 +2990,7 @@ class AsyncTestWhatAlexeyAskedFor(AsyncKurrentDBClientInstrumentorTestCase):
             span_index=4,
             span_name="streams.subscribe",
             span_kind=trace_api.SpanKind.CONSUMER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.subscribe",
             },
             error=cm.exception,
@@ -2997,7 +3034,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3012,7 +3049,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3027,7 +3064,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3044,7 +3081,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3061,7 +3098,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3079,7 +3116,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -3126,7 +3163,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3139,7 +3176,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[0].id),
@@ -3154,7 +3191,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[1].id),
@@ -3169,7 +3206,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[2].id),
@@ -3184,7 +3221,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -3196,7 +3233,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.get_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3248,7 +3285,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3263,7 +3300,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncKurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncKurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3278,7 +3315,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3295,7 +3332,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3312,7 +3349,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3330,7 +3367,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
             },
         )
@@ -3377,7 +3414,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="AsyncKurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncKurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3390,7 +3427,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[0].id),
@@ -3405,7 +3442,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[1].id),
@@ -3420,7 +3457,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[2].id),
@@ -3435,7 +3472,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=6,
             span_name="AsyncReadResponse.__anext__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncReadResponse.__anext__",
             },
         )
@@ -3447,7 +3484,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             parent_span_index=None,
             span_name="AsyncKurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "AsyncKurrentDBClient.get_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3533,7 +3570,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3547,7 +3584,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3563,7 +3600,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3579,7 +3616,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3608,7 +3645,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -3645,7 +3682,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=8,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3657,7 +3694,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[0].id),
@@ -3671,7 +3708,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[1].id),
@@ -3685,7 +3722,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[2].id),
@@ -3711,7 +3748,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -3722,7 +3759,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             parent_span_index=None,
             span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.get_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3797,7 +3834,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="streams.append",
             span_kind=trace_api.SpanKind.PRODUCER,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "streams.append",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3811,7 +3848,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3825,7 +3862,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3841,7 +3878,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3857,7 +3894,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_event.id),
@@ -3886,7 +3923,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -3924,7 +3961,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=8,
             span_name="KurrentDBClient.read_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.read_stream",
                 "db.kurrentdb.stream": stream_name,
             },
@@ -3937,7 +3974,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[0].id),
@@ -3952,7 +3989,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[1].id),
@@ -3967,7 +4004,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
                 "db.kurrentdb.stream": stream_name,
                 "db.kurrentdb.event.id": str(recorded_events[2].id),
@@ -3994,7 +4031,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=8,
             span_name="ReadResponse.__next__",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "ReadResponse.__next__",
             },
         )
@@ -4006,7 +4043,7 @@ class AsyncTestReadAndGetStreamWithGrpcInstrumentor(
             parent_span_index=None,
             span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
-            span_attributes={
+            expected_span_attributes={
                 "db.operation": "KurrentDBClient.get_stream",
             },
         )

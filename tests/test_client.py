@@ -2096,11 +2096,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # self.client.append_events(stream_name, current_version=1, events=[event3])
 
         sleep(0.1)  # sometimes we need to wait a little bit for KurrentDB
+        # Todo: Flaky behaviour: Sometimes we get StreamState.NO_STREAM.
         self.assertEqual(2, self.client.get_current_version(stream_name))
         self.client.append_events(stream_name, current_version=2, events=[event4])
 
         # Can read from deleted stream if new events have been appended.
-        # Todo: This behaviour is a little bit flakey? Sometimes we get NotFound.
+        # Todo: Flaky behaviour? Sometimes we get NotFound.
         sleep(0.1)
         events = self.client.get_stream(stream_name)
         # Expect only to get events appended after stream was deleted.
@@ -2315,7 +2316,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.append_events(stream_name, current_version=1, events=[event3])
 
         # Can read from deleted stream if new events have been appended.
-        # Todo: This behaviour is a little bit flakey? Sometimes we get NotFound.
+        # Todo: Flaky behaviour: Sometimes we get NotFound.
         sleep(0.1)
         events = self.client.get_stream(stream_name)
         # Expect only to get events appended after stream was deleted.
@@ -2398,7 +2399,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Can read from deleted stream if new events have been appended.
-        # Todo: This behaviour is a little bit flakey? Sometimes we get NotFound.
+        # Todo: Flaky behaviour: Sometimes we get NotFound.
         sleep(0.1)
         events = self.client.get_stream(stream_name)
         # Expect only to get events appended after stream was deleted.
@@ -3630,6 +3631,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.client.replay_parked_events(group_name=group_name)
 
         replayed_events = []
+        # Todo: Flaky behaviour: Sometimes raises GrpcDeadlineExceededError,
+        #  in other words doesn't complete within 30s (timeout value above).
         for event in subscription:
             subscription.ack(event)
             replayed_events.append(event)
@@ -7145,6 +7148,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Check project result stream.
         result_stream_name = f"$projections-{projection_name}-result"
+        # Todo: Flaky behaviour: Sometimes raises NotFoundError.
         result_events = self.client.get_stream(result_stream_name)
         self.assertEqual(2, len(result_events))
         self.assertEqual("Result", result_events[0].type)

@@ -14,7 +14,6 @@ from uuid import UUID, uuid4
 import grpc
 import grpc.aio
 from google.protobuf import any_pb2, duration_pb2, empty_pb2
-from grpc.aio import AioRpcError
 from typing_extensions import Protocol
 
 from kurrentdbclient.common import (
@@ -186,14 +185,7 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
             while True:
                 read_resp = await self._read_resp_iter.__anext__()
                 await self._read_resp_queue.put(read_resp)
-                if self._has_iter_error_for_testing():
-                    raise AioRpcError(
-                        grpc.StatusCode.INTERNAL,
-                        grpc.aio.Metadata(),
-                        grpc.aio.Metadata(),
-                        "",
-                        "",
-                    )
+                self._check_iter_error_for_testing()
         except StopAsyncIteration:
             # End of the stream, signal to end the iteration.
             await self._read_resp_queue.put(None)

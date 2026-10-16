@@ -966,8 +966,8 @@ class TracedAsyncRecordedEventIterator(
     async def __aexit__(self, *args: object, **kwargs: Any) -> None:
         return await self.response.__aexit__(*args, **kwargs)
 
-    def _set_iter_error_for_testing(self) -> None:
-        self.response._set_iter_error_for_testing()
+    def _set_iter_error_for_testing(self, msg: str) -> None:
+        self.response._set_iter_error_for_testing(msg)
 
     def __del__(self) -> None:
         current_span = self._current_span

@@ -18,7 +18,7 @@ from typing import (
 from uuid import UUID
 
 import grpc
-from grpc.aio import AioRpcError, StreamStreamCall
+from grpc.aio import StreamStreamCall
 from typing_extensions import Protocol, Self, TypedDict
 
 from kurrentdbclient.common import (
@@ -523,14 +523,7 @@ class AsyncPersistentSubscription(
             while True:
                 read_resp = await self._read_resp_iter.__anext__()
                 await self._read_resp_queue.put(read_resp)
-                if self._has_iter_error_for_testing():
-                    raise AioRpcError(
-                        grpc.StatusCode.INTERNAL,
-                        grpc.aio.Metadata(),
-                        grpc.aio.Metadata(),
-                        "",
-                        "",
-                    )
+                self._check_iter_error_for_testing()
         except BaseException:
             # Drain the queue (to avoid blocking on put).
             try:
