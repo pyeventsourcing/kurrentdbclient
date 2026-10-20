@@ -42,8 +42,13 @@
 #KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.0.1
 #KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:25.1.4
 #KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.0.3
-KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.3
-#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.2.2  # cluster requires licence
+#KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.1.3
+# note, 26.2 cluster requires licence
+KURRENTDB_DOCKER_IMAGE ?= kurrentplatform/kurrentdb:26.2.2
+
+# On MacOS, set this up with: `security add-generic-password -a $USER -s "KurrentDB_License" -w "your-license-key"`
+# On GitHub, set this up with a actions secret.
+KURRENTDB_LICENSING__LICENSE_KEY ?= $(shell security find-generic-password -a $(USER) -s "KurrentDB_License" -w 2>/dev/null)
 
 PYTHONUNBUFFERED=1
 PYTHONPATH=./tests
@@ -167,6 +172,7 @@ start-kurrentdb-insecure:
     --env "KURRENTDB_ENABLE_ATOM_PUB_OVER_HTTP=true" \
     --env "KURRENTDB_ALLOW_UNKNOWN_OPTIONS=true" \
     --env "KURRENTDB_TELEMETRY_OPTOUT=true" \
+    --env "KURRENTDB_LICENSING__LICENSE_KEY=$(KURRENTDB_LICENSING__LICENSE_KEY)" \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
     --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2113" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \
@@ -187,6 +193,7 @@ start-kurrentdb-secure:
     --env "KURRENTDB_START_STANDARD_PROJECTIONS=true" \
     --env "KURRENTDB_ALLOW_UNKNOWN_OPTIONS=true" \
     --env "KURRENTDB_TELEMETRY_OPTOUT=true" \
+    --env "KURRENTDB_LICENSING__LICENSE_KEY=$(KURRENTDB_LICENSING__LICENSE_KEY)" \
     --env "EVENTSTORE_ADVERTISE_HOST_TO_CLIENT_AS=localhost" \
     --env "EVENTSTORE_ADVERTISE_NODE_PORT_TO_CLIENT_AS=2114" \
     --env "EVENTSTORE_RUN_PROJECTIONS=All" \

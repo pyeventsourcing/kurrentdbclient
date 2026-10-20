@@ -9,14 +9,28 @@ from coverage.results import display_covered, should_fail_under
 
 nocover_tags = []
 
-if "26.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
-    pass
+if "26.2" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r">=26\.2")
+    nocover_tags.append(r">=26\.1")
+    nocover_tags.append(r">=26\.0")
+    nocover_tags.append(r">=25\.1")
+elif "26.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r">=26\.1")
+    nocover_tags.append(r">=26\.0")
+    nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r"<26\.2")
 elif "26.0" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r">=26\.0")
+    nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
 elif "25.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
     nocover_tags.append(r"<26\.0")
 else:
+    nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
     nocover_tags.append(r"<26\.0")
     nocover_tags.append(r"<25\.1")

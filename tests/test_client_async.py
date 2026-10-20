@@ -37,6 +37,7 @@ from kurrentdbclient.exceptions import (
     DeadlineExceededError,
     DiscoveryFailedError,
     ExceptionThrownByHandlerError,
+    FailedPreconditionError,
     FollowerNotFoundError,
     GrpcDeadlineExceededError,
     MultiAppendToSameStreamError,
@@ -3535,7 +3536,12 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertLess(0, statistics.events_processed_after_restart)
 
         # Can't delete whilst running.
-        with self.assertRaises(OperationFailedError):
+        # Can't delete whilst running (v26.2 changed the error).
+        with self.assertRaises(
+            OperationFailedError
+            if SERVER_VERSION < (26, 2)
+            else FailedPreconditionError
+        ):
             await self.client.delete_projection(
                 projection_name,
                 delete_emitted_streams=True,

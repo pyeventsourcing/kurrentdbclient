@@ -298,12 +298,15 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
         if e.code() == grpc.StatusCode.UNKNOWN:
             if "Exception was thrown by handler" in details_str:
                 return ExceptionThrownByHandlerError(details_str)
+            # no cover >=26.2: start
             if (
                 "Envelope callback expected Updated, received Conflict instead"
                 in details_str
             ):
-                # Projections.Create does this....
+                # Projections.Create in when projection exists with same name.
+                # KurrentDB >=26.2 returns error with status code ALREADY_EXISTS.
                 return AlreadyExistsError(details_str)
+            # no cover >=26.2: stop
             if (
                 "Envelope callback expected Updated, received NotFound instead"
                 in details_str
@@ -328,12 +331,15 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
             ):
                 # Projections.Result does this in < v24.6
                 return NotFoundError(details_str)  # pragma: no cover
+            # no cover >=26.2: start
             if (
                 "Envelope callback expected Updated, received OperationFailed instead"
                 in details_str
             ):
-                # Projections.Delete does this....
+                # Projections.Delete does this when projection not stopped.
+                # KurrentDB >=26.2 returns error with status code FAILED_PRECONDITION.
                 return OperationFailedError(details_str)
+            # no cover >=26.2: stop
             # no cover <25.1: start
             if "Unexpected FilteredReadAllResult: InvalidPosition" in details_str:
                 # Commit position does not exist.
@@ -387,10 +393,11 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                 "Maximum subscriptions reached"
             ):
                 return MaximumSubscriptionsReachedError(details_str)
-            # no cover: start
+            # no cover <26.2: start
+            # Projections.Delete does this in >=26.2 when projection not stopped.
             return FailedPreconditionError(details_str)
-            # no cover: stop
-        if e.code() == grpc.StatusCode.INTERNAL:  # pragma: no cover
+            # no cover <26.2: stop
+        if e.code() == grpc.StatusCode.INTERNAL:
             return InternalError(details_str)
     return GrpcError(str(e))
 

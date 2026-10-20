@@ -21,9 +21,10 @@ jobs:
           - kurrentplatform/kurrentdb:25.1.4
           - kurrentplatform/kurrentdb:26.0.3
           - kurrentplatform/kurrentdb:26.1.3
-#          - kurrentplatform/kurrentdb:26.2.2  # cluster requires licence
+          - kurrentplatform/kurrentdb:26.2.2
     env:
       KURRENTDB_DOCKER_IMAGE: ${{ matrix.kurrentdb-docker-image }}
+      KURRENTDB_LICENSING__LICENSE_KEY: ${{ secrets.KURRENTDB_LICENSING__LICENSE_KEY }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

@@ -112,8 +112,8 @@ last = datetime.datetime.now()
 # KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.0")
 # KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "25.1")
 # KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.0")
-KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.1")
-# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.2")
+# KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.1")
+KURRENTDB_DOCKER_IMAGE = os.environ.get("KURRENTDB_DOCKER_IMAGE", "26.2")
 
 if "21.9" in KURRENTDB_DOCKER_IMAGE:
     SERVER_VERSION = (21, 9)
@@ -7192,8 +7192,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # result = self.client.get_projection_result(projection_name)
         # self.assertIn("count", result.value)
 
-        # Can't delete whilst running.
-        with self.assertRaises(OperationFailedError):
+        # Can't delete whilst running (v26.2 changed the error).
+        with self.assertRaises(
+            OperationFailedError
+            if SERVER_VERSION < (26, 2)
+            else FailedPreconditionError
+        ):
             self.client.delete_projection(
                 projection_name,
                 delete_emitted_streams=True,
@@ -8721,7 +8725,7 @@ class TestGrpcOptions(TestCase):
 class TestRequiresLeaderHeader(TimedTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111,127.0.0.1:2112"
+        self.uri = "kdb://admin:changeit@localhost:2110,localhost:2111,localhost:2112"
         self.ca_cert = get_ca_certificate()
         self.writer = KurrentDBClient(
             self.uri + "?NodePreference=leader", root_certificates=self.ca_cert
