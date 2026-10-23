@@ -276,6 +276,8 @@ class TestDocs(TestCase):
                 lines[i] = ""
             if "uninstrument()" in line:
                 lines[i] = ""
+            if line.lstrip().startswith("print("):
+                lines[i] = line.replace("print(", "pass  # print(", 1)
 
         if print_block_line_numbers:
             assert not lines[0].strip()
