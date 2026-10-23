@@ -1,4 +1,3 @@
-# run_tests.py
 import os
 import sys
 import unittest
@@ -14,26 +13,56 @@ if "26.2" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
     nocover_tags.append(r">=26\.1")
     nocover_tags.append(r">=26\.0")
     nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r">=25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
 elif "26.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r"<26\.2")
     nocover_tags.append(r">=26\.1")
     nocover_tags.append(r">=26\.0")
     nocover_tags.append(r">=25\.1")
-    nocover_tags.append(r"<26\.2")
+    nocover_tags.append(r">=25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
 elif "26.0" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
-    nocover_tags.append(r">=26\.0")
-    nocover_tags.append(r">=25\.1")
     nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
-elif "25.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r">=26\.0")
     nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r">=25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
+elif "25.1" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
     nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
     nocover_tags.append(r"<26\.0")
+    nocover_tags.append(r">=25\.1")
+    nocover_tags.append(r">=25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
+elif "25.0" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r"<26\.2")
+    nocover_tags.append(r"<26\.1")
+    nocover_tags.append(r"<26\.0")
+    nocover_tags.append(r"<25\.1")
+    nocover_tags.append(r">=25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
+elif "24.10" in os.getenv("KURRENTDB_DOCKER_IMAGE", ""):
+    nocover_tags.append(r"<26\.2")
+    nocover_tags.append(r"<26\.1")
+    nocover_tags.append(r"<26\.0")
+    nocover_tags.append(r"<25\.1")
+    nocover_tags.append(r"<25\.0")
+    nocover_tags.append(r">=24\.10")
+    nocover_tags.append(r">=23\.10")
 else:
     nocover_tags.append(r"<26\.2")
     nocover_tags.append(r"<26\.1")
     nocover_tags.append(r"<26\.0")
     nocover_tags.append(r"<25\.1")
+    nocover_tags.append(r"<25\.0")
+    nocover_tags.append(r"<24\.10")
 
 cov = coverage.Coverage()
 exclude_lines = cov.get_option("report:exclude_lines") or []
