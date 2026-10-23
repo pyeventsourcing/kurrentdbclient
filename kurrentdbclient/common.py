@@ -111,13 +111,23 @@ class BaseGrpcStreamer:
 TGrpcStreamer = TypeVar("TGrpcStreamer", bound=BaseGrpcStreamer)
 
 
+class GrpcStreamersCollectionClosedError(Exception):
+    pass
+
+
 class BaseGrpcStreamers(Generic[TGrpcStreamer]):
     def __init__(self) -> None:
         self.map: WeakValueDictionary[int, TGrpcStreamer] = WeakValueDictionary()
         self.lock = threading.Lock()
+        self._is_closed = False
 
     def add(self, streamer: TGrpcStreamer) -> None:
+        # print(f"Adding streamer: {id(streamer)}")
         with self.lock:
+            if self._is_closed:
+                # This is hit by the test_replicate_github_issue_40 tests when
+                # run separately but for some reason not with the full suite
+                raise GrpcStreamersCollectionClosedError
             self.map[id(streamer)] = streamer
 
     def __iter__(self) -> Iterator[TGrpcStreamer]:
@@ -134,24 +144,42 @@ TGrpcStreamers = TypeVar("TGrpcStreamers", bound=BaseGrpcStreamers[Any])
 
 class GrpcStreamer(BaseGrpcStreamer, ABC):
     def __init__(self, grpc_streamers: GrpcStreamers) -> None:
-        self._grpc_streamers = grpc_streamers
-        self._grpc_streamers.add(self)
         self._is_stopped = False
+        self._is_cancelled = False
         self._is_stopped_lock = threading.Lock()
+        self._grpc_streamers = grpc_streamers
+        try:
+            self._grpc_streamers.add(self)
+        except GrpcStreamersCollectionClosedError:  # pragma: no cover
+            # This is hit by the test_replicate_github_issue_40 tests when
+            # run separately but for some reason not with the full suite
+            self.stop(cancel=True)
+
+    @property
+    def is_stopped(self) -> bool:
+        return self._is_stopped
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self._is_cancelled
 
     @abstractmethod
-    def stop(self) -> None:
+    def stop(self, *, cancel: bool = False) -> None:
         """
         Stops the iterator(s) of streaming call.
         """
 
-    def _set_is_stopped(self) -> bool:
+    def _remove(self) -> None:
+        self._grpc_streamers.remove(self)
+
+    def _set_is_stopped(self, *, cancel: bool = False) -> bool:
         is_stopped = True
         if self._is_stopped is False:
             with self._is_stopped_lock:
                 if self._is_stopped is False:
                     is_stopped = False
                     self._is_stopped = True
+                    self._is_cancelled = cancel
                 else:  # pragma: no cover
                     pass
         return is_stopped
@@ -159,10 +187,10 @@ class GrpcStreamer(BaseGrpcStreamer, ABC):
 
 class GrpcStreamers(BaseGrpcStreamers[GrpcStreamer]):
     def close(self) -> None:
+        with self.lock:
+            self._is_closed = True
         for grpc_streamer in self:
-            # print("closing streamer")
-            grpc_streamer.stop()
-            # print("closed streamer")
+            grpc_streamer.stop(cancel=True)
 
 
 class AsyncGrpcStreamer(BaseGrpcStreamer, ABC):

@@ -32,6 +32,8 @@ from kurrentdbclient.common import (
     DEFAULT_PERSISTENT_SUB_MESSAGE_TIMEOUT,
     DEFAULT_PERSISTENT_SUB_MIN_CHECKPOINT_COUNT,
     DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
+    GrpcStreamer,
+    GrpcStreamers,
 )
 from kurrentdbclient.connection_spec import (
     NODE_PREFERENCE_FOLLOWER,
@@ -9587,6 +9589,35 @@ class TestSubscriptionReadRequest(TimedTestCase):
 
         self.assertEqual(len(grpc_read_req1.ack.ids), 3)
         self.assertEqual(len(grpc_read_req1.nack.ids), 0)
+
+
+class TestGrpcStreamers(TimedTestCase):
+    def test(self) -> None:
+        class MyStreamer(GrpcStreamer):
+            def stop(self, *, cancel: bool = False) -> None:
+                if self._set_is_stopped(cancel=cancel):
+                    self._remove()
+
+        streamers = GrpcStreamers()
+
+        # Normal scenario: start and stop a new streamer.
+        streamer1 = MyStreamer(grpc_streamers=streamers)
+        self.assertFalse(streamer1.is_stopped)
+        self.assertFalse(streamer1.is_cancelled)
+        streamer1.stop()
+        self.assertTrue(streamer1.is_stopped)
+        self.assertFalse(streamer1.is_cancelled)
+
+        # Reconnection scenario: close all streamers.
+        streamer2 = MyStreamer(grpc_streamers=streamers)
+        streamers.close()
+        self.assertTrue(streamer2.is_stopped)
+        self.assertTrue(streamer2.is_cancelled)
+
+        # Race scenario: start streamer against closed connection.
+        streamer3 = MyStreamer(grpc_streamers=streamers)
+        self.assertTrue(streamer3.is_stopped)
+        self.assertTrue(streamer3.is_cancelled)
 
 
 def random_data(size: int = 16) -> bytes:
