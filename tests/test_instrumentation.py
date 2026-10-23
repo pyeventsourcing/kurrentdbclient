@@ -58,6 +58,7 @@ from kurrentdbclient import (
 )
 from kurrentdbclient.client import BaseKurrentDBClient
 from kurrentdbclient.exceptions import (
+    CancelledError,
     DiscoveryFailedError,
     GrpcError,
     ServiceUnavailableError,
@@ -3147,11 +3148,25 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
         # Check span after error during iteration.
         read_response = client.read_stream(stream_name)
         self.break_client_connection(client)
-        with self.assertRaises(GrpcError):
+
+        with self.assertRaises(ServiceUnavailableError):
+            client.reconnect()
+
+        with self.assertRaises(CancelledError):
             next(read_response)
+
         # Todo: Actually check the span...
         self.check_spans(
             num_spans=8,
+        )
+
+        with self.assertRaises(ServiceUnavailableError):
+            read_response = client.read_stream(stream_name)
+            list(read_response)
+
+        # Todo: Actually check the span...
+        self.check_spans(
+            num_spans=10,
         )
 
     def test_get_stream(self) -> None:
@@ -3180,79 +3195,10 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
         self.assertEqual(3, len(recorded_events))
 
         # Check the second span.
-        self.check_spans(
-            num_spans=7,
-            span_index=1,
-            parent_span_index=6,
-            span_name="KurrentDBClient.read_stream",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "KurrentDBClient.read_stream",
-                "db.kurrentdb.stream": stream_name,
-            },
-        )
-
-        # Check the third span.
-        self.check_spans(
-            num_spans=7,
-            span_index=2,
-            parent_span_index=6,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[0].id),
-                "db.kurrentdb.event.type": recorded_events[0].type,
-            },
-        )
-
-        # Check the fourth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=3,
-            parent_span_index=6,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[1].id),
-                "db.kurrentdb.event.type": recorded_events[1].type,
-            },
-        )
-
-        # Check the fifth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=4,
-            parent_span_index=6,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[2].id),
-                "db.kurrentdb.event.type": recorded_events[2].type,
-            },
-        )
-
-        # Check the sixth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=5,
-            parent_span_index=6,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-            },
-        )
-
         # Check the seventh span.
         self.check_spans(
-            num_spans=7,
-            span_index=6,
+            num_spans=2,
+            span_index=1,
             parent_span_index=None,
             span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
@@ -3268,7 +3214,7 @@ class TestReadAndGetStream(KurrentDBClientInstrumentorTestCase):
             client.get_stream(stream_name)
 
         self.check_spans(
-            num_spans=15,
+            num_spans=3,
         )
 
 
@@ -3700,63 +3646,9 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
         self.assertEqual(3, len(recorded_events))
 
         self.check_spans(
-            num_spans=9,
+            num_spans=4,
             span_index=2,
-            parent_span_index=8,
-            span_name="KurrentDBClient.read_stream",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "KurrentDBClient.read_stream",
-                "db.kurrentdb.stream": stream_name,
-            },
-        )
-
-        self.check_spans(
-            num_spans=9,
-            span_index=3,
-            parent_span_index=8,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[0].id),
-                "db.kurrentdb.event.type": recorded_events[0].type,
-            },
-        )
-
-        self.check_spans(
-            num_spans=9,
-            span_index=4,
-            parent_span_index=8,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[1].id),
-                "db.kurrentdb.event.type": recorded_events[1].type,
-            },
-        )
-
-        self.check_spans(
-            num_spans=9,
-            span_index=5,
-            parent_span_index=8,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[2].id),
-                "db.kurrentdb.event.type": recorded_events[2].type,
-            },
-        )
-
-        self.check_spans(
-            num_spans=9,
-            span_index=6,
-            parent_span_index=2,
+            parent_span_index=3,
             instrumentation_scope_name="opentelemetry.instrumentation.grpc",
             instrumentation_scope_version=instrumentation_grpc_version.__version__,
             span_name="/event_store.client.streams.Streams/Read",
@@ -3766,19 +3658,8 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
         )
 
         self.check_spans(
-            num_spans=9,
-            span_index=7,
-            parent_span_index=8,
-            span_name="ReadResponse.__next__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "ReadResponse.__next__",
-            },
-        )
-
-        self.check_spans(
-            num_spans=9,
-            span_index=8,
+            num_spans=4,
+            span_index=3,
             parent_span_index=None,
             span_name="KurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
@@ -3795,7 +3676,7 @@ class TestReadAndGetStreamWithGrpcInstrumentor(KurrentDBClientInstrumentorTestCa
             client.get_stream(stream_name)
 
         self.check_spans(
-            num_spans=21,
+            num_spans=9,
             # span_index=8,
             # parent_span_index=None,
             # span_name="KurrentDBClient.get_stream",

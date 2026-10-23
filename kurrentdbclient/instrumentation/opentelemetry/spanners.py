@@ -279,6 +279,7 @@ def span_read_stream(
     stream_name: str,
     *args: Any,
     **kwargs: Any,
+    # TODO: Can't this use AbstractAsyncReadResponse rather than AsyncReadResponse?
 ) -> OverloadedSpannerResponse[AbstractReadResponse, AsyncReadResponse]:
     span_name, span_kind = _get_span_name_and_kind(spanned_func)
     with _start_span(tracer, span_name, span_kind) as span:
@@ -294,6 +295,7 @@ def span_read_stream(
             if inspect.iscoroutine(response):
 
                 async def wrap_response() -> AsyncReadResponse:
+                    # TODO: Can this be AbstractAsyncReadResponse?
                     return cast(
                         AsyncReadResponse,
                         TracedAsyncReadResponse(
@@ -317,7 +319,8 @@ def span_read_stream(
                     span_name=span_name,
                     span_kind=span_kind,
                 )
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
+            # Hard to cover this consistently due to timing of channel readiness.
             _set_span_error(span, e)
             raise
         else:
@@ -777,15 +780,8 @@ class TracedRecordedEventIterator(
                 span.end()
                 self._current_span = None
 
-    def stop(self) -> None:
-        self.response.stop()
-
-    def __enter__(self) -> Self:
-        self.response.__enter__()
-        return self
-
-    def __exit__(self, *args: object, **kwargs: Any) -> None:
-        return self.response.__exit__(*args, **kwargs)
+    def stop(self, *, cancel: bool = False) -> None:
+        self.response.stop(cancel=cancel)
 
     def __del__(self) -> None:
         current_span = self._current_span
