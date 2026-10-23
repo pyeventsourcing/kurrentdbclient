@@ -297,9 +297,12 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                         )
             return KurrentDBClientError(details_str)
 
+        # Handle error according the status code of the given error.
         if e.code() == grpc.StatusCode.UNKNOWN:
             if "Exception was thrown by handler" in details_str:
+                # This just happens from time to time in KurrentDB (various operations)
                 return ExceptionThrownByHandlerError(details_str)
+
             # no cover >=26.2: start
             if (
                 "Envelope callback expected Updated, received Conflict instead"
@@ -309,30 +312,43 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                 # KurrentDB >=26.2 returns error with status code ALREADY_EXISTS.
                 return AlreadyExistsError(details_str)
             # no cover >=26.2: stop
+
+            # no cover >=24.10: start
             if (
                 "Envelope callback expected Updated, received NotFound instead"
                 in details_str
             ):
                 # Projections.Update and Projections.Delete does this in < v24.6
-                return NotFoundError(details_str)  # pragma: no cover
+                return NotFoundError(details_str)
+            # no cover >=24.10: stop
+
+            # no cover >=24.10: start
             if (
                 "Envelope callback expected Statistics, received NotFound instead"
                 in details_str
             ):
                 # Projections.Statistics does this in < v24.6
-                return NotFoundError(details_str)  # pragma: no cover
+                return NotFoundError(details_str)
+            # no cover >=24.10: stop
+
+            # no cover >=24.10: start
             if (
                 "Envelope callback expected ProjectionState, received NotFound instead"
                 in details_str
             ):
                 # Projections.State does this in < v24.6
-                return NotFoundError(details_str)  # pragma: no cover
+                return NotFoundError(details_str)
+            # no cover >=24.10: stop
+
+            # no cover >=24.10: start
             if (
                 "Envelope callback expected ProjectionResult, received NotFound instead"
                 in details_str
             ):
                 # Projections.Result does this in < v24.6
                 return NotFoundError(details_str)  # pragma: no cover
+            # no cover >=24.10: stop
+
             # no cover >=26.2: start
             if (
                 "Envelope callback expected Updated, received OperationFailed instead"
@@ -342,12 +358,15 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                 # KurrentDB >=26.2 returns error with status code FAILED_PRECONDITION.
                 return OperationFailedError(details_str)
             # no cover >=26.2: stop
+
             # no cover <25.1: start
             if "Unexpected FilteredReadAllResult: InvalidPosition" in details_str:
                 # Commit position does not exist.
                 return InvalidCommitPositionError(details_str)
             # no cover <25.1: stop
-            return UnknownError(details_str)  # pragma: no cover
+
+            # Catch all other unknown errors.
+            return UnknownError(details_str)
 
         if e.code() == grpc.StatusCode.ABORTED:
             if "Consumer too slow" in details_str:
@@ -361,8 +380,10 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
 
         if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
             return GrpcDeadlineExceededError(details_str)
+
         if e.code() == grpc.StatusCode.UNAUTHENTICATED:
             return UnauthenticatedError(details_str)
+
         if e.code() == grpc.StatusCode.UNAVAILABLE:
             if "SSL_ERROR" in details_str:
                 # root_certificates is None and CA cert not installed
@@ -374,8 +395,10 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                 # given root_certificates is invalid
                 return SSLError(details_str)
             return ServiceUnavailableError(details_str)
+
         if e.code() == grpc.StatusCode.ALREADY_EXISTS:
             return AlreadyExistsError(details_str)
+
         if e.code() == grpc.StatusCode.NOT_FOUND:
             if details_str == "Leader info available":
                 trailing_metadata = {m[0]: m[1] for m in e.trailing_metadata()}  # type: ignore[index]
@@ -391,6 +414,7 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
                     ),
                 )
             return NotFoundError()
+
         if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
             if details_str is not None and details_str.startswith(
                 "Maximum subscriptions reached"
@@ -406,7 +430,8 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
 
         if e.code() == grpc.StatusCode.INTERNAL:
             return InternalError(details_str)
-    return GrpcError(str(e))
+
+    return GrpcError(str(e))  # pragma: no cover
 
 
 def _convert_append_consistency_violations(
@@ -586,7 +611,7 @@ class RecordedEventIterator(
         self.stop()
 
     @abstractmethod
-    def stop(self) -> None:
+    def stop(self, *, cancel: bool = False) -> None:
         pass  # pragma: no cover
 
 
