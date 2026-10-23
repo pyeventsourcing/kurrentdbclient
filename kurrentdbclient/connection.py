@@ -77,9 +77,7 @@ class KurrentDBConnection(BaseKurrentDBConnection):
         self._grpc_streamers.close()
         # self.grpc_channel.unsubscribe(self._receive_channel_connectivity_state)
         # sleep(0.1)  # Allow connectivity polling to stop.
-        # print("closing channel")
         self._grpc_channel.close()
-        # print("closed channel")
 
 
 class AsyncKurrentDBConnection(BaseKurrentDBConnection):
