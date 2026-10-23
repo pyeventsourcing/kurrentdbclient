@@ -55,6 +55,8 @@ from kurrentdbclient.exceptions import (
     AbortedByServerError,
     AccessDeniedError,
     AlreadyExistsError,
+    CancelledByClientError,
+    CancelledError,
     ConsistencyChecksFailedError,
     ConsumerTooSlowError,
     DeadlineExceededError,
@@ -9778,6 +9780,17 @@ class TestHandleRpcError(TestCase):
         with self.assertRaises(AccessDeniedError):
             raise handle_rpc_error(FakeAccessDeniedError()) from None
 
+    def test_cancelled_error(self) -> None:
+        with self.assertRaises(CancelledError) as cm:
+            raise handle_rpc_error(FakeCancelledError()) from None
+        self.assertNotIsInstance(cm.exception, CancelledByClientError)
+
+    def test_cancelled_by_client_error(self) -> None:
+        with self.assertRaises(CancelledByClientError):
+            raise handle_rpc_error(
+                FakeCancelledError("Locally cancelled by application!")
+            ) from None
+
 
 class FakeRpcError(_MultiThreadedRendezvous):
     def __init__(
@@ -10057,6 +10070,11 @@ class FakeStreamIsDeletedError(FakeFailedPreconditionRpcError):
 class FakeAccessDeniedError(FakeRpcError):
     def __init__(self) -> None:
         super().__init__(status_code=StatusCode.PERMISSION_DENIED, details="")
+
+
+class FakeCancelledError(FakeRpcError):
+    def __init__(self, details: str = "") -> None:
+        super().__init__(status_code=StatusCode.CANCELLED, details=details)
 
 
 def random_data(size: int = 16) -> bytes:

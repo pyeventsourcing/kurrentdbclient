@@ -33,6 +33,7 @@ from kurrentdbclient.exceptions import (
     AccessDeniedError,
     AlreadyExistsError,
     CancelledByClientError,
+    CancelledError,
     ConsistencyCheckFailure,
     ConsistencyChecksFailedError,
     ConsumerTooSlowError,
@@ -352,11 +353,12 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
             if "Consumer too slow" in details_str:
                 return ConsumerTooSlowError(details_str)
             return AbortedByServerError(details_str)
-        if (
-            e.code() == grpc.StatusCode.CANCELLED
-            and details_str == "Locally cancelled by application!"
-        ):
-            return CancelledByClientError(details_str)
+
+        if e.code() == grpc.StatusCode.CANCELLED:
+            if details_str == "Locally cancelled by application!":
+                return CancelledByClientError(details_str)
+            return CancelledError(details_str)
+
         if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
             return GrpcDeadlineExceededError(details_str)
         if e.code() == grpc.StatusCode.UNAUTHENTICATED:

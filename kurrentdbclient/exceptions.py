@@ -61,9 +61,15 @@ class GrpcDeadlineExceededError(GrpcError, DeadlineExceededError):
     """
 
 
-class CancelledByClientError(KurrentDBClientError):
+class CancelledError(GrpcError):
     """
-    Raised when gRPC operation is cancelled.
+    Raised when gRPC operation is somehow cancelled.
+    """
+
+
+class CancelledByClientError(CancelledError):
+    """
+    Raised when gRPC operation is known to have been cancelled by client.
     """
 
 
