@@ -699,8 +699,14 @@ class PersistentSubscription(
         while True:
             try:
                 read_resp = self._get_next_read_resp()
-            except CancelledByClientError:
-                raise StopIteration from None
+            except CancelledByClientError as e:
+                # Grpc stream is cancelled.
+                self.stop(cancel=True)
+                if self._is_cancelled:
+                    # Response is stopped and cancelled.
+                    raise
+                # Response is stopped but not cancelled.
+                raise StopIteration from e
             content_oneof = read_resp.WhichOneof("content")
             if content_oneof == "event":
                 recorded_event = construct_recorded_event(read_resp.event)

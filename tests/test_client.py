@@ -8399,7 +8399,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         if not_cancelled_by_client_errors:
             raise AssertionError from not_cancelled_by_client_errors[0]
 
-    def test_reconnect_during_read_stream_causes_cancelled_by_client_error_midway(
+    def test_reconnect_during_read_stream_causes_cancelled_error_midway(
         self,
     ) -> None:
         self.construct_client()
@@ -8434,7 +8434,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         with self.assertRaises(CancelledByClientError):
             next(read_response)
 
-    def test_reconnect_during_read_stream_causes_cancelled_by_client_error_at_end(
+    def test_reconnect_during_read_stream_causes_cancelled_error_at_end(
         self,
     ) -> None:
         self.construct_client()
@@ -8473,6 +8473,160 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # Expect CancelledByClientError
         with self.assertRaises(CancelledByClientError):
             next(read_response)
+
+    def test_reconnect_during_catchup_subscription_causes_cancelled_error_midway(
+        self,
+    ) -> None:
+        self.construct_client()
+
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            sleep(0.1)
+
+        # Read one event.
+        subscription = self.client.subscribe_to_stream(stream_name)
+        next(subscription)
+
+        # Reconnect the client.
+        self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            next(subscription)
+
+    def test_reconnect_during_catchup_subscribe_causes_cancelled_error_at_end(
+        self,
+    ) -> None:
+        self.construct_client()
+
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            sleep(0.1)
+
+        # Read two events.
+        subscription = self.client.subscribe_to_stream(stream_name)
+        next(subscription)
+        next(subscription)
+
+        # Give the RPC response a bit of time to get the OK status code.
+        sleep(0.5)
+
+        # Reconnect the client.
+        # print("Calling reconnect() from test")
+        self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            next(subscription)
+
+    def test_reconnect_during_persistent_subscription_causes_cancelled_error_midway(
+        self,
+    ) -> None:
+        self.construct_client()
+
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            sleep(0.1)
+
+        # Read one event.
+        group_name = str(uuid4())
+        self.client.create_subscription_to_stream(group_name, stream_name)
+        subscription = self.client.read_subscription_to_stream(group_name, stream_name)
+        next(subscription)
+
+        # Reconnect the client.
+        self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            next(subscription)
+
+    def test_reconnect_during_persistent_subscription_causes_cancelled_error_at_end(
+        self,
+    ) -> None:
+        self.construct_client()
+
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            sleep(0.1)
+
+        # Read two events.
+        group_name = str(uuid4())
+        self.client.create_subscription_to_stream(group_name, stream_name)
+        subscription = self.client.read_subscription_to_stream(group_name, stream_name)
+        next(subscription)
+        next(subscription)
+
+        # Give the RPC response a bit of time to get the OK status code.
+        sleep(0.5)
+
+        # Reconnect the client.
+        # print("Calling reconnect() from test")
+        self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            next(subscription)
 
     def test_avoid_reconnecting_if_already_have_new_connection(self) -> None:
         # This is used in the autoreconnect decorator to avoid a thread
