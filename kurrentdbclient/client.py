@@ -699,18 +699,44 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Returns a sequence of recorded events from the named stream.
         """
-        with self.read_stream(
+        with self._read_stream(
             stream_name=stream_name,
             stream_position=stream_position,
             backwards=backwards,
             resolve_links=resolve_links,
             limit=limit,
             timeout=timeout,
-            credentials=credentials or self._call_credentials,
+            credentials=credentials,
         ) as events:
             return tuple(events)
 
+    @retrygrpc
+    @autoreconnect
     def read_stream(
+        self,
+        stream_name: str,
+        *,
+        stream_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AbstractReadResponse:
+        """
+        Reads recorded events from the named stream.
+        """
+        return self._read_stream(
+            stream_name=stream_name,
+            stream_position=stream_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _read_stream(
         self,
         stream_name: str,
         *,
@@ -735,7 +761,39 @@ class KurrentDBClient(BaseKurrentDBClient):
             credentials=credentials or self._call_credentials,
         )
 
+    @retrygrpc
+    @autoreconnect
     def read_all(
+        self,
+        *,
+        commit_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
+        filter_include: Sequence[str] = (),
+        filter_by_stream_name: bool = False,
+        filter_by_prefix: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AbstractReadResponse:
+        """
+        Reads recorded events in "all streams" in the database.
+        """
+        return self._read_all(
+            commit_position=commit_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+            filter_by_prefix=filter_by_prefix,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _read_all(
         self,
         *,
         commit_position: int | None = None,
@@ -766,6 +824,8 @@ class KurrentDBClient(BaseKurrentDBClient):
             credentials=credentials or self._call_credentials,
         )
 
+    @retrygrpc
+    @autoreconnect
     def read_index(
         self,
         index_name: str,
@@ -779,7 +839,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         if not index_name.startswith("$idx-"):
             index_name = f"$idx-{index_name}"
 
-        return self.read_all(
+        return self._read_all(
             commit_position=commit_position,
             filter_include=(index_name,),
             filter_by_stream_name=True,
@@ -838,15 +898,34 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Returns the current commit position of the database.
         """
-        read_response = self.streams.read(
+        return self._get_commit_position(
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _get_commit_position(
+        self,
+        *,
+        filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
+        filter_include: Sequence[str] = (),
+        filter_by_stream_name: bool = False,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> int:
+        """
+        Returns the current commit position of the database.
+        """
+        read_response = self._read_all(
             backwards=True,
             filter_exclude=filter_exclude,
             filter_include=filter_include,
             filter_by_stream_name=filter_by_stream_name,
             limit=1,
             timeout=timeout,
-            metadata=self._call_metadata,
-            credentials=credentials or self._call_credentials,
+            credentials=credentials,
         )
         recorded_events = tuple(read_response)
         if recorded_events:
@@ -931,6 +1010,45 @@ class KurrentDBClient(BaseKurrentDBClient):
         Starts a catch-up subscription, from which all
         recorded events in the database can be received.
         """
+        return self._subscribe_to_all(
+            commit_position=commit_position,
+            from_end=from_end,
+            resolve_links=resolve_links,
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+            filter_by_prefix=filter_by_prefix,
+            include_checkpoints=include_checkpoints,
+            window_size=window_size,
+            checkpoint_interval_multiplier=checkpoint_interval_multiplier,
+            include_caught_up=include_caught_up,
+            include_fell_behind=include_fell_behind,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _subscribe_to_all(
+        self,
+        *,
+        commit_position: int | None = None,
+        from_end: bool = False,
+        resolve_links: bool = False,
+        filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
+        filter_include: Sequence[str] = (),
+        filter_by_stream_name: bool = False,
+        filter_by_prefix: bool = False,
+        include_checkpoints: bool = False,
+        window_size: int = DEFAULT_WINDOW_SIZE,
+        checkpoint_interval_multiplier: int = DEFAULT_CHECKPOINT_INTERVAL_MULTIPLIER,
+        include_caught_up: bool = False,
+        include_fell_behind: bool = False,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AbstractCatchupSubscription:
+        """
+        Starts a catch-up subscription, from which all
+        recorded events in the database can be received.
+        """
         return self.streams.read(
             commit_position=commit_position,
             from_end=from_end,
@@ -950,6 +1068,8 @@ class KurrentDBClient(BaseKurrentDBClient):
             credentials=credentials or self._call_credentials,
         )
 
+    @retrygrpc
+    @autoreconnect
     def subscribe_to_index(
         self,
         index_name: str,
@@ -962,7 +1082,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         if not index_name.startswith("$idx-"):
             index_name = f"$idx-{index_name}"
 
-        return self.subscribe_to_all(
+        return self._subscribe_to_all(
             commit_position=commit_position,
             filter_include=(index_name,),
             filter_by_stream_name=True,
@@ -1446,6 +1566,24 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Gets info for a persistent subscription.
         """
+        return self._get_subscription_info(
+            group_name=group_name,
+            stream_name=stream_name,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _get_subscription_info(
+        self,
+        group_name: str,
+        stream_name: str | None = None,
+        *,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> SubscriptionInfo:
+        """
+        Gets info for a persistent subscription.
+        """
         return self.persistent_subscriptions.get_info(
             group_name=group_name,
             stream_name=stream_name,
@@ -1775,7 +1913,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         Updates a persistent subscription on one stream.
         """
 
-        info = self.get_subscription_info(
+        info = self._get_subscription_info(
             group_name=group_name,
             stream_name=stream_name,
             timeout=timeout,
