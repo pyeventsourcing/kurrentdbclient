@@ -7878,7 +7878,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertGreater(cm.exception.size, size)
         self.assertLess(cm.exception.max_size, cm.exception.size)
 
-    @skip("This workds but clogs the server and doesn't increase test coverage")
+    @skip("This works but clogs the server and doesn't increase test coverage")
     @skipIf(SERVER_VERSION < (25, 1), "Doesn't support multi-append")
     def test_stream_multi_append_transaction_max_size_exceeded_error(self) -> None:
         self.construct_client()
