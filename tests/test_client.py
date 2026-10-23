@@ -3197,7 +3197,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                         NewEvent(type=f"Type{i}", data=b"{}") for i in range(10000)
                     ],
                 )
-                print(commit_position)
+                # print(_commit_position)
                 sleep(0.1)
                 # Read one event.
                 next(subscription)
@@ -4598,11 +4598,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             message_timeout=1,
             max_retry_count=max_retry_count,
         )
-        print("Created persistent subscription")
+        # print("Created persistent subscription")
 
         # Start consumer.
         subscription1 = self.client.read_subscription_to_all(group_name=group_name1)
-        print("Started persistent subscription consumer #1")
+        # print("Started persistent subscription consumer #1")
 
         # Append some events.
         num_appended_events = 1
@@ -4615,25 +4615,25 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
         appended_event_ids = {e.id for e in events}
 
-        print("Consuming appended events...")
+        # print("Consuming appended events...")
         acked_event_ids = set[UUID]()
         with subscription1:
             while len(acked_event_ids) < num_appended_events:
                 event = next(subscription1)
                 if event.id not in appended_event_ids:
                     continue  # Ignore any other events (shouldn't get here)
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 if event.id in acked_event_ids:
                     self.fail(f"Acked event was redelivered: {event.id}")
                 subscription1.ack(event)
-                print("Acked event:", event.id)
+                # print("Acked event:", event.id)
                 acked_event_ids.add(event.id)
 
-        print("Stopped persistent subscription consumer #1")
+        # print("Stopped persistent subscription consumer #1")
 
         # Append some more events.
         events = [
@@ -4645,12 +4645,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             current_version=num_appended_events - 1,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
 
         # Start another consumer.
         subscription2 = self.client.read_subscription_to_all(group_name=group_name1)
-        print("Started persistent subscription consumer #2")
+        # print("Started persistent subscription consumer #2")
         unacked_events_received = Counter[UUID]()
         with subscription2:
             while (
@@ -4659,10 +4659,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 event = next(subscription2)
                 if event.id in acked_event_ids:
                     self.fail("Acked event was redelivered")
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 unacked_events_received.update([event.id])
-        print("Stopped persistent subscription consumer #2")
-        print("None of the acked events were redelivered")
+        # print("Stopped persistent subscription consumer #2")
+        # print("None of the acked events were redelivered")
 
     def test_subscription_to_stream_event_not_redelivered_after_ack(
         self,
@@ -4685,14 +4685,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             message_timeout=1,
             max_retry_count=max_retry_count,
         )
-        print("Created persistent subscription")
+        # print("Created persistent subscription")
 
         # Start consumer.
         subscription1 = self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
         )
-        print("Started persistent subscription consumer #1")
+        # print("Started persistent subscription consumer #1")
 
         # Append some events.
         num_appended_events = 1
@@ -4705,25 +4705,25 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
         appended_event_ids = {e.id for e in events}
 
-        print("Consuming appended events...")
+        # print("Consuming appended events...")
         acked_event_ids = set[UUID]()
         with subscription1:
             while len(acked_event_ids) < num_appended_events:
                 event = next(subscription1)
                 if event.id not in appended_event_ids:
                     continue  # Ignore any other events (shouldn't get here)
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 if event.id in acked_event_ids:
                     self.fail(f"Acked event was redelivered: {event.id}")
                 subscription1.ack(event)
-                print("Acked event:", event.id)
+                # print("Acked event:", event.id)
                 acked_event_ids.add(event.id)
 
-        print("Stopped persistent subscription consumer #1")
+        # print("Stopped persistent subscription consumer #1")
 
         # Append some more events.
         events = [
@@ -4735,15 +4735,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             current_version=num_appended_events - 1,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
 
         # Start another consumer.
         subscription2 = self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
         )
-        print("Started persistent subscription consumer #2")
+        # print("Started persistent subscription consumer #2")
         unacked_events_received = Counter[UUID]()
         with subscription2:
             while (
@@ -4752,10 +4752,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 event = next(subscription2)
                 if event.id in acked_event_ids:
                     self.fail("Acked event was redelivered")
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 unacked_events_received.update([event.id])
-        print("Stopped persistent subscription consumer #2")
-        print("None of the acked events were redelivered")
+        # print("Stopped persistent subscription consumer #2")
+        # print("None of the acked events were redelivered")
 
     def test_subscription_get_info(self) -> None:
         self.construct_client()
@@ -7901,7 +7901,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
                 ]
 
             while True:
-                print(num_events)
+                # print(num_events)
                 events = generate_events(num_events)
                 start = datetime.datetime.now()
                 self.client.multi_append_to_stream(

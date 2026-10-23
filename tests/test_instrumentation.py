@@ -1071,7 +1071,30 @@ class BaseKurrentDBClientTestCase(TestCase, ABC, Generic[TKurrentDBClient]):
 
         # Check the number of finished spans.
         if num_spans is not None:
-            self.assertEqual(num_spans, len(spans))
+            try:
+                self.assertEqual(num_spans, len(spans))
+            except:
+                # for i, span in enumerate(spans):
+                #     print()
+                #     print(f"Span {i}. Name:", span.name)
+                #     print(" - span ID: ", span.context.span_id)
+                #     print(" - trace ID: ", span.context.trace_id)
+                #     if span.parent:
+                #         print(" - parent trace ID: ", span.parent.trace_id)
+                #         print(" - parent span ID: ", span.parent.span_id)
+                #     if span.attributes:
+                #         for key, value in span.attributes.items():
+                #             print(" -", key, value)
+                #     else:
+                #         print("  - SPAN ATTRIBUTES IS None")
+                #     for event in span.events:
+                #         print(" -", event.name)
+                #         if event.attributes:
+                #             for key, value in event.attributes.items():
+                #                 print("   -", key, value)
+                #         else:
+                #             print("  - SPAN EVENT ATTRIBUTES IS None")
+                raise
 
         if span_index is None:
             return

@@ -2877,13 +2877,13 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             message_timeout=1,
             max_retry_count=max_retry_count,
         )
-        print("Created persistent subscription")
+        # print("Created persistent subscription")
 
         # Start consumer.
         subscription1 = await self.client.read_subscription_to_all(
             group_name=group_name1
         )
-        print("Started persistent subscription consumer #1")
+        # print("Started persistent subscription consumer #1")
 
         # Append some events.
         num_appended_events = 1
@@ -2896,25 +2896,25 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
         appended_event_ids = {e.id for e in events}
 
-        print("Consuming appended events...")
+        # print("Consuming appended events...")
         acked_event_ids = set[UUID]()
         async with subscription1:
             while len(acked_event_ids) < num_appended_events:
                 event = await subscription1.__anext__()
                 if event.id not in appended_event_ids:
                     continue  # Ignore any other events (shouldn't get here)
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 if event.id in acked_event_ids:
                     self.fail(f"Acked event was redelivered: {event.id}")
                 await subscription1.ack(event)
-                print("Acked event:", event.id)
+                # print("Acked event:", event.id)
                 acked_event_ids.add(event.id)
 
-        print("Stopped persistent subscription consumer #1")
+        # print("Stopped persistent subscription consumer #1")
 
         # Append some more events.
         events = [
@@ -2926,14 +2926,14 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=num_appended_events - 1,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
 
         # Start another consumer.
         subscription2 = await self.client.read_subscription_to_all(
             group_name=group_name1
         )
-        print("Started persistent subscription consumer #2")
+        # print("Started persistent subscription consumer #2")
         unacked_events_received = Counter[UUID]()
         async with subscription2:
             while (
@@ -2942,10 +2942,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 event = await subscription2.__anext__()
                 if event.id in acked_event_ids:
                     self.fail("Acked event was redelivered")
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 unacked_events_received.update([event.id])
-        print("Stopped persistent subscription consumer #2")
-        print("None of the acked events were redelivered")
+        # print("Stopped persistent subscription consumer #2")
+        # print("None of the acked events were redelivered")
 
     async def test_subscription_to_stream_event_not_redelivered_after_ack(
         self,
@@ -2966,14 +2966,14 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             message_timeout=1,
             max_retry_count=max_retry_count,
         )
-        print("Created persistent subscription")
+        # print("Created persistent subscription")
 
         # Start consumer.
         subscription1 = await self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
         )
-        print("Started persistent subscription consumer #1")
+        # print("Started persistent subscription consumer #1")
 
         # Append some events.
         num_appended_events = 1
@@ -2986,25 +2986,25 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=StreamState.NO_STREAM,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
         appended_event_ids = {e.id for e in events}
 
-        print("Consuming appended events...")
+        # print("Consuming appended events...")
         acked_event_ids = set[UUID]()
         async with subscription1:
             while len(acked_event_ids) < num_appended_events:
                 event = await subscription1.__anext__()
                 if event.id not in appended_event_ids:
                     continue  # Ignore any other events (shouldn't get here)
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 if event.id in acked_event_ids:
                     self.fail(f"Acked event was redelivered: {event.id}")
                 await subscription1.ack(event)
-                print("Acked event:", event.id)
+                # print("Acked event:", event.id)
                 acked_event_ids.add(event.id)
 
-        print("Stopped persistent subscription consumer #1")
+        # print("Stopped persistent subscription consumer #1")
 
         # Append some more events.
         events = [
@@ -3016,15 +3016,15 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             current_version=num_appended_events - 1,
             events=events,
         )
-        for new_event in events:
-            print("Appended event:", new_event.id)
+        # for new_event in events:
+        #     print("Appended event:", new_event.id)
 
         # Start another consumer.
         subscription2 = await self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
         )
-        print("Started persistent subscription consumer #2")
+        # print("Started persistent subscription consumer #2")
         unacked_events_received = Counter[UUID]()
         async with subscription2:
             while (
@@ -3033,10 +3033,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                 event = await subscription2.__anext__()
                 if event.id in acked_event_ids:
                     self.fail("Acked event was redelivered")
-                print("Received event:", event.id)
+                # print("Received event:", event.id)
                 unacked_events_received.update([event.id])
-        print("Stopped persistent subscription consumer #2")
-        print("None of the acked events were redelivered")
+        # print("Stopped persistent subscription consumer #2")
+        # print("None of the acked events were redelivered")
 
     async def test_create_projection_v1engine(self) -> None:
         # Create "continuous" projection.
