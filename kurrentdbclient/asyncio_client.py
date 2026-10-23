@@ -119,7 +119,7 @@ def retrygrpc(f: _TCallable) -> _TCallable:
         try:
             return await f(*args, **kwargs)
         except GrpcError:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             return await f(*args, **kwargs)
 
     return cast(_TCallable, retrygrpc_decorator)
