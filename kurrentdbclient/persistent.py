@@ -660,6 +660,7 @@ class PersistentSubscription(
         self._read_reqs = read_reqs
         self._read_resps = read_resps
         self._is_stopping = False
+        self._is_cancelling = False
 
         try:
             first_read_resp = self._get_next_read_resp()
@@ -733,13 +734,14 @@ class PersistentSubscription(
         self._grpc_streamers.remove(self)
         self._is_stopped = True
 
-    def stop(self) -> None:
+    def stop(self, *, cancel: bool = False) -> None:
         if self._is_context_manager_active:
             self._is_stopping = True
-        elif not self._set_is_stopped():
+            self._is_cancelling = cancel
+        elif not self._set_is_stopped(cancel=cancel):
             self._read_reqs.stop()
             self._read_resps.cancel()
-            self._grpc_streamers.remove(self)
+            self._remove()
 
     def ack(self, item: UUID | RecordedEvent) -> None:
         self._read_reqs.ack(event_id=self._get_event_id(item))

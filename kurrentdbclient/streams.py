@@ -284,10 +284,10 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
         stream_name: str | None,
         grpc_streamers: GrpcStreamers,
     ):
-        GrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
         BaseReadResponse.__init__(self, stream_name=stream_name)
         AbstractReadResponse.__init__(self)
         self._read_resps = read_resps
+        GrpcStreamer.__init__(self, grpc_streamers=grpc_streamers)
 
     def __next__(self) -> RecordedEvent:
         try:
@@ -298,12 +298,32 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
                 )
                 if recorded_event is not None:
                     return recorded_event
-        except CancelledByClientError:
-            self.stop()
-            raise StopIteration from None
-        except:
-            self.stop()
-            raise
+        except StopIteration as e:
+            # Grpc stream is finished.
+            self.stop(cancel=False)
+            if self._is_cancelled:
+                # Grpc stream is finished but response is cancelled.
+                raise CancelledByClientError from e
+            # Grpc stream is finished but response is not cancelled.
+            raise e from e
+        except CancelledByClientError as e:
+            # Grpc stream is cancelled.
+            self.stop(cancel=True)
+            if self._is_cancelled:
+                # Response is stopped and cancelled.
+                raise
+            # Response is stopped but not cancelled.
+            raise StopIteration from e
+        except Exception as e:
+            # Some channel error.
+            if self._is_cancelled:
+                # Some channel error but response was cancelled.
+                # print("Was cancelled, got error:", e)
+                raise CancelledByClientError from e
+            # Some channel error but response was not cancelled.
+            # print(f"Not cancelled ({id(self)}), got error:", e)
+            self.stop(cancel=True)
+            raise e from e
 
     def _get_next_read_resp(self) -> streams_pb2.ReadResp:
         try:
@@ -314,10 +334,10 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
             assert isinstance(read_resp, streams_pb2.ReadResp)
             return read_resp
 
-    def stop(self) -> None:
-        if not self._set_is_stopped():
+    def stop(self, *, cancel: bool = False) -> None:
+        if not self._set_is_stopped(cancel=cancel):
             self._read_resps.cancel()
-            self._grpc_streamers.remove(self)
+            self._remove()
 
 
 class CatchupSubscription(ReadResponse, AbstractCatchupSubscription):
@@ -1184,6 +1204,8 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
         )
 
         # Send the read request, and iterate over the response.
+        #  - if channel is closed, this raises ValueError('Channel closed!').
+        #  - although a fresh channel doesn't do this,
         read_resps = self._stub.Read(
             read_req,
             timeout=timeout,
