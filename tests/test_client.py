@@ -1760,6 +1760,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             },
         )
 
+    # TODO: Add timeouts in method calls because this sometimes hangs.
     def test_read_all_filter_include_stream_identifiers(self) -> None:
         self.construct_client()
 
@@ -2000,6 +2001,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         assert isinstance(count, int)
         self.assertGreater(count, 1)
 
+    # TODO: Sometimes hangs.
     def test_stream_delete_with_current_version(self) -> None:
         self.construct_client()
         stream_name = str(uuid4())
@@ -2745,6 +2747,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         SERVER_VERSION <= (22, 10),
         "Server doesn't support 'caught up' or 'fell behind' messages",
     )
+    # TODO: This sometime hangs.
     def test_subscribe_to_all_include_caught_up(self) -> None:
         self.construct_client()
 
@@ -6310,6 +6313,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         with self.assertRaises(AlreadyExistsError):
             self.client.create_subscription_to_stream(group_name, stream_name)
 
+    # TODO: Sometimes hangs.
     def test_subscription_to_stream_delete(self) -> None:
         self.construct_client()
 
@@ -6863,6 +6867,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertGreater(len(statistics), 0)
         self.assertIsInstance(statistics[0], ProjectionStatistics)
 
+    # TODO: Sometimes hangs.
     def test_disable_projection(self) -> None:
         self.construct_client()
         projection_name = str(uuid4())
@@ -8643,6 +8648,7 @@ class TestOptionalClientAuth(TimedTestCase):
 
 
 class TestDiscoverScheme(TestCase):
+    # TODO: Sometimes get NotFoundError from final call to get_stream().
     def test_calls_dns_and_uses_given_port_number_or_default(self) -> None:
         # Cluster name not configured in DNS, default port.
         uri = (
