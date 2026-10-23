@@ -119,8 +119,13 @@ def autoreconnect(f: _TCallable) -> _TCallable:
     def autoreconnect_decorator(*args: Any, **kwargs: Any) -> Any:
         client = args[0]
         assert isinstance(client, KurrentDBClient)
+        connection_id = client.connection_id
         try:
             return f(*args, **kwargs)
+
+        # TODO: Maybe refine the retry so that we do reconnect and try again when
+        #   there is connection failure after retrying without reconnecting because
+        #   the connection has changed. Need to think about this a bit more...
 
         except NodeIsNotLeaderError as e:
             if (
@@ -131,7 +136,8 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 )
             ):
                 client.reconnect(
-                    grpc_target(e.host, e.port) if e.host and e.port else None
+                    grpc_target(e.host, e.port) if e.host and e.port else None,
+                    connection_id=connection_id,
                 )
                 sleep(0.1)
                 return f(*args, **kwargs)
@@ -140,13 +146,13 @@ def autoreconnect(f: _TCallable) -> _TCallable:
         except ValueError as e:
             s = str(e)
             if "Channel closed!" in s or "Cannot invoke RPC on closed channel!" in s:
-                client.reconnect()
+                client.reconnect(connection_id=connection_id)
                 sleep(0.1)
                 return f(*args, **kwargs)
             raise  # pragma: no cover
 
         except ServiceUnavailableError:
-            client.reconnect()
+            client.reconnect(connection_id=connection_id)
             sleep(0.1)
             return f(*args, **kwargs)
 
