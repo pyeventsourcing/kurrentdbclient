@@ -53,6 +53,7 @@ from kurrentdbclient.events import (
 )
 from kurrentdbclient.exceptions import (
     AbortedByServerError,
+    AccessDeniedError,
     AlreadyExistsError,
     ConsistencyChecksFailedError,
     ConsumerTooSlowError,
@@ -9773,6 +9774,10 @@ class TestHandleRpcError(TestCase):
         self.assertEqual(KurrentDBClientError, cm.exception.__class__)
         self.assertEqual("Actually OK", cm.exception.args[0])
 
+    def test_access_denied_error(self) -> None:
+        with self.assertRaises(AccessDeniedError):
+            raise handle_rpc_error(FakeAccessDeniedError()) from None
+
 
 class FakeRpcError(_MultiThreadedRendezvous):
     def __init__(
@@ -10047,6 +10052,11 @@ class FakeWrongExpectedVersionActuallyPlusOneError(FakeFailedPreconditionRpcErro
 class FakeStreamIsDeletedError(FakeFailedPreconditionRpcError):
     def __init__(self) -> None:
         super().__init__(details="is deleted")
+
+
+class FakeAccessDeniedError(FakeRpcError):
+    def __init__(self) -> None:
+        super().__init__(status_code=StatusCode.PERMISSION_DENIED, details="")
 
 
 def random_data(size: int = 16) -> bytes:

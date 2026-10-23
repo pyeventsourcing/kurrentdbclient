@@ -30,6 +30,7 @@ import kurrentdbclient.protos.v2.streams.errors_pb2 as v2streams_errors_pb2
 from kurrentdbclient.events import RecordedEvent
 from kurrentdbclient.exceptions import (
     AbortedByServerError,
+    AccessDeniedError,
     AlreadyExistsError,
     CancelledByClientError,
     ConsistencyCheckFailure,
@@ -397,6 +398,10 @@ def handle_rpc_error(e: grpc.RpcError) -> KurrentDBClientError:  # noqa: PLR0911
             # Projections.Delete does this in >=26.2 when projection not stopped.
             return FailedPreconditionError(details_str)
             # no cover <26.2: stop
+
+        if e.code() == grpc.StatusCode.PERMISSION_DENIED:
+            return AccessDeniedError(details_str)
+
         if e.code() == grpc.StatusCode.INTERNAL:
             return InternalError(details_str)
     return GrpcError(str(e))
