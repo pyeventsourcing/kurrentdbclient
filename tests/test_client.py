@@ -8345,6 +8345,21 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     #                 break
     #             self.fail("Failed to read event from index")
 
+    def test_avoid_reconnecting_if_already_have_new_connection(self) -> None:
+        # This is used in the autoreconnect decorator to avoid a thread
+        # that experienced a connection failure from causing a reconnection
+        # when the connection that caused the failure has already been replaced.
+        # This would avoid a storm of reconnections when many threads are reading
+        # within code that reconnects when the reads fail, such that each might
+        # close new connections created by other threads, causing further read errors.
+        self.construct_client()
+        connection_id = self.client.connection_id
+        self.client.reconnect(connection_id=connection_id)
+        new_connection_id = self.client.connection_id
+        self.assertNotEqual(connection_id, new_connection_id)
+        self.client.reconnect(connection_id=connection_id)
+        self.assertEqual(new_connection_id, self.client.connection_id)
+
 
 PROJECTION_QUERY_TEMPLATE1 = """fromStream('%s')
 .when({

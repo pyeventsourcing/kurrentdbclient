@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from kurrentdbclient.common import AsyncGrpcStreamers, GrpcStreamers
 from kurrentdbclient.gossip import AsyncGossipService, GossipService
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 class BaseKurrentDBConnection:
     def __init__(self, grpc_target: str):
         self._grpc_target = grpc_target
+        self.connection_id = uuid4()
 
     @property
     def grpc_target(self) -> str:

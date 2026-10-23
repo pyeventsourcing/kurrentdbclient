@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import random
 import sys
@@ -62,6 +63,7 @@ from kurrentdbclient.events import (
     StreamStateCheck,
 )
 from kurrentdbclient.exceptions import (
+    AccessDeniedError,
     DiscoveryFailedError,
     FollowerNotFoundError,
     GrpcError,
@@ -81,6 +83,7 @@ from kurrentdbclient.gossip import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from uuid import UUID
 
     from kurrentdbclient.persistent import (
         ConsumerStrategy,
@@ -323,6 +326,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         return self._connection.grpc_target
 
     @property
+    def connection_id(self) -> UUID:
+        return self._connection.connection_id
+
+    @property
     def streams(self) -> StreamsService:
         return self._connection.streams
 
@@ -411,14 +418,22 @@ class KurrentDBClient(BaseKurrentDBClient):
 
         return connection
 
-    def reconnect(self, grpc_target: str | None = None) -> None:
-        self._is_reconnection_required.set()
+    def reconnect(
+        self, grpc_target: str | None = None, *, connection_id: UUID | None = None
+    ) -> None:
+        # Avoid reconnecting if client already has a new connection.
+        if connection_id is None or connection_id == self.connection_id:
+            self._is_reconnection_required.set()
+        # Single reconnection.
         with self._reconnection_lock:
             if self._is_reconnection_required.is_set():
                 new_conn = self._connect(grpc_target)
                 old_conn, self._connection = self._connection, new_conn
                 old_conn.close()
                 self._is_reconnection_required.clear()
+                # Exercise the connection (avoids delayed errors due to lazy channel)
+                with contextlib.suppress(AccessDeniedError):
+                    self._get_commit_position()
             else:  # pragma: no cover
                 # Todo: Test with concurrent writes to wrong node state.
                 pass
