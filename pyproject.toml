@@ -204,7 +204,7 @@ branch = true
 omit = [
     "kurrentdbclient/protos/*"
 ]
-relative_files = true
+#relative_files = true
 
 [tool.coverage.report]
 fail_under = 100
