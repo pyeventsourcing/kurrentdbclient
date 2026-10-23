@@ -120,7 +120,7 @@ lint-python: lint-black lint-ruff lint-isort lint-mypy
 
 .PHONY: test
 test:
-	@timeout --preserve-status --kill-after=10s 10m $(POETRY) run python ./runtests.py
+	@timeout --preserve-status --kill-after=10s 10m $(POETRY) run python ./runtests.py -v
 #	$(POETRY) run coverage report
 
 # 	$(POETRY) run python -m pytest -v $(opts) $(call tests,.) & read -t 1 ||
