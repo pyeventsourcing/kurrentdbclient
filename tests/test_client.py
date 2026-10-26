@@ -2890,6 +2890,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
     @skipIf(SERVER_VERSION <= (21, 10), "'Extra checkpoint' bug not fixed")
+    # TODO: Sometimes hangs.
     def test_extra_checkpoint_bug_is_fixed(self) -> None:
         self.construct_client()
 
@@ -3023,6 +3024,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
             break
         self.assertEqual(count, 1)
 
+    # TODO: Hangs sometimes.
     def test_subscribe_to_all_from_commit_position_current(self) -> None:
         self.construct_client()
 
@@ -3097,6 +3099,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[0].id, event2.id)
         self.assertEqual(events[1].id, event3.id)
 
+    # TODO: Sometimes hangs.
     def test_subscribe_to_all_raises_deadline_exceeded(self) -> None:
         self.construct_client()
 
@@ -6517,6 +6520,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     #         print("Event1 link type:", received2.link.type if received2.link else "")
     #         print()
 
+    # TODO: Sometimes hangs.
     def test_stream_metadata_get_and_set(self) -> None:
         self.construct_client()
         stream_name = str(uuid4())
