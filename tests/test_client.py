@@ -591,6 +591,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(events[0].commit_position, commit_position1)
         self.assertEqual(events[2].commit_position, commit_position2)
 
+    # TODO: Sometimes hangs.
     def test_append_to_stream_wrong_credentials(self) -> None:
         self.construct_client()
         stream_name1 = str(uuid4())
@@ -4569,6 +4570,7 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         subscription1.stop()
         subscription2.stop()
 
+    # TODO: Sometimes hangs.
     def test_subscription_to_all_event_not_redelivered_after_ack(self) -> None:
         # This test was added to ensure that acks are effective, which requires
         # acks are send with the received subscriber_id. This wasn't being done

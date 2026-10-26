@@ -3415,6 +3415,8 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_restart_projections_subsystem(self) -> None:
         await self.client.restart_projections_subsystem()
 
+    # TODO: Sometimes get "Stream '$projection-...' not found"
+    #  when checking project result stream.
     async def test_projection_example(self) -> None:
         application_stream_name = "account-" + str(uuid4())
         emitted_stream_name = "emitted-" + str(uuid4())
