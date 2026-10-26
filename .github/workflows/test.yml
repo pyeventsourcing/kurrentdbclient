@@ -5,7 +5,9 @@ on:
       - '**'
   pull_request:
   workflow_call:
-
+    secrets:
+      KURRENTDB_LICENSING__LICENSE_KEY:
+        required: true
 jobs:
   test:
     strategy:

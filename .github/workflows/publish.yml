@@ -9,6 +9,8 @@ jobs:
   test:
     name: Tests
     uses: ./.github/workflows/test.yml
+    secrets:
+      KURRENTDB_LICENSING__LICENSE_KEY: ${{ secrets.KURRENTDB_LICENSING__LICENSE_KEY }}
 
   build:
     name: Build distributions
