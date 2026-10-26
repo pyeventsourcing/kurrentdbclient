@@ -214,12 +214,11 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                 )
                 if recorded_event is not None:
                     return recorded_event
-        except StopAsyncIteration as e:
-            if self._is_cancelled:
+        except BaseException as e:
+            was_cancelled = self._is_cancelled
+            await self.stop(cancel=True)
+            if was_cancelled and isinstance(e, StopAsyncIteration):
                 raise CancelledByClientError from e
-            raise
-        except BaseException:
-            await self.stop()
             raise
 
     async def stop(

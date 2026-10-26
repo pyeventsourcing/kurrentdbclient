@@ -65,6 +65,7 @@ from kurrentdbclient.exceptions import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from uuid import UUID
 
     from kurrentdbclient.persistent import ConsumerStrategy, SubscriptionInfo
     from kurrentdbclient.projections import ProjectionState, ProjectionStatistics
@@ -80,6 +81,7 @@ def autoreconnect(f: _TCallable) -> _TCallable:
         client: AsyncKurrentDBClient, *args: Any, **kwargs: Any
     ) -> Any:
         await client.connect()
+        connection_id = client.connection_id
         try:
             return await f(client, *args, **kwargs)
 
@@ -92,7 +94,8 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 )
             ):
                 await client.reconnect(
-                    grpc_target(e.host, e.port) if e.host and e.port else None
+                    grpc_target(e.host, e.port) if e.host and e.port else None,
+                    connection_id=connection_id,
                 )
                 await asyncio.sleep(0.1)
                 return await f(client, *args, **kwargs)
@@ -100,13 +103,13 @@ def autoreconnect(f: _TCallable) -> _TCallable:
 
         except grpc.aio.UsageError as e:
             if "Channel is closed" in str(e):
-                await client.reconnect()
+                await client.reconnect(connection_id=connection_id)
                 await asyncio.sleep(0.1)
                 return await f(client, *args, **kwargs)
             raise  # pragma: no cover
 
         except ServiceUnavailableError:
-            await client.reconnect()
+            await client.reconnect(connection_id=connection_id)
             await asyncio.sleep(0.1)
             return await f(client, *args, **kwargs)
 
@@ -143,6 +146,11 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         self._is_reconnection_required = Event()
         self._connection_lock = Lock()
 
+    @property
+    def connection_id(self) -> UUID:
+        assert self._connection is not None
+        return self._connection.connection_id
+
     async def connect(self) -> None:
         if self._connection is None:
             async with self._connection_lock:
@@ -163,8 +171,12 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
     def connection_target(self) -> str:
         return self.connection.grpc_target
 
-    async def reconnect(self, grpc_target: str | None = None) -> None:
-        self._is_reconnection_required.set()
+    async def reconnect(
+        self, grpc_target: str | None = None, connection_id: UUID | None = None
+    ) -> None:
+        # Avoid reconnecting if client already has a new connection.
+        if connection_id is None or connection_id == self.connection_id:
+            self._is_reconnection_required.set()
         async with self._connection_lock:
             if self._is_reconnection_required.is_set():
                 new = await self._connect(grpc_target)

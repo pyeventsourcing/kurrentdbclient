@@ -4537,6 +4537,243 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         if not_cancelled_by_client_errors:
             raise AssertionError from not_cancelled_by_client_errors[0]
 
+    async def test_reconnect_during_read_stream_causes_cancelled_error_midway(
+        self,
+    ) -> None:
+
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read one event.
+        read_response = await self.client.read_stream(stream_name)
+        await read_response.__anext__()
+
+        # Reconnect the client.
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await read_response.__anext__()
+
+    async def test_reconnect_during_read_stream_causes_cancelled_error_at_end(
+        self,
+    ) -> None:
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read two events.
+        read_response = await self.client.read_stream(stream_name)
+        await read_response.__anext__()
+        await read_response.__anext__()
+
+        # Give the RPC response a bit of time to get the OK status code.
+        await asyncio.sleep(0.5)
+
+        # Reconnect the client.
+        # print("Calling reconnect() from test")
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await read_response.__anext__()
+
+    async def test_reconnect_during_catchup_subscription_causes_cancelled_error_midway(
+        self,
+    ) -> None:
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read one event.
+        subscription = await self.client.subscribe_to_stream(stream_name)
+        await subscription.__anext__()
+
+        # Reconnect the client.
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await subscription.__anext__()
+
+    async def test_reconnect_during_catchup_subscribe_causes_cancelled_error_at_end(
+        self,
+    ) -> None:
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read two events.
+        subscription = await self.client.subscribe_to_stream(stream_name)
+        await subscription.__anext__()
+        await subscription.__anext__()
+
+        # Give the RPC response a bit of time to get the OK status code.
+        await asyncio.sleep(0.5)
+
+        # Reconnect the client.
+        # print("Calling reconnect() from test")
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await subscription.__anext__()
+
+    async def test_reconnect_during_persistent_subscription_causes_cancelled_err_midway(
+        self,
+    ) -> None:
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read one event.
+        group_name = str(uuid4())
+        await self.client.create_subscription_to_stream(group_name, stream_name)
+        subscription = await self.client.read_subscription_to_stream(
+            group_name, stream_name
+        )
+        await subscription.__anext__()
+
+        # Reconnect the client.
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await subscription.__anext__()
+
+    async def test_reconnect_during_persistent_subscription_causes_cancelled_err_at_end(
+        self,
+    ) -> None:
+        # Append two events.
+        stream_name = str(uuid4())
+        event1 = NewEvent(type="OrderCreated", data=random_data())
+        event2 = NewEvent(type="OrderUpdated", data=random_data())
+        await self.client.append_events(
+            stream_name, current_version=StreamState.NO_STREAM, events=[event1, event2]
+        )
+
+        # Make sure the client can read the stream.
+        while True:
+            try:
+                stream_events = await self.client.get_stream(stream_name)
+            except NotFoundError:
+                pass
+            else:
+                if len(stream_events) == 2:
+                    break
+            await asyncio.sleep(0.1)
+
+        # Read two events.
+        group_name = str(uuid4())
+        await self.client.create_subscription_to_stream(group_name, stream_name)
+        subscription = await self.client.read_subscription_to_stream(
+            group_name, stream_name
+        )
+        await subscription.__anext__()
+        await subscription.__anext__()
+
+        # Give the RPC response a bit of time to get the OK status code.
+        await asyncio.sleep(0.5)
+
+        # Reconnect the client.
+        # print("Calling reconnect() from test")
+        await self.client.reconnect()
+
+        # Expect CancelledByClientError
+        with self.assertRaises(CancelledByClientError):
+            await subscription.__anext__()
+
+    async def test_avoid_reconnecting_if_already_have_new_connection(self) -> None:
+        await self.client.connect()
+        # This is used in the autoreconnect decorator to avoid a thread
+        # that experienced a connection failure from causing a reconnection
+        # when the connection that caused the failure has already been replaced.
+        # This would avoid a storm of reconnections when many threads are reading
+        # within code that reconnects when the reads fail, such that each might
+        # close new connections created by other threads, causing further read errors.
+        connection_id = self.client.connection_id
+        await self.client.reconnect(connection_id=connection_id)
+        new_connection_id = self.client.connection_id
+        self.assertNotEqual(connection_id, new_connection_id)
+        await self.client.reconnect(connection_id=connection_id)
+        self.assertEqual(new_connection_id, self.client.connection_id)
+
 
 class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
     def setUp(self) -> None:

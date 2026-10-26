@@ -597,8 +597,11 @@ class AsyncPersistentSubscription(
                         return recorded_event
                 else:  # pragma: no cover
                     pass
-        except BaseException:
-            await self.stop(timeout=1)
+        except BaseException as e:
+            was_cancelled = self._is_cancelled
+            await self.stop(timeout=1, cancel=True)
+            if was_cancelled and isinstance(e, StopAsyncIteration):
+                raise CancelledByClientError from e
             raise
 
     async def stop(
