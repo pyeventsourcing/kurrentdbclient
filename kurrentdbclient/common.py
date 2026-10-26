@@ -196,23 +196,48 @@ class GrpcStreamers(BaseGrpcStreamers[GrpcStreamer]):
 class AsyncGrpcStreamer(BaseGrpcStreamer, ABC):
     def __init__(self, grpc_streamers: AsyncGrpcStreamers) -> None:
         self._grpc_streamers = grpc_streamers
-        self._grpc_streamers.add(self)
         self._is_stopped = False
+        self._is_cancelled = False
         self._is_stopped_lock = asyncio.Lock()
 
+    async def add_to_steamers(self) -> None:
+        try:
+            self._grpc_streamers.add(self)
+        except GrpcStreamersCollectionClosedError:  # pragma: no cover
+            # This is hit by the test_replicate_github_issue_40 tests when
+            # run separately but for some reason not with the full suite
+            await self.stop(cancel=True)
+
+    @property
+    def is_stopped(self) -> bool:
+        return self._is_stopped
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self._is_cancelled
+
     @abstractmethod
-    async def stop(self, *, timeout: float | None = None) -> None:
+    async def stop(
+        self,
+        *,
+        timeout: float | None = None,
+        cancel: bool = False,
+    ) -> None:
         """
         Stops the iterator(s) of streaming call.
         """
 
-    async def _set_is_stopped(self) -> bool:
+    def _remove(self) -> None:
+        self._grpc_streamers.remove(self)
+
+    async def _set_is_stopped(self, *, cancel: bool = False) -> bool:
         is_stopped = True
         if self._is_stopped is False:
             async with self._is_stopped_lock:
                 if self._is_stopped is False:
                     is_stopped = False
                     self._is_stopped = True
+                    self._is_cancelled = cancel
                 else:  # pragma: no cover
                     pass
         return is_stopped
@@ -220,9 +245,11 @@ class AsyncGrpcStreamer(BaseGrpcStreamer, ABC):
 
 class AsyncGrpcStreamers(BaseGrpcStreamers[AsyncGrpcStreamer]):
     async def close(self) -> None:
+        with self.lock:
+            self._is_closed = True
         for async_grpc_streamer in self:
             # print("closing streamer")
-            await async_grpc_streamer.stop(timeout=1)
+            await async_grpc_streamer.stop(timeout=1, cancel=True)
             # print("closed streamer")
 
 

@@ -214,17 +214,26 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                 )
                 if recorded_event is not None:
                     return recorded_event
+        except StopAsyncIteration as e:
+            if self._is_cancelled:
+                raise CancelledByClientError from e
+            raise
         except BaseException:
             await self.stop()
             raise
 
-    async def stop(self, *, timeout: float | None = None) -> None:
+    async def stop(
+        self,
+        *,
+        timeout: float | None = None,
+        cancel: bool = False,
+    ) -> None:
         if self._is_context_manager_active:
             self._is_stopping = True
-        elif not await self._set_is_stopped():
+        elif not await self._set_is_stopped(cancel=cancel):
             self._read_resp_stream_worker_task.cancel()
             self._unary_stream_call.cancel()
-            self._grpc_streamers.remove(self)
+            self._remove()
             try:
                 await self._read_resp_stream_worker_task
             except asyncio.CancelledError:
@@ -1008,6 +1017,7 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 stream_name=stream_name,
                 grpc_streamers=self._grpc_streamers,
             )
+            await response.add_to_steamers()
         else:
             response = AsyncCatchupSubscription(
                 unary_stream_call=unary_stream_call,
@@ -1017,6 +1027,7 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 include_fell_behind=include_fell_behind,
                 grpc_streamers=self._grpc_streamers,
             )
+            await response.add_to_steamers()
             try:
                 await response.check_confirmation()
             except BaseException:

@@ -29,10 +29,13 @@ from kurrentdbclient.common import (
     DEFAULT_PERSISTENT_SUB_READ_BATCH_SIZE,
     AbstractAsyncCatchupSubscription,
     AbstractAsyncPersistentSubscription,
+    AsyncGrpcStreamer,
+    AsyncGrpcStreamers,
 )
 from kurrentdbclient.events import CaughtUp, NewEvents, NewRecord, StreamStateCheck
 from kurrentdbclient.exceptions import (
     AlreadyExistsError,
+    CancelledByClientError,
     ConsistencyChecksFailedError,
     DeadlineExceededError,
     DiscoveryFailedError,
@@ -1844,6 +1847,7 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
             stream_name=None,
             grpc_streamers=self.client.connection._grpc_streamers,
         )
+        await persistent_subscription.add_to_steamers()
 
         with self.assertRaises(SubscriptionConfirmationError) as cm:
             async with persistent_subscription:
@@ -4484,6 +4488,55 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                     break
                 self.fail("Failed to read event from index")
 
+    async def test_replicate_github_issue_40_reconnect_silently_truncates_reads(
+        self,
+    ) -> None:
+        stream = f"silent-truncate-reads-issue-{uuid4()}"
+        stream_len = 500
+        num_tasks = 20
+
+        await self.client.append_to_stream(
+            stream,
+            current_version=StreamState.NO_STREAM,
+            events=[NewEvent(type="E", data=b"{}") for _ in range(stream_len)],
+        )
+
+        counts = []
+        errors = []
+
+        async def read() -> None:
+            try:
+                # Assuming read_stream returns an async generator/iterable
+                events = [e async for e in await self.client.read_stream(stream)]
+                counts.append(len(events))
+            except Exception as e:
+                errors.append(e)
+
+        # Fire off all the concurrent read tasks
+        tasks = [asyncio.create_task(read()) for _ in range(num_tasks)]
+
+        # Yield control briefly to let reads start
+        await asyncio.sleep(0.005)
+
+        # Trigger the reconnect
+        await self.client.reconnect()
+
+        # Wait for all read tasks to finish
+        await asyncio.gather(*tasks)
+
+        num_received = sum(counts)
+        num_missing_events = num_tasks * stream_len - num_received
+        num_errors = len(errors)
+        self.assertGreater(num_missing_events, 0)
+        self.assertGreater(num_errors, 0)
+
+        not_cancelled_by_client_errors = [
+            e for e in errors if not isinstance(e, CancelledByClientError)
+        ]
+
+        if not_cancelled_by_client_errors:
+            raise AssertionError from not_cancelled_by_client_errors[0]
+
 
 class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -4550,3 +4603,40 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
         # TlsCaFile should override the root_certificates passed directly.
         self.assertNotEqual(root_certificates, client_with_tls_ca.root_certificates)
         self.assertEqual(tls_ca_file_contents, client_with_tls_ca.root_certificates)
+
+
+class TestAsyncGrpcStreamers(TimedTestCase, IsolatedAsyncioTestCase):
+    async def test(self) -> None:
+        class MyStreamer(AsyncGrpcStreamer):
+            async def stop(
+                self,
+                *,
+                timeout: float | None = None,
+                cancel: bool = False,
+            ) -> None:
+                if await self._set_is_stopped(cancel=cancel):
+                    self._remove()
+
+        streamers = AsyncGrpcStreamers()
+
+        # Normal scenario: start and stop a new streamer.
+        streamer1 = MyStreamer(grpc_streamers=streamers)
+        await streamer1.add_to_steamers()
+        self.assertFalse(streamer1.is_stopped)
+        self.assertFalse(streamer1.is_cancelled)
+        await streamer1.stop()
+        self.assertTrue(streamer1.is_stopped)
+        self.assertFalse(streamer1.is_cancelled)
+
+        # Reconnection scenario: close all streamers.
+        streamer2 = MyStreamer(grpc_streamers=streamers)
+        await streamer2.add_to_steamers()
+        await streamers.close()
+        self.assertTrue(streamer2.is_stopped)
+        self.assertTrue(streamer2.is_cancelled)
+
+        # Race scenario: start streamer against closed connection.
+        streamer3 = MyStreamer(grpc_streamers=streamers)
+        await streamer3.add_to_steamers()
+        self.assertTrue(streamer3.is_stopped)
+        self.assertTrue(streamer3.is_cancelled)
