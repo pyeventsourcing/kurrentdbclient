@@ -313,7 +313,7 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
                 # Grpc stream is finished but response is cancelled.
                 raise CancelledByClientError from e
             # Grpc stream is finished but response is not cancelled.
-            raise e from e
+            raise
         except CancelledByClientError as e:
             # Grpc stream is cancelled.
             self.stop(cancel=True)
@@ -331,7 +331,7 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
             # Some channel error but response was not cancelled.
             # print(f"Not cancelled ({id(self)}), got error:", e)
             self.stop(cancel=True)
-            raise e from e
+            raise e
 
     def _get_next_read_resp(self) -> streams_pb2.ReadResp:
         try:
