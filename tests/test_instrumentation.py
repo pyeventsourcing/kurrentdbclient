@@ -3378,78 +3378,8 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
 
         # Check the second span.
         self.check_spans(
-            num_spans=7,
+            num_spans=2,
             span_index=1,
-            parent_span_index=6,
-            span_name="AsyncKurrentDBClient.read_stream",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "AsyncKurrentDBClient.read_stream",
-                "db.kurrentdb.stream": stream_name,
-            },
-        )
-
-        # Check the third span.
-        self.check_spans(
-            num_spans=7,
-            span_index=2,
-            parent_span_index=6,
-            span_name="AsyncReadResponse.__anext__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "AsyncReadResponse.__anext__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[0].id),
-                "db.kurrentdb.event.type": recorded_events[0].type,
-            },
-        )
-
-        # Check the fourth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=3,
-            parent_span_index=6,
-            span_name="AsyncReadResponse.__anext__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "AsyncReadResponse.__anext__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[1].id),
-                "db.kurrentdb.event.type": recorded_events[1].type,
-            },
-        )
-
-        # Check the fifth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=4,
-            parent_span_index=6,
-            span_name="AsyncReadResponse.__anext__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "AsyncReadResponse.__anext__",
-                "db.kurrentdb.stream": stream_name,
-                "db.kurrentdb.event.id": str(recorded_events[2].id),
-                "db.kurrentdb.event.type": recorded_events[2].type,
-            },
-        )
-
-        # Check the sixth span.
-        self.check_spans(
-            num_spans=7,
-            span_index=5,
-            parent_span_index=6,
-            span_name="AsyncReadResponse.__anext__",
-            span_kind=trace_api.SpanKind.CLIENT,
-            expected_span_attributes={
-                "db.operation": "AsyncReadResponse.__anext__",
-            },
-        )
-
-        # Check the seventh span.
-        self.check_spans(
-            num_spans=7,
-            span_index=6,
             parent_span_index=None,
             span_name="AsyncKurrentDBClient.get_stream",
             span_kind=trace_api.SpanKind.CLIENT,
@@ -3465,7 +3395,7 @@ class AsyncTestReadAndGetStream(AsyncKurrentDBClientInstrumentorTestCase):
             await client.get_stream(stream_name)
 
         self.check_spans(
-            num_spans=16,
+            num_spans=3,
         )
 
 

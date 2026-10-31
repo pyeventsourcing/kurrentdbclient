@@ -6,6 +6,7 @@ import contextlib
 import os
 import ssl
 from pathlib import Path
+from typing import Any
 
 # from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -283,6 +284,15 @@ class TestDocs(TestCase):
             assert not lines[0].strip()
             lines[0] = "import sys"
 
+        if sync_only or async_only:
+            lines.append("try:")
+            if sync_only:
+                lines.append("    client.close()")
+            else:
+                lines.append("    await client.close()")
+            lines.append("except NameError:")
+            lines.append("    pass")
+
         source = "\n".join(lines) + "\n"
 
         # # Write the code into a temp file.
@@ -290,6 +300,8 @@ class TestDocs(TestCase):
         # tempfile.writelines(source)
         # tempfile.flush()
 
+        globals_: dict[str, Any] = {}
+        locals_: dict[str, Any] = globals_
         result = eval(  # noqa: S307, PGH001
             compile(
                 source=self.randomize_names(source),
@@ -297,8 +309,8 @@ class TestDocs(TestCase):
                 mode="exec",
                 flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
             ),
-            globals(),
-            globals(),
+            globals_,
+            locals_,
         )
         if asyncio.iscoroutine(result):
             asyncio.run(result)

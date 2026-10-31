@@ -180,7 +180,6 @@ class BaseKurrentDBClient(ABC):
         private_key: str | bytes | None = None,
         certificate_chain: str | bytes | None = None,
     ) -> None:
-        self._is_closed = False
         self.root_certificates = (
             root_certificates.encode()
             if isinstance(root_certificates, str)
@@ -255,10 +254,6 @@ class BaseKurrentDBClient(ABC):
     def connection_target(self) -> str:
         pass  # pragma: no cover
 
-    @property
-    def is_closed(self) -> bool:
-        return self._is_closed
-
     def construct_call_credentials(
         self, username: str | None, password: str | None
     ) -> grpc.CallCredentials | None:
@@ -316,6 +311,7 @@ class KurrentDBClient(BaseKurrentDBClient):
             private_key=private_key,
             certificate_chain=certificate_chain,
         )
+        self._is_closed = False
         self._is_reconnection_required = Event()
         self._reconnection_lock = Lock()
         self._connection = self._connect()
@@ -326,6 +322,10 @@ class KurrentDBClient(BaseKurrentDBClient):
         #     target=self._batch_append_future_result_loop, daemon=True
         # )
         # self._batch_append_thread.start()
+
+    @property
+    def is_closed(self) -> bool:
+        return self._is_closed
 
     @property
     def connection_target(self) -> str:
@@ -918,7 +918,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Returns the current commit position of the database.
         """
-        read_response = self._read_all(
+        with self._read_all(
             backwards=True,
             filter_exclude=filter_exclude,
             filter_include=filter_include,
@@ -926,11 +926,11 @@ class KurrentDBClient(BaseKurrentDBClient):
             limit=1,
             timeout=timeout,
             credentials=credentials,
-        )
-        recorded_events = tuple(read_response)
-        if recorded_events:
-            return recorded_events[0].commit_position
-        return 0
+        ) as read_response:
+            recorded_events = tuple(read_response)
+            if recorded_events:
+                return recorded_events[0].commit_position
+            return 0
 
     @retrygrpc
     @autoreconnect

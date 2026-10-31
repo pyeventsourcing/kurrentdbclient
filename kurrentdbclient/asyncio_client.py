@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from asyncio import Event, Lock
@@ -54,6 +55,7 @@ from kurrentdbclient.events import (
     StreamStateCheck,
 )
 from kurrentdbclient.exceptions import (
+    AccessDeniedError,
     DeadlineExceededError,
     DiscoveryFailedError,
     GrpcError,
@@ -136,15 +138,26 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         private_key: str | bytes | None = None,
         certificate_chain: str | bytes | None = None,
     ):
+        self._connection: AsyncKurrentDBConnection | None = None
+        self._is_reconnection_required = Event()
+        self._connection_lock = Lock()
         super().__init__(
             uri=uri,
             root_certificates=root_certificates,
             private_key=private_key,
             certificate_chain=certificate_chain,
         )
-        self._connection: AsyncKurrentDBConnection | None = None
-        self._is_reconnection_required = Event()
-        self._connection_lock = Lock()
+
+    async def __aenter__(self) -> Self:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
+        await self.close()
+
+    @property
+    def is_closed(self) -> bool:
+        return self._connection is None
 
     @property
     def connection_id(self) -> UUID:
@@ -158,12 +171,22 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                     self._connection = await self._connect()
                 else:  # for coverage with Python <= 3.11
                     pass
+            with contextlib.suppress(AccessDeniedError):
+                await self._get_commit_position()
+
+    async def close(self) -> None:
+        if not self.is_closed:
+            async with self._connection_lock:
+                if not self.is_closed:
+                    connection = self.connection
+                    self._connection = None
+                    await connection.close()
 
     @property
     def connection(self) -> AsyncKurrentDBConnection:
         connection = self._connection
         if connection is None:
-            msg = "Connection was never established"
+            msg = "Client is not connected"
             raise ProgrammingError(msg)
         return connection
 
@@ -186,6 +209,8 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
             else:  # pragma: no cover
                 # Todo: Test with concurrent writes to wrong node state.
                 pass
+        with contextlib.suppress(AccessDeniedError):
+            await self._get_commit_position()
 
     async def _connect(
         self, grpc_target: str | None = None
@@ -397,6 +422,36 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         """
         Reads recorded events in "all streams" in the database.
         """
+        return await self._read_all(
+            commit_position=commit_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+            filter_by_prefix=filter_by_prefix,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    async def _read_all(
+        self,
+        *,
+        commit_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
+        filter_include: Sequence[str] = (),
+        filter_by_stream_name: bool = False,
+        filter_by_prefix: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AsyncReadResponse:
+        """
+        Reads recorded events in "all streams" in the database.
+        """
         return await self.connection.streams.read(
             commit_position=commit_position,
             backwards=backwards,
@@ -448,7 +503,27 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         """
         Returns the current commit position of the database.
         """
-        read_response = await self.read_all(
+        return await self._get_commit_position(
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    async def _get_commit_position(
+        self,
+        *,
+        filter_exclude: Sequence[str] = DEFAULT_EXCLUDE_FILTER,
+        filter_include: Sequence[str] = (),
+        filter_by_stream_name: bool = False,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> int:
+        """
+        Returns the current commit position of the database.
+        """
+        async with await self._read_all(
             backwards=True,
             filter_exclude=filter_exclude,
             filter_include=filter_include,
@@ -456,11 +531,11 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
             limit=1,
             timeout=timeout,
             credentials=credentials,
-        )
-        recorded_events = tuple([ev async for ev in read_response])
-        if recorded_events:
-            return recorded_events[0].commit_position
-        return 0
+        ) as read_response:
+            recorded_events = tuple([ev async for ev in read_response])
+            if recorded_events:
+                return recorded_events[0].commit_position
+            return 0
 
     @retrygrpc
     @autoreconnect
@@ -478,20 +553,68 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         """
         Lists recorded events from the named stream.
         """
-        async with await self.read_stream(
+        return await self._get_stream(
             stream_name=stream_name,
             stream_position=stream_position,
             backwards=backwards,
             resolve_links=resolve_links,
             limit=limit,
             timeout=timeout,
-            credentials=credentials or self._call_credentials,
+            credentials=credentials,
+        )
+
+    async def _get_stream(
+        self,
+        stream_name: str,
+        *,
+        stream_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> tuple[RecordedEvent, ...]:
+        """
+        Lists recorded events from the named stream.
+        """
+        async with await self._read_stream(
+            stream_name=stream_name,
+            stream_position=stream_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
         ) as events:
             return tuple([e async for e in events])
 
     @retrygrpc
     @autoreconnect
     async def read_stream(
+        self,
+        stream_name: str,
+        *,
+        stream_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> AsyncReadResponse:
+        """
+        Reads recorded events from the named stream.
+        """
+        return await self._read_stream(
+            stream_name=stream_name,
+            stream_position=stream_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    async def _read_stream(
         self,
         stream_name: str,
         *,
@@ -530,12 +653,12 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         """
         metadata_stream_name = f"$${stream_name}"
         try:
-            metadata_events = await self.get_stream(
+            metadata_events = await self._get_stream(
                 stream_name=metadata_stream_name,
                 backwards=True,
                 limit=1,
                 timeout=timeout,
-                credentials=credentials or self._call_credentials,
+                credentials=credentials,
             )
         except NotFoundError:
             return {}, StreamState.NO_STREAM
@@ -1854,24 +1977,6 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,
         )
-
-    async def close(self) -> None:
-        if not self._is_closed:
-            try:
-                esdb_connection = self.connection
-                del self._connection
-            except AttributeError:  # pragma: no cover
-                pass
-            else:
-                await esdb_connection.close()
-                self._is_closed = True
-
-    async def __aenter__(self) -> Self:
-        await self.connect()
-        return self
-
-    async def __aexit__(self, *args: object, **kwargs: Any) -> None:
-        await self.close()
 
 
 class _AsyncioKurrentDBClient(AsyncKurrentDBClient):

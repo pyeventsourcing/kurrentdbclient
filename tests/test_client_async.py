@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import os
@@ -32,6 +33,7 @@ from kurrentdbclient.common import (
     AsyncGrpcStreamer,
     AsyncGrpcStreamers,
 )
+from kurrentdbclient.connection import AsyncKurrentDBConnection
 from kurrentdbclient.events import CaughtUp, NewEvents, NewRecord, StreamStateCheck
 from kurrentdbclient.exceptions import (
     AlreadyExistsError,
@@ -103,8 +105,8 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
     async def asyncTearDown(self) -> None:
-        try:
-            if hasattr(self, "client") and not self.client.is_closed:
+        if hasattr(self, "client") and not self.client.is_closed:
+            with contextlib.suppress(Exception):
                 for subscription in await self.client.list_subscriptions():
                     await self.client.delete_subscription(
                         group_name=subscription.group_name,
@@ -114,16 +116,11 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                             else subscription.event_source
                         ),
                     )
-            await self.client.close()
-            del self.client
 
-            if self._reader is not None:
-                await self._reader.close()
-                del self._reader
-
-            if self._writer is not None and self._writer.is_closed:
+        if self._writer is not None and not self._writer.is_closed:
+            with contextlib.suppress(Exception):
                 for subscription in await self._writer.list_subscriptions():
-                    await self.client.delete_subscription(
+                    await self._writer.delete_subscription(
                         group_name=subscription.group_name,
                         stream_name=(
                             None
@@ -131,12 +128,67 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                             else subscription.event_source
                         ),
                     )
-                await self._writer.close()
-                del self._writer
-        except (ServiceUnavailableError, DiscoveryFailedError):
-            pass
-        finally:
+
+            with contextlib.suppress(Exception):
+                if hasattr(self, "client"):
+                    await self.client.close()
+                    del self.client
+
+                if self._reader is not None:
+                    await self._reader.close()
+                    del self._reader
+
+                if self._writer is not None:
+                    await self._writer.close()
+                    del self._writer
+
             await super().asyncTearDown()
+            # Give grpc.aio one final loop iteration to flush pending C-core callbacks
+            await asyncio.sleep(0)
+
+    async def test_close(self) -> None:
+        await self.client.connect()
+        self.assertFalse(self.client.is_closed)
+        await self.client.close()
+        self.assertTrue(self.client.is_closed)
+        await self.client.close()
+        self.assertTrue(self.client.is_closed)
+
+        self.client = AsyncKurrentDBClient(
+            uri="kdb://admin:changeit@localhost:2114",
+            root_certificates=get_server_certificate("localhost:2114"),
+        )
+
+        await self.client.close()
+
+    async def test_close_thread_safety(self) -> None:
+        await self.client.connect()
+
+        # Aquire the connection lock...
+        await self.client._connection_lock.acquire()
+
+        # Try to close, waits for lock...
+        async def close_and_lock() -> None:
+            await self.client.close()
+
+        async def sleep_and_close() -> None:
+            # Wait for the other to wait for the lock.
+            await asyncio.sleep(0.1)
+            # Effectively close.
+            connection = self.client._connection
+            assert connection is not None
+            self.client._connection = None
+            await connection.close()
+            # Now release the lock, the other attempt will exit early.
+            self.client._connection_lock.release()
+
+        task1 = asyncio.create_task(close_and_lock())
+        task2 = asyncio.create_task(sleep_and_close())
+
+        # Note, any exceptions raised by the tasks will be raised here.
+        await asyncio.gather(task1, task2)
+
+        self.assertTrue(self.client.is_closed)
 
     async def test_connect_thread_safety(self) -> None:
         # Aquire the connection lock...
@@ -168,114 +220,134 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
     async def test_connection_never_established_error(self) -> None:
         with self.assertRaises(ProgrammingError) as cm:
             self.client.connection  # noqa: B018
-        self.assertEqual(str(cm.exception), "Connection was never established")
+        self.assertEqual(str(cm.exception), "Client is not connected")
+
+    async def test_context_manager(self) -> None:
+        async with self.client:
+            self.assertIsInstance(self.client.connection, AsyncKurrentDBConnection)
+            self.assertFalse(self.client.is_closed)
+        self.assertTrue(self.client.is_closed)
 
     async def test_esdb_scheme_discovery_single_node_cluster(self) -> None:
-        client = AsyncKurrentDBClient(
+        async with AsyncKurrentDBClient(
             "kdb://localhost:2113,localhost:2113?Tls=False"
             "&GossipTimeout=1&MaxDiscoverAttempts=1&DiscoveryInterval=0"
-        )
-        await client.connect()
-        self.assertEqual("localhost:2113", client.connection_target)
+        ) as client:
+            self.assertEqual("localhost:2113", client.connection_target)
 
     async def test_esdb_discover_scheme_raises_discovery_failed(self) -> None:
-        client = AsyncKurrentDBClient(
-            "kdb+discover://example.com?Tls=False"
-            "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
-        )
         with self.assertRaises(DiscoveryFailedError) as cm:
-            await client.connect()
+            async with AsyncKurrentDBClient(
+                "kdb+discover://example.com?Tls=False"
+                "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
+            ) as client:
+                pass
         self.assertIn(":2113", str(cm.exception))
         self.assertNotIn(":9898", str(cm.exception))
 
-        client = AsyncKurrentDBClient(
-            "kdb+discover://example.com:9898?Tls=False"
-            "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
-        )
         with self.assertRaises(DiscoveryFailedError) as cm:
-            await client.connect()
+            async with AsyncKurrentDBClient(
+                "kdb+discover://example.com:9898?Tls=False"
+                "&GossipTimeout=0&MaxDiscoverAttempts=1&DiscoveryInterval=0"
+            ) as client:
+                await client.connect()
         self.assertNotIn(":2113", str(cm.exception))
         self.assertIn(":9898", str(cm.exception))
 
     async def test_sometimes_reconnnects_to_selected_node_after_discovery(self) -> None:
         root_certificates = get_ca_certificate()
-        client = AsyncKurrentDBClient(
+        reconnected = 0
+        async with AsyncKurrentDBClient(
             "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2110?NodePreference=leader",
             root_certificates=root_certificates,
-        )
-        await client.connect()
-        client = AsyncKurrentDBClient(
+        ) as client:
+            if "2110" not in client.connection.grpc_target:
+                reconnected += 1
+        async with AsyncKurrentDBClient(
             "kdb://admin:changeit@127.0.0.1:2111,127.0.0.1:2111?NodePreference=leader",
             root_certificates=root_certificates,
-        )
-        await client.connect()
-        client = AsyncKurrentDBClient(
+        ) as client:
+            if "2111" not in client.connection.grpc_target:
+                reconnected += 1
+        async with AsyncKurrentDBClient(
             "kdb://admin:changeit@127.0.0.1:2112,127.0.0.1:2112?NodePreference=leader",
             root_certificates=root_certificates,
-        )
-        await client.connect()
+        ) as client:
+            if "2112" not in client.connection.grpc_target:
+                reconnected += 1
+
+        # Only one leader, so expect two reconnections.
+        self.assertEqual(2, reconnected)
 
     async def test_node_preference_random(self) -> None:
-        client = AsyncKurrentDBClient(
+        async with AsyncKurrentDBClient(
             "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=random"
-        )
-        await client.connect()
+        ):
+            pass
 
     async def test_raises_follower_not_found(self) -> None:
-        client = AsyncKurrentDBClient(
-            "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=follower"
-        )
         with self.assertRaises(FollowerNotFoundError):
-            await client.connect()
+            connection_string = (
+                "kdb://localhost:2113,localhost:2113?"
+                "Tls=False&NodePreference=follower"
+            )
+            async with AsyncKurrentDBClient(connection_string):
+                pass
 
     async def test_raises_read_only_replica_not_found(self) -> None:
-        client = AsyncKurrentDBClient(
-            "kdb://localhost:2113,localhost:2113?Tls=False&NodePreference=readonlyreplica"
-        )
         with self.assertRaises(ReadOnlyReplicaNotFoundError):
-            await client.connect()
+            connection_string = (
+                "kdb://localhost:2113,localhost:2113?"
+                "Tls=False&NodePreference=readonlyreplica"
+            )
+            async with AsyncKurrentDBClient(connection_string):
+                pass
 
     async def test_raises_ssl_error_with_tls_true_but_no_root_certificates(
         self,
     ) -> None:
         # NB Client can work with Tls=True without setting 'root_certificates'
         # if grpc lib can verify server cert using locally installed CA certs.
-        qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        uri = f"kdb://admin:changeit@localhost:2114?{qs}"
-        client = AsyncKurrentDBClient(uri)
-        await client.connect()
+        connection_string = (
+            "kdb://admin:changeit@localhost:2114?"
+            "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
+        )
         with self.assertRaises(SSLError):
-            await client.get_commit_position()
+            async with AsyncKurrentDBClient(connection_string):
+                pass
 
     async def test_raises_ssl_error_with_tls_true_broken_root_certificates(
         self,
     ) -> None:
-        qs = "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-        uri = f"kdb://admin:changeit@localhost:2114?{qs}"
-        client = AsyncKurrentDBClient(uri, root_certificates="blah")
-        await client.connect()
+        connection_string = (
+            "kdb://admin:changeit@localhost:2114?"
+            "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
+        )
         with self.assertRaises(SSLError):
-            await client.get_commit_position()
+            async with AsyncKurrentDBClient(
+                connection_string,
+                root_certificates="blah",
+            ):
+                pass
 
     async def test_raises_discovery_failed_with_tls_true_but_no_root_certificate(
         self,
     ) -> None:
-        uri = "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111"
-        uri += "?MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
-
-        client = AsyncKurrentDBClient(uri, root_certificates="blah")
+        connection_string = (
+            "kdb://admin:changeit@127.0.0.1:2110,127.0.0.1:2111?"
+            "MaxDiscoverAttempts=2&DiscoveryInterval=100&GossipTimeout=1"
+        )
         with self.assertRaises(DiscoveryFailedError):
-            await client.connect()
+            async with AsyncKurrentDBClient(
+                connection_string,
+                root_certificates="blah",
+            ):
+                pass
 
     async def test_username_and_password_required_for_secure_connection(self) -> None:
         with self.assertRaises(ValueError) as cm:
             AsyncKurrentDBClient("kdb://localhost:2114")
         self.assertIn("Username and password are required", cm.exception.args[0])
-
-    async def test_context_manager(self) -> None:
-        async with self.client:
-            self.assertFalse(self.client.is_closed)
-        self.assertTrue(self.client.is_closed)
 
     async def test_append_events_and_get_stream(self) -> None:
         # Append events.
@@ -902,15 +974,17 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                     raise
 
         subscription = await self.client.subscribe_to_stream(str(uuid4()))
-        worker = Worker(subscription)
-        task = asyncio.create_task(worker.run())
-        await at_async_for.wait()
-        await asyncio.sleep(0.1)  # Try to make sure we got into _get_next_read_resp
-        # await asyncio.sleep(10)  # Try to make sure we got into _get_next_read_resp
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        self.assertTrue(worker.was_cancelled)
+        try:
+            worker = Worker(subscription)
+            task = asyncio.create_task(worker.run())
+            await at_async_for.wait()
+            await asyncio.sleep(0.1)  # Try to ensure we got into _get_next_read_resp
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(worker.was_cancelled)
+        finally:
+            await subscription.stop()
 
     async def test_subscribe_to_all_with_task_cancel_with_context_manager(self) -> None:
 
@@ -946,9 +1020,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         self.assertIsInstance(catchup_subscription, AsyncCatchupSubscription)
 
         # Reconstruct connection with wrong port (to inspire ServiceUnavailble).
-        self.client._connection = self.client._construct_esdb_connection(
-            "localhost:22222"
-        )
+        old_connection = self.client.connection
+        wrong_port = "localhost:22222"
+        self.client._connection = self.client._construct_esdb_connection(wrong_port)
+        await old_connection.close()
         catchup_subscription = await self.client.subscribe_to_all()
         self.assertIsInstance(catchup_subscription, AsyncCatchupSubscription)
 
@@ -965,17 +1040,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Subscribe excluding all events, with small window.
-        subscription = await self.client.subscribe_to_all(
+        async with await self.client.subscribe_to_all(
             filter_exclude=".*",
             include_checkpoints=True,
             window_size=1,
             checkpoint_interval_multiplier=1,
-        )
-
-        # Expect to get checkpoints.
-        async for event in subscription:
-            if isinstance(event, Checkpoint):
-                break
+        ) as subscription:
+            # Expect to get checkpoints.
+            async for event in subscription:
+                if isinstance(event, Checkpoint):
+                    break
 
     @skipIf(
         "21.10" in KURRENTDB_DOCKER_IMAGE,
@@ -999,28 +1073,27 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Subscribe excluding all events, with small window.
-        subscription = await self.client.subscribe_to_all(
+        async with await self.client.subscribe_to_all(
             commit_position=commit_position,
             filter_exclude=".*",
             include_caught_up=True,
             timeout=10,
-        )
-
-        # Expect to get caught up message.
-        async for event in subscription:
-            if isinstance(event, CaughtUp):
-                if "23.10" in KURRENTDB_DOCKER_IMAGE:
-                    pass
-                else:
-                    self.assertEqual(0, event.stream_position)
-                    self.assertEqual(commit_position, event.commit_position)
-                    self.assertEqual(commit_position, event.prepare_position)
-                    assert event.recorded_at is not None
-                    self.assertGreaterEqual(event.recorded_at, before_recording)
-                    after_subscribing = datetime.datetime.now(tz=datetime.timezone.utc)
-                    # Note, difference with server clock makes this fail occasionally.
-                    self.assertLessEqual(event.recorded_at, after_subscribing)
-                break
+        ) as subscription:
+            # Expect to get caught up message.
+            async for event in subscription:
+                if isinstance(event, CaughtUp):
+                    if "23.10" in KURRENTDB_DOCKER_IMAGE:
+                        pass
+                    else:
+                        self.assertEqual(0, event.stream_position)
+                        self.assertEqual(commit_position, event.commit_position)
+                        self.assertEqual(commit_position, event.prepare_position)
+                        assert event.recorded_at is not None
+                        self.assertGreaterEqual(event.recorded_at, before_recording)
+                        dt_after = datetime.datetime.now(tz=datetime.timezone.utc)
+                        # Note, server clock difference occasionally makes this fail.
+                        self.assertLessEqual(event.recorded_at, dt_after)
+                    break
 
     async def test_subscribe_to_stream(self) -> None:
         # Append events.
@@ -1590,26 +1663,26 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Subscribe to stream events, from the start.
-        subscription = await self.client.subscribe_to_stream(
+        async with await self.client.subscribe_to_stream(
             stream_name=stream_name1,
             include_caught_up=True,
             timeout=10,
-        )
-        async for event in subscription:
-            if isinstance(event, CaughtUp):
-                if "23.10" in KURRENTDB_DOCKER_IMAGE:
-                    pass
-                else:
-                    self.assertEqual(1, event.stream_position)
-                    self.assertNotEqual(commit_position, event.commit_position)
-                    self.assertNotEqual(commit_position, event.prepare_position)
-                    self.assertEqual(0, event.prepare_position)
-                    self.assertEqual(1, event.stream_position)
-                    assert event.recorded_at is not None
-                    self.assertGreaterEqual(event.recorded_at, before_recording)
-                    after_subscribing = datetime.datetime.now(tz=datetime.timezone.utc)
-                    self.assertLessEqual(event.recorded_at, after_subscribing)
-                break
+        ) as subscription:
+            async for event in subscription:
+                if isinstance(event, CaughtUp):
+                    if "23.10" in KURRENTDB_DOCKER_IMAGE:
+                        pass
+                    else:
+                        self.assertEqual(1, event.stream_position)
+                        self.assertNotEqual(commit_position, event.commit_position)
+                        self.assertNotEqual(commit_position, event.prepare_position)
+                        self.assertEqual(0, event.prepare_position)
+                        self.assertEqual(1, event.stream_position)
+                        assert event.recorded_at is not None
+                        self.assertGreaterEqual(event.recorded_at, before_recording)
+                        dt_after = datetime.datetime.now(tz=datetime.timezone.utc)
+                        self.assertLessEqual(event.recorded_at, dt_after)
+                    break
 
     async def test_persistent_subscription_to_all(self) -> None:
         # Check subscription does not exist.
@@ -1887,14 +1960,17 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                     raise
 
         subscription = await self.client.read_subscription_to_all(group_name)
-        worker = Worker(subscription)
-        task = asyncio.create_task(worker.run())
-        await at_async_for.wait()
-        await asyncio.sleep(0.1)  # Try to make sure we got into _get_next_read_resp
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        self.assertTrue(worker.was_cancelled)
+        try:
+            worker = Worker(subscription)
+            task = asyncio.create_task(worker.run())
+            await at_async_for.wait()
+            await asyncio.sleep(0.1)  # Try to ensure we got into _get_next_read_resp
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(worker.was_cancelled)
+        finally:
+            await subscription.stop()
 
     async def test_read_subscription_to_all_with_task_cancel_with_context_manager(
         self,
@@ -4805,43 +4881,49 @@ class TestOptionalClientAuth(TimedTestCase, IsolatedAsyncioTestCase):
         uri = f"kdb://admin:changeit@{secure_grpc_target}"
 
         # Construct client without client auth.
-        client = AsyncKurrentDBClient(uri, root_certificates=root_certificates)
-        await client.connect()
-
-        # User key and cert should be None.
-        self.assertIsNone(client.private_key)
-        self.assertIsNone(client.certificate_chain)
-
-        # Should be able to get commit position.
-        await client.get_commit_position()
+        async with AsyncKurrentDBClient(
+            uri, root_certificates=root_certificates
+        ) as client:
+            # User key and cert should be None.
+            self.assertIsNone(client.private_key)
+            self.assertIsNone(client.certificate_chain)
 
         # Construct client with client auth.
         uri += f"?UserKeyFile={self.user_key_file}&UserCertFile={self.user_cert_file}"
         client = AsyncKurrentDBClient(uri, root_certificates=root_certificates)
-        await client.connect()
 
         # User cert and key should have expected values.
         self.assertEqual(self.user_key, client.private_key)
         self.assertEqual(self.user_cert, client.certificate_chain)
 
-        # Should raise SSL error.
+        # Should raise SSL error (invalid certificate chain).
         with self.assertRaises(SSLError):
-            await client.get_commit_position()
-
-        # Construct client with TlsCaFile (instead
-        # of passing root_certificates directly).
-        uri += f"&TlsCaFile={self.tls_ca_file}"
-        client_with_tls_ca = AsyncKurrentDBClient(uri)
-        await client_with_tls_ca.connect()
+            async with client:
+                pass
 
         # Read the contents of TlsCaFile as bytes,
         # because root_certificates are compared as bytes.
         with open(self.tls_ca_file, "rb") as f:  # noqa: ASYNC101
             tls_ca_file_contents = f.read()
 
-        # TlsCaFile should override the root_certificates passed directly.
+        # Construct client with TlsCaFile (instead
+        # of passing root_certificates directly).
+        uri += f"&TlsCaFile={self.tls_ca_file}"
+        client_with_tls_ca = AsyncKurrentDBClient(
+            uri,
+            root_certificates=root_certificates,
+        )
+
+        # TlsCaFile should take precedence over the root_certificates argument.
         self.assertNotEqual(root_certificates, client_with_tls_ca.root_certificates)
         self.assertEqual(tls_ca_file_contents, client_with_tls_ca.root_certificates)
+
+        # Connection won't work because these file contents aren't proper SSL certs
+        with self.assertRaises(SSLError):
+            async with client_with_tls_ca:
+                pass
+
+    # TODO: Test with proper client auth (requires licence for <26.2)
 
 
 class TestAsyncGrpcStreamers(TimedTestCase, IsolatedAsyncioTestCase):

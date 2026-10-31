@@ -152,7 +152,7 @@ The example below appends an event to a new stream `"student-1"`.
 @tab sync
 ```python:no-line-numbers
 from kurrentdbclient import (
-    AsyncKurrentDBClient,
+    KurrentDBClient,
     NewEvent,
     StreamState,
 )
