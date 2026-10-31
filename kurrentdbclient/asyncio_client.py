@@ -1977,7 +1977,3 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
             metadata=self._call_metadata,
             credentials=credentials or self._call_credentials,
         )
-
-
-class _AsyncioKurrentDBClient(AsyncKurrentDBClient):
-    pass
