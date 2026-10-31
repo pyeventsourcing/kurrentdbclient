@@ -4642,12 +4642,15 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         read_response = await self.client.read_stream(stream_name)
         await read_response.__anext__()
 
-        # Reconnect the client.
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await read_response.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await read_response.__anext__()
+        finally:
+            await read_response.stop()
 
     async def test_reconnect_during_read_stream_causes_cancelled_error_at_end(
         self,
@@ -4679,13 +4682,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         # Give the RPC response a bit of time to get the OK status code.
         await asyncio.sleep(0.5)
 
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await read_response.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await read_response.__anext__()
+        finally:
+            await read_response.stop()
 
     async def test_reconnect_during_catchup_subscription_causes_cancelled_error_midway(
         self,
@@ -4713,12 +4719,15 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         subscription = await self.client.subscribe_to_stream(stream_name)
         await subscription.__anext__()
 
-        # Reconnect the client.
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await subscription.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await subscription.__anext__()
+        finally:
+            await subscription.stop()
 
     async def test_reconnect_during_catchup_subscribe_causes_cancelled_error_at_end(
         self,
@@ -4750,13 +4759,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         # Give the RPC response a bit of time to get the OK status code.
         await asyncio.sleep(0.5)
 
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await subscription.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await subscription.__anext__()
+        finally:
+            await subscription.stop()
 
     async def test_reconnect_during_persistent_subscription_causes_cancelled_err_midway(
         self,
@@ -4788,12 +4800,15 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
         await subscription.__anext__()
 
-        # Reconnect the client.
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await subscription.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await subscription.__anext__()
+        finally:
+            await subscription.stop()
 
     async def test_reconnect_during_persistent_subscription_causes_cancelled_err_at_end(
         self,
@@ -4829,13 +4844,16 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         # Give the RPC response a bit of time to get the OK status code.
         await asyncio.sleep(0.5)
 
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        await self.client.reconnect()
+        try:
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            await self.client.reconnect()
 
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
-            await subscription.__anext__()
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                await subscription.__anext__()
+        finally:
+            await subscription.stop()
 
     async def test_avoid_reconnecting_if_already_have_new_connection(self) -> None:
         await self.client.connect()
