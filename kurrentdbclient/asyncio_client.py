@@ -202,6 +202,8 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                     ):
                         # Will exit instantly if already SHUTDOWN
                         await asyncio.wait_for(_wait_for_shutdown(), timeout=2.0)
+                else:  # for coverage with Python <= 3.10
+                    pass
 
     @property
     def connection(self) -> AsyncKurrentDBConnection:
