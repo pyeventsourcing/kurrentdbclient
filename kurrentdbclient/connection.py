@@ -117,6 +117,10 @@ class AsyncKurrentDBConnection(BaseKurrentDBConnection):
             grpc_streamers=self._grpc_streamers,
         )
 
+    @property
+    def grpc_channel(self) -> grpc.aio.Channel:
+        return self._grpc_channel
+
     async def close(self) -> None:
         await self._grpc_streamers.close()
         await self._grpc_channel.close(grace=5)

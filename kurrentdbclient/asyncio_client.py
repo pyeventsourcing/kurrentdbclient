@@ -180,7 +180,28 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                 if not self.is_closed:
                     connection = self.connection
                     self._connection = None
+
+                    # 1. Initiate the close (cancel all calls and close the channel).
                     await connection.close()
+
+                    # 2. Actively wait for the gRPC channel to reach the SHUTDOWN state.
+                    # This guarantees the C-core has finished all teardown operations
+                    # and fired all its callbacks before we let the event loop close.
+                    channel = connection.grpc_channel
+
+                    async def _wait_for_shutdown() -> None:
+                        state = channel.get_state(try_to_connect=False)
+                        while (
+                            state != grpc.ChannelConnectivity.SHUTDOWN
+                        ):  # pragma: no cover
+                            await channel.wait_for_state_change(state)
+                            state = channel.get_state(try_to_connect=False)
+
+                    with contextlib.suppress(
+                        asyncio.TimeoutError, grpc.FutureTimeoutError
+                    ):
+                        # Will exit instantly if already SHUTDOWN
+                        await asyncio.wait_for(_wait_for_shutdown(), timeout=2.0)
 
     @property
     def connection(self) -> AsyncKurrentDBConnection:

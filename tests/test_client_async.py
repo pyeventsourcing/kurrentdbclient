@@ -129,22 +129,22 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
                         ),
                     )
 
-            with contextlib.suppress(Exception):
-                if hasattr(self, "client"):
-                    await self.client.close()
-                    del self.client
+        with contextlib.suppress(Exception):
+            if hasattr(self, "client"):
+                await self.client.close()
+                del self.client
 
-                if self._reader is not None:
-                    await self._reader.close()
-                    del self._reader
+            if self._reader is not None:
+                await self._reader.close()
+                del self._reader
 
-                if self._writer is not None:
-                    await self._writer.close()
-                    del self._writer
+            if self._writer is not None:
+                await self._writer.close()
+                del self._writer
 
-            await super().asyncTearDown()
-            # Give grpc.aio one final loop iteration to flush pending C-core callbacks
-            await asyncio.sleep(0)
+        await super().asyncTearDown()
+        # Give grpc.aio one final loop iteration to flush pending C-core callbacks
+        await asyncio.sleep(0)
 
     async def test_close(self) -> None:
         await self.client.connect()
