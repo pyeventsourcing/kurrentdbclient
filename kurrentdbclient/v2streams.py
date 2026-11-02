@@ -82,7 +82,7 @@ class AppendRequestIterator(Iterator[streams_pb2.AppendRequest]):
                 ),
             )
         except Exception as e:
-            self.errored = e
+            self.errored = e.with_traceback(None)
             raise
 
 

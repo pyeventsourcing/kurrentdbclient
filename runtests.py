@@ -1,10 +1,15 @@
+import faulthandler
 import os
+import signal
 import sys
 import unittest
 from typing import cast
 
 import coverage
 from coverage.results import display_covered, should_fail_under
+
+faulthandler.register(signal.SIGTERM, all_threads=True, chain=True)
+
 
 nocover_tags = []
 

@@ -230,8 +230,8 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
         if self._is_context_manager_active:
             self._is_stopping = True
         elif not await self._set_is_stopped(cancel=cancel):
-            self._read_resp_stream_worker_task.cancel()
             self._unary_stream_call.cancel()
+            self._read_resp_stream_worker_task.cancel()
             self._remove()
             try:
                 await self._read_resp_stream_worker_task
@@ -239,6 +239,10 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                 pass
             except grpc.RpcError as e:
                 raise handle_streams_rpc_error(e) from e
+            finally:
+                # Break the cycle
+                del self._read_resp_stream_worker_task
+                del self._read_resp_stream_worker_co
 
     def __del__(self) -> None:
         # Safety net, last chance to cancel the streaming call.

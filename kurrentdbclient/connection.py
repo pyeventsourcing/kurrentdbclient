@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from typing import TYPE_CHECKING
 from uuid import uuid4
+
+import grpc.aio
 
 from kurrentdbclient.common import AsyncGrpcStreamers, GrpcStreamers
 from kurrentdbclient.gossip import AsyncGossipService, GossipService
@@ -14,8 +18,6 @@ from kurrentdbclient.streams import AsyncStreamsService, StreamsService
 from kurrentdbclient.v2streams import AsyncV2StreamsService, V2StreamsService
 
 if TYPE_CHECKING:
-    import grpc.aio
-
     from kurrentdbclient.connection_spec import ConnectionSpec
 
 
@@ -64,19 +66,9 @@ class KurrentDBConnection(BaseKurrentDBConnection):
             connection_spec=connection_spec,
             grpc_streamers=self._grpc_streamers,
         )
-        # self._channel_connectivity_state: Optional[ChannelConnectivity] = None
-        # self.grpc_channel.subscribe(self._receive_channel_connectivity_state)
-
-    # def _receive_channel_connectivity_state(
-    #     self, connectivity: ChannelConnectivity
-    # ) -> None:
-    #     self._channel_connectivity_state = connectivity
-    #     # print("Channel connectivity state:", connectivity)
 
     def close(self) -> None:
         self._grpc_streamers.close()
-        # self.grpc_channel.unsubscribe(self._receive_channel_connectivity_state)
-        # sleep(0.1)  # Allow connectivity polling to stop.
         self._grpc_channel.close()
 
 
@@ -117,10 +109,19 @@ class AsyncKurrentDBConnection(BaseKurrentDBConnection):
             grpc_streamers=self._grpc_streamers,
         )
 
-    @property
-    def grpc_channel(self) -> grpc.aio.Channel:
-        return self._grpc_channel
-
     async def close(self) -> None:
         await self._grpc_streamers.close()
         await self._grpc_channel.close(grace=5)
+
+        # Actively wait for the gRPC channel to reach the SHUTDOWN state.
+        # This guarantees the C-core has finished all teardown operations
+        # and fired all its callbacks before we let the event loop close.
+        async def _wait_for_shutdown() -> None:
+            state = self._grpc_channel.get_state(try_to_connect=False)
+            while state != grpc.ChannelConnectivity.SHUTDOWN:  # pragma: no cover
+                await self._grpc_channel.wait_for_state_change(state)
+                state = self._grpc_channel.get_state(try_to_connect=False)
+
+        with contextlib.suppress(asyncio.TimeoutError, grpc.FutureTimeoutError):
+            # Will exit instantly if already SHUTDOWN
+            await asyncio.wait_for(_wait_for_shutdown(), timeout=2.0)

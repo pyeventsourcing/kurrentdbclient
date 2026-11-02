@@ -298,7 +298,7 @@ class AsyncSubscriptionReadReqs(
         except BaseException as e:
             self._is_stopped.set()
             if not isinstance(e, StopAsyncIteration):
-                self.errored = e
+                self.errored = e.with_traceback(None)
             raise e
 
     async def ack(self, event_id: UUID) -> None:
@@ -450,7 +450,7 @@ class SubscriptionReadReqs(BaseSubscriptionReadReqs):
                             action=batch_action,
                         )
         except Exception as e:
-            self.errored = e
+            self.errored = e.with_traceback(None)
             raise
 
     def ack(self, event_id: UUID) -> None:
@@ -616,17 +616,22 @@ class AsyncPersistentSubscription(
             try:
                 await self._read_reqs.stop(timeout=timeout)
             finally:
-                self._read_resp_stream_worker_task.cancel()
-                self._stream_stream_call.cancel()
-                self._remove()
                 try:
-                    await self._read_resp_stream_worker_task
-                except asyncio.CancelledError:
-                    pass
-                except grpc.RpcError as e:
-                    raise handle_rpc_error(e) from e
-                if self._read_reqs.errored:
-                    raise self._read_reqs.errored
+                    self._stream_stream_call.cancel()
+                    self._read_resp_stream_worker_task.cancel()
+                    self._remove()
+                    try:
+                        await self._read_resp_stream_worker_task
+                    except asyncio.CancelledError:
+                        pass
+                    except grpc.RpcError as e:
+                        raise handle_rpc_error(e) from e
+                    if self._read_reqs.errored:
+                        raise self._read_reqs.errored
+                finally:
+                    # Break the reference cycles
+                    del self._read_resp_stream_worker_task
+                    del self._read_resp_stream_worker_co
 
     async def ack(self, item: UUID | RecordedEvent) -> None:
         await self._read_reqs.ack(event_id=self._get_event_id(item))

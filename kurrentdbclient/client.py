@@ -2355,11 +2355,11 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         if not self._is_closed:
             try:
-                esdb_connection = self._connection
+                connection = self._connection
             except AttributeError:
                 pass
             else:
-                esdb_connection.close()
+                connection.close()
                 self._is_closed = True
 
     def __enter__(self) -> Self:
