@@ -656,13 +656,14 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Check commit positions are returned.
-        events = [
-            e
-            async for e in await self.client.read_all(commit_position=commit_position1)
-        ]
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].commit_position, commit_position1)
-        self.assertEqual(events[2].commit_position, commit_position2)
+        async with await self.client.read_all(commit_position=commit_position1):
+            events = [
+                e
+                async for e in read_response
+            ]
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].commit_position, commit_position1)
+            self.assertEqual(events[2].commit_position, commit_position2)
 
     async def test_get_stream_raises_stream_is_deleted(self) -> None:
         stream_name1 = str(uuid4())

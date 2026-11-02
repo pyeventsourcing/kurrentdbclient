@@ -591,10 +591,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check commit positions are returned.
-        events = list(self.client.read_all(commit_position=commit_position1))
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].commit_position, commit_position1)
-        self.assertEqual(events[2].commit_position, commit_position2)
+        with self.client.read_all(commit_position=commit_position1) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].commit_position, commit_position1)
+            self.assertEqual(events[2].commit_position, commit_position2)
 
     # TODO: Sometimes hangs.
     def test_append_to_stream_wrong_credentials(self) -> None:
