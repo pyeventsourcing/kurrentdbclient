@@ -656,11 +656,10 @@ class TestAsyncKurrentDBClient(TimedTestCase, IsolatedAsyncioTestCase):
         )
 
         # Check commit positions are returned.
-        async with await self.client.read_all(commit_position=commit_position1):
-            events = [
-                e
-                async for e in read_response
-            ]
+        async with await self.client.read_all(
+            commit_position=commit_position1
+        ) as read_response:
+            events = [e async for e in read_response]
             self.assertEqual(len(events), 3)
             self.assertEqual(events[0].commit_position, commit_position1)
             self.assertEqual(events[2].commit_position, commit_position2)

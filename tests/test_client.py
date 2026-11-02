@@ -1387,7 +1387,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
     def test_read_all_filter_default(self) -> None:
         self.construct_client()
 
-        num_old_events = len(list(self.client.read_all()))
+        with self.client.read_all() as read_response:
+            num_old_events = len(list(read_response))
 
         event1 = NewEvent(type="OrderCreated", data=b"{}", metadata=b"{}")
         event2 = NewEvent(type="OrderUpdated", data=b"{}", metadata=b"{}")
@@ -1412,121 +1413,131 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check we can read forwards from the start.
-        events = list(self.client.read_all())
-        self.assertEqual(len(events) - num_old_events, 6)
-        self.assertEqual(events[-1].stream_name, stream_name2)
-        self.assertEqual(events[-1].type, "OrderDeleted")
-        self.assertEqual(events[-2].stream_name, stream_name2)
-        self.assertEqual(events[-2].type, "OrderUpdated")
-        self.assertEqual(events[-3].stream_name, stream_name2)
-        self.assertEqual(events[-3].type, "OrderCreated")
-        self.assertEqual(events[-4].stream_name, stream_name1)
-        self.assertEqual(events[-4].type, "OrderDeleted")
+        with self.client.read_all() as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events) - num_old_events, 6)
+            self.assertEqual(events[-1].stream_name, stream_name2)
+            self.assertEqual(events[-1].type, "OrderDeleted")
+            self.assertEqual(events[-2].stream_name, stream_name2)
+            self.assertEqual(events[-2].type, "OrderUpdated")
+            self.assertEqual(events[-3].stream_name, stream_name2)
+            self.assertEqual(events[-3].type, "OrderCreated")
+            self.assertEqual(events[-4].stream_name, stream_name1)
+            self.assertEqual(events[-4].type, "OrderDeleted")
 
         # Check we can read backwards from the end.
-        events = list(self.client.read_all(backwards=True))
-        self.assertEqual(len(events) - num_old_events, 6)
-        self.assertEqual(events[0].stream_name, stream_name2)
-        self.assertEqual(events[0].type, "OrderDeleted")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderUpdated")
-        self.assertEqual(events[2].stream_name, stream_name2)
-        self.assertEqual(events[2].type, "OrderCreated")
-        self.assertEqual(events[3].stream_name, stream_name1)
-        self.assertEqual(events[3].type, "OrderDeleted")
+        with self.client.read_all(backwards=True) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events) - num_old_events, 6)
+            self.assertEqual(events[0].stream_name, stream_name2)
+            self.assertEqual(events[0].type, "OrderDeleted")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderUpdated")
+            self.assertEqual(events[2].stream_name, stream_name2)
+            self.assertEqual(events[2].type, "OrderCreated")
+            self.assertEqual(events[3].stream_name, stream_name1)
+            self.assertEqual(events[3].type, "OrderDeleted")
 
         # Check we can read forwards from commit position 1.
-        events = list(self.client.read_all(commit_position=commit_position1))
-        self.assertEqual(len(events), 4)
-        self.assertEqual(events[0].id, event3.id)
-        self.assertEqual(events[1].id, event4.id)
-        self.assertEqual(events[2].id, event5.id)
-        self.assertEqual(events[3].id, event6.id)
-        self.assertEqual(events[0].stream_name, stream_name1)
-        self.assertEqual(events[0].type, "OrderDeleted")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderCreated")
-        self.assertEqual(events[2].stream_name, stream_name2)
-        self.assertEqual(events[2].type, "OrderUpdated")
-        self.assertEqual(events[3].stream_name, stream_name2)
-        self.assertEqual(events[3].type, "OrderDeleted")
+        with self.client.read_all(commit_position=commit_position1) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 4)
+            self.assertEqual(events[0].id, event3.id)
+            self.assertEqual(events[1].id, event4.id)
+            self.assertEqual(events[2].id, event5.id)
+            self.assertEqual(events[3].id, event6.id)
+            self.assertEqual(events[0].stream_name, stream_name1)
+            self.assertEqual(events[0].type, "OrderDeleted")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderCreated")
+            self.assertEqual(events[2].stream_name, stream_name2)
+            self.assertEqual(events[2].type, "OrderUpdated")
+            self.assertEqual(events[3].stream_name, stream_name2)
+            self.assertEqual(events[3].type, "OrderDeleted")
 
         # Check we can read forwards from commit position 2.
-        events = list(self.client.read_all(commit_position=commit_position2))
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].id, event6.id)
-        self.assertEqual(events[0].stream_name, stream_name2)
-        self.assertEqual(events[0].type, "OrderDeleted")
+        with self.client.read_all(commit_position=commit_position2) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].id, event6.id)
+            self.assertEqual(events[0].stream_name, stream_name2)
+            self.assertEqual(events[0].type, "OrderDeleted")
 
         # Check we can read backwards from commit position 1.
         # NB backwards here doesn't include event at commit position, otherwise
         # first event would an OrderDeleted event, and we get an OrderUpdated.
-        events = list(
-            self.client.read_all(commit_position=commit_position1, backwards=True)
-        )
-        self.assertEqual(len(events) - num_old_events, 2)
-        self.assertEqual(events[0].id, event2.id)
-        self.assertEqual(events[1].id, event1.id)
-        self.assertEqual(events[0].stream_name, stream_name1)
-        self.assertEqual(events[0].type, "OrderUpdated")
-        self.assertEqual(events[1].stream_name, stream_name1)
-        self.assertEqual(events[1].type, "OrderCreated")
+        with self.client.read_all(
+            commit_position=commit_position1, backwards=True
+        ) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events) - num_old_events, 2)
+            self.assertEqual(events[0].id, event2.id)
+            self.assertEqual(events[1].id, event1.id)
+            self.assertEqual(events[0].stream_name, stream_name1)
+            self.assertEqual(events[0].type, "OrderUpdated")
+            self.assertEqual(events[1].stream_name, stream_name1)
+            self.assertEqual(events[1].type, "OrderCreated")
 
         # Check we can read backwards from commit position 2.
         # NB backwards here doesn't include event at commit position.
-        events = list(
-            self.client.read_all(commit_position=commit_position2, backwards=True)
-        )
-        self.assertEqual(len(events) - num_old_events, 5)
-        self.assertEqual(events[0].id, event5.id)
-        self.assertEqual(events[1].id, event4.id)
-        self.assertEqual(events[2].id, event3.id)
-        self.assertEqual(events[3].id, event2.id)
-        self.assertEqual(events[4].id, event1.id)
-        self.assertEqual(events[0].stream_name, stream_name2)
-        self.assertEqual(events[0].type, "OrderUpdated")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderCreated")
-        self.assertEqual(events[2].stream_name, stream_name1)
-        self.assertEqual(events[2].type, "OrderDeleted")
+        with self.client.read_all(
+            commit_position=commit_position2, backwards=True
+        ) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events) - num_old_events, 5)
+            self.assertEqual(events[0].id, event5.id)
+            self.assertEqual(events[1].id, event4.id)
+            self.assertEqual(events[2].id, event3.id)
+            self.assertEqual(events[3].id, event2.id)
+            self.assertEqual(events[4].id, event1.id)
+            self.assertEqual(events[0].stream_name, stream_name2)
+            self.assertEqual(events[0].type, "OrderUpdated")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderCreated")
+            self.assertEqual(events[2].stream_name, stream_name1)
+            self.assertEqual(events[2].type, "OrderDeleted")
 
         # Check we can read forwards from the start with limit.
-        events = list(self.client.read_all(limit=3))
-        self.assertEqual(len(events), 3)
+        with self.client.read_all(limit=3) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 3)
 
         # Check we can read backwards from the end with limit.
-        events = list(self.client.read_all(backwards=True, limit=3))
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].stream_name, stream_name2)
-        self.assertEqual(events[0].type, "OrderDeleted")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderUpdated")
-        self.assertEqual(events[2].stream_name, stream_name2)
-        self.assertEqual(events[2].type, "OrderCreated")
+        with self.client.read_all(backwards=True, limit=3) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].stream_name, stream_name2)
+            self.assertEqual(events[0].type, "OrderDeleted")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderUpdated")
+            self.assertEqual(events[2].stream_name, stream_name2)
+            self.assertEqual(events[2].type, "OrderCreated")
 
         # Check we can read forwards from commit position 1 with limit.
-        events = list(self.client.read_all(commit_position=commit_position1, limit=3))
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].stream_name, stream_name1)
-        self.assertEqual(events[0].type, "OrderDeleted")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderCreated")
-        self.assertEqual(events[2].stream_name, stream_name2)
-        self.assertEqual(events[2].type, "OrderUpdated")
+        with self.client.read_all(
+            commit_position=commit_position1, limit=3
+        ) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].stream_name, stream_name1)
+            self.assertEqual(events[0].type, "OrderDeleted")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderCreated")
+            self.assertEqual(events[2].stream_name, stream_name2)
+            self.assertEqual(events[2].type, "OrderUpdated")
 
         # Check we can read backwards from commit position 2 with limit.
-        events = list(
-            self.client.read_all(
-                commit_position=commit_position2, backwards=True, limit=3
-            )
-        )
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].stream_name, stream_name2)
-        self.assertEqual(events[0].type, "OrderUpdated")
-        self.assertEqual(events[1].stream_name, stream_name2)
-        self.assertEqual(events[1].type, "OrderCreated")
-        self.assertEqual(events[2].stream_name, stream_name1)
-        self.assertEqual(events[2].type, "OrderDeleted")
+        with self.client.read_all(
+            commit_position=commit_position2, backwards=True, limit=3
+        ) as read_response:
+            events = list(read_response)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].stream_name, stream_name2)
+            self.assertEqual(events[0].type, "OrderUpdated")
+            self.assertEqual(events[1].stream_name, stream_name2)
+            self.assertEqual(events[1].type, "OrderCreated")
+            self.assertEqual(events[2].stream_name, stream_name1)
+            self.assertEqual(events[2].type, "OrderDeleted")
 
     def assert_filtered_events(
         self,
@@ -1537,19 +1548,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         *,
         filter_by_stream_name: bool = False,
     ) -> None:
-        events: list[RecordedEvent] = list(
-            self.client.read_all(
-                commit_position=commit_position,
-                filter_exclude=filter_exclude,
-                filter_include=filter_include,
-                filter_by_stream_name=filter_by_stream_name,
-            )
-        )
-        if filter_by_stream_name is False:
-            actual = {e.type for e in events}
-        else:
-            actual = {e.stream_name for e in events}
-        self.assertEqual(expected, actual)
+        with self.client.read_all(
+            commit_position=commit_position,
+            filter_exclude=filter_exclude,
+            filter_include=filter_include,
+            filter_by_stream_name=filter_by_stream_name,
+        ) as read_response:
+            events: list[RecordedEvent] = list(read_response)
+            if filter_by_stream_name is False:
+                actual = {e.type for e in events}
+            else:
+                actual = {e.stream_name for e in events}
+            self.assertEqual(expected, actual)
 
     def test_read_all_filter_include_event_types(self) -> None:
         self.construct_client()
@@ -1982,31 +1992,29 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         sleep(1)  # Give the system time to run.
 
         # Should get only one instance of event1.
-        all_events = tuple(
-            self.client.read_all(
-                commit_position=commit_position,
-                resolve_links=False,
-                filter_exclude=[],
-            )
-        )
-        counter = Counter([e.id for e in all_events])
-        count = counter.get(event1.id)
-        assert isinstance(count, int)
-        self.assertEqual(count, 1)
+        with self.client.read_all(
+            commit_position=commit_position,
+            resolve_links=False,
+            filter_exclude=[],
+        ) as read_response:
+            all_events = tuple(read_response)
+            counter = Counter([e.id for e in all_events])
+            count = counter.get(event1.id)
+            assert isinstance(count, int)
+            self.assertEqual(count, 1)
 
         # Should get more than one instance of event1 due to
         # resolving links generated by system projections.
-        all_events = tuple(
-            self.client.read_all(
-                commit_position=commit_position,
-                resolve_links=True,
-                filter_exclude=[],
-            )
-        )
-        counter = Counter([e.id for e in all_events])
-        count = counter.get(event1.id)
-        assert isinstance(count, int)
-        self.assertGreater(count, 1)
+        with self.client.read_all(
+            commit_position=commit_position,
+            resolve_links=True,
+            filter_exclude=[],
+        ) as read_response:
+            all_events = tuple(read_response)
+            counter = Counter([e.id for e in all_events])
+            count = counter.get(event1.id)
+            assert isinstance(count, int)
+            self.assertGreater(count, 1)
 
     # TODO: Sometimes hangs.
     def test_stream_delete_with_current_version(self) -> None:
