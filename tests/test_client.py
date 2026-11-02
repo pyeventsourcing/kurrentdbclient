@@ -535,8 +535,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.construct_client()
         stream_name = str(uuid4())
 
-        read_response = self.client.read_stream(stream_name)
-        with self.assertRaises(NotFoundError):
+        with (
+            self.client.read_stream(stream_name) as read_response,
+            self.assertRaises(NotFoundError),
+        ):
             tuple(read_response)
 
         with self.assertRaises(NotFoundError):
@@ -1919,11 +1921,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.construct_client()
 
         # Read all events.
-        read_response = self.client.read_all(filter_exclude=[])
-
-        for event in read_response:
-            if event.stream_name.startswith("$"):
-                break
+        with self.client.read_all(filter_exclude=[]) as read_response:
+            for event in read_response:
+                if event.stream_name.startswith("$"):
+                    break
 
     # def test_read_all_filter_by_system_stream(self) -> None:
     #     # This was a response to Tony's query about filtering for secondary indexes.
@@ -2164,10 +2165,10 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Timeout reading all events.
-        read_response = self.client.read_all(timeout=0.001)
-        sleep(0.5)
-        with self.assertRaises(GrpcDeadlineExceededError):
-            list(read_response)
+        with self.client.read_all(timeout=0.001) as read_response:
+            sleep(0.5)
+            with self.assertRaises(GrpcDeadlineExceededError):
+                list(read_response)
 
     @skipIf(
         SERVER_VERSION <= (25, 0),
@@ -2188,11 +2189,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Timeout reading all events.
-        read_response = self.client.read_all(
-            commit_position=commit_position - 1, limit=1
-        )
-
-        with self.assertRaises(InvalidCommitPositionError):
+        with (
+            self.client.read_all(
+                commit_position=commit_position - 1, limit=1
+            ) as read_response,
+            self.assertRaises(InvalidCommitPositionError),
+        ):
             list(read_response)
 
     def test_read_all_can_be_stopped(self) -> None:
@@ -2218,9 +2220,9 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check we do get events when reading all events.
-        read_response = self.client.read_all()
-        events = list(read_response)
-        self.assertNotEqual(0, len(events))
+        with self.client.read_all() as read_response:
+            events = list(read_response)
+            self.assertNotEqual(0, len(events))
 
         # Check we don't get events when we stop.
         read_response = self.client.read_all()
@@ -2576,35 +2578,35 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Subscribe to all events, from the start.
-        subscription = self.client.subscribe_to_all()
-        events = []
-        for event in subscription:
-            events.append(event)
-            if event.id == event3.id:
-                break
+        with self.client.subscribe_to_all() as subscription:
+            events = []
+            for event in subscription:
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        # Append three more events.
-        event4 = NewEvent(type="OrderCreated", data=random_data())
-        event5 = NewEvent(type="OrderUpdated", data=random_data())
-        event6 = NewEvent(type="OrderDeleted", data=random_data())
-        stream_name2 = str(uuid4())
-        self.client.append_events(
-            stream_name2,
-            current_version=StreamState.NO_STREAM,
-            events=[event4, event5, event6],
-        )
+            # Append three more events.
+            event4 = NewEvent(type="OrderCreated", data=random_data())
+            event5 = NewEvent(type="OrderUpdated", data=random_data())
+            event6 = NewEvent(type="OrderDeleted", data=random_data())
+            stream_name2 = str(uuid4())
+            self.client.append_events(
+                stream_name2,
+                current_version=StreamState.NO_STREAM,
+                events=[event4, event5, event6],
+            )
 
-        # Continue reading from the subscription.
-        events = []
-        for event in subscription:
-            events.append(event)
-            if event.id == event6.id:
-                break
+            # Continue reading from the subscription.
+            events = []
+            for event in subscription:
+                events.append(event)
+                if event.id == event6.id:
+                    break
 
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].id, event4.id)
-        self.assertEqual(events[1].id, event5.id)
-        self.assertEqual(events[2].id, event6.id)
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].id, event4.id)
+            self.assertEqual(events[1].id, event5.id)
+            self.assertEqual(events[2].id, event6.id)
 
     def test_subscribe_to_all_filter_exclude_nothing(self) -> None:
         self.construct_client()
@@ -2621,15 +2623,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Subscribe and exclude nothing.
-        subscription = self.client.subscribe_to_all(
+        with self.client.subscribe_to_all(
             filter_exclude=[],
-        )
+        ) as subscription:
 
-        # Expect to get system events.
-        for event in subscription:
-            if event.type.startswith("$"):
-                break
-            self.fail("Didn't get the $metadata event")
+            # Expect to get system events.
+            for event in subscription:
+                if event.type.startswith("$"):
+                    break
+                self.fail("Didn't get the $metadata event")
 
     def test_subscribe_to_all_filter_include_event_types(self) -> None:
         self.construct_client()
@@ -2646,24 +2648,24 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Subscribe from the beginning.
-        subscription = self.client.subscribe_to_all(
+        with self.client.subscribe_to_all(
             filter_include=["OrderCreated"],
-        )
+        ) as subscription:
 
-        # Expect to only get "OrderCreated" events.
-        events = []
-        for event in subscription:
-            if not event.type.startswith("OrderCreated"):
-                self.fail("Event type is not 'OrderCreated'")
+            # Expect to only get "OrderCreated" events.
+            events = []
+            for event in subscription:
+                if not event.type.startswith("OrderCreated"):
+                    self.fail("Event type is not 'OrderCreated'")
 
-            events.append(event)
+                events.append(event)
 
-            # Break if we see the 'OrderCreated' event appended above.
-            if event.id == event1.id:
-                break
+                # Break if we see the 'OrderCreated' event appended above.
+                if event.id == event1.id:
+                    break
 
-        # Check we actually got some 'OrderCreated' events.
-        self.assertGreater(len(events), 0)
+            # Check we actually got some 'OrderCreated' events.
+            self.assertGreater(len(events), 0)
 
     def test_subscribe_to_all_filter_include_stream_names(self) -> None:
         self.construct_client()
@@ -2686,40 +2688,39 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Subscribe to all, filtering by stream name for stream_name1.
-        subscription = self.client.subscribe_to_all(
+        with self.client.subscribe_to_all(
             filter_include=stream_name1, filter_by_stream_name=True
-        )
+        ) as subscription:
 
-        # Expect to only get stream_name1 events.
-        for event in subscription:
-            if event.stream_name != stream_name1:
-                self.fail("Filtering included other stream names")
-            if event.id == event1.id:
-                break
+            # Expect to only get stream_name1 events.
+            for event in subscription:
+                if event.stream_name != stream_name1:
+                    self.fail("Filtering included other stream names")
+                if event.id == event1.id:
+                    break
 
         # Subscribe to all, filtering by stream name for stream_name2.
-        subscription = self.client.subscribe_to_all(
+        with self.client.subscribe_to_all(
             filter_include=stream_name2, filter_by_stream_name=True
-        )
-
-        # Expect to only get stream_name2 events.
-        for event in subscription:
-            if event.stream_name != stream_name2:
-                self.fail("Filtering included other stream names")
-            if event.id == event2.id:
-                break
+        ) as subscription:
+            # Expect to only get stream_name2 events.
+            for event in subscription:
+                if event.stream_name != stream_name2:
+                    self.fail("Filtering included other stream names")
+                if event.id == event2.id:
+                    break
 
         # Subscribe to all, filtering by stream name for stream_name3.
-        subscription = self.client.subscribe_to_all(
+        with self.client.subscribe_to_all(
             filter_include=stream_name3, filter_by_stream_name=True
-        )
+        ) as subscription:
 
-        # Expect to only get stream_name3 events.
-        for event in subscription:
-            if event.stream_name != stream_name3:
-                self.fail("Filtering included other stream names")
-            if event.id == event3.id:
-                break
+            # Expect to only get stream_name3 events.
+            for event in subscription:
+                if event.stream_name != stream_name3:
+                    self.fail("Filtering included other stream names")
+                if event.id == event3.id:
+                    break
 
     def test_subscribe_to_all_include_checkpoints(self) -> None:
         self.construct_client()
@@ -3124,15 +3125,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         while retries:
             retries -= 1
             # Subscribe from the beginning.
-            subscription = self.client.subscribe_to_all(timeout=0.25)
+            with self.client.subscribe_to_all(timeout=0.25) as subscription:
 
-            # Expect to timeout instead of waiting indefinitely for next event.
-            count = 0
-            with self.assertRaises(GrpcDeadlineExceededError):
-                for _ in subscription:
-                    count += 1
-            if count > 0:
-                break
+                # Expect to timeout instead of waiting indefinitely for next event.
+                count = 0
+                with self.assertRaises(GrpcDeadlineExceededError):
+                    for _ in subscription:
+                        count += 1
+                if count > 0:
+                    break
         else:
             self.fail("Didn't get any events before deadline, despite retries")
 
@@ -3167,9 +3168,8 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Calling stop inside the context manager should terminate the iteration.
         subscription = self.client.subscribe_to_all()
-        with subscription:
-            subscription.stop()
-            list(subscription)
+        subscription.stop()
+        list(subscription)
         self.assertTrue(cast(CatchupSubscription, subscription)._is_stopped)
 
     def _test_subscribe_to_all_raises_consumer_too_slow(self) -> None:
@@ -3177,12 +3177,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.construct_client()
 
         # Subscribe from the end.
-        subscription = self.client.subscribe_to_all(
-            commit_position=self.client.get_commit_position()
-        )
+        with (
+            self.client.subscribe_to_all(
+                commit_position=self.client.get_commit_position()
+            ) as subscription,
+            self.assertRaises(ConsumerTooSlowError),
+        ):
 
-        # Append new events.
-        with self.assertRaises(ConsumerTooSlowError):
+            # Append new events.
             while True:
                 # Write 10000 events.
                 _commit_position = self.client.append_events(
@@ -3203,23 +3205,23 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.construct_client()
 
         # Subscribe from the beginning.
-        subscription = self.client.subscribe_to_all()
+        with self.client.subscribe_to_all() as subscription:
 
-        # Append new events.
-        for i in range(1000):
-            # Write 100 events.
-            self.client.append_events(
-                stream_name=str(uuid4()),
-                current_version=StreamState.NO_STREAM,
-                events=[NewEvent(type=f"Type{i}", data=b"{}") for i in range(1000)],
-            )
-            # Read one event.
-            try:
-                next(subscription)
-            except ConsumerTooSlowError:
-                break
-        else:
-            self.fail("Didn't see 'ConsumerTooSlow' error")
+            # Append new events.
+            for i in range(1000):
+                # Write 100 events.
+                self.client.append_events(
+                    stream_name=str(uuid4()),
+                    current_version=StreamState.NO_STREAM,
+                    events=[NewEvent(type=f"Type{i}", data=b"{}") for i in range(1000)],
+                )
+                # Read one event.
+                try:
+                    next(subscription)
+                except ConsumerTooSlowError:
+                    break
+            else:
+                self.fail("Didn't see 'ConsumerTooSlow' error")
 
     def test_subscribe_to_stream_from_start(self) -> None:
         self.construct_client()
@@ -3393,23 +3395,23 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Subscribe to a stream.
         stream_name1 = str(uuid4())
-        subscription = self.client.subscribe_to_stream(stream_name=stream_name1)
+        with self.client.subscribe_to_stream(stream_name=stream_name1) as subscription:
 
-        # Append new events.
-        event1 = NewEvent(type="OrderCreated", data=b"{}", metadata=b"{}")
-        event2 = NewEvent(type="OrderUpdated", data=b"{}", metadata=b"{}")
-        event3 = NewEvent(type="OrderDeleted", data=b"{}", metadata=b"{}")
-        self.client.append_events(
-            stream_name1,
-            current_version=StreamState.NO_STREAM,
-            events=[event1, event2, event3],
-        )
+            # Append new events.
+            event1 = NewEvent(type="OrderCreated", data=b"{}", metadata=b"{}")
+            event2 = NewEvent(type="OrderUpdated", data=b"{}", metadata=b"{}")
+            event3 = NewEvent(type="OrderDeleted", data=b"{}", metadata=b"{}")
+            self.client.append_events(
+                stream_name1,
+                current_version=StreamState.NO_STREAM,
+                events=[event1, event2, event3],
+            )
 
-        # Stop subscription.
-        subscription.stop()
+            # Stop subscription.
+            subscription.stop()
 
-        # Iterating should stop.
-        list(subscription)
+            # Iterating should stop.
+            list(subscription)
 
     @skipIf(
         SERVER_VERSION <= (22, 10),
@@ -3473,18 +3475,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.ack(event.ack_id)
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.ack(event.ack_id)
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_ack_event_object(self) -> None:
         self.construct_client()
@@ -3507,18 +3510,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_nack_unknown(self) -> None:
         self.construct_client()
@@ -3541,18 +3545,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.nack(event, action="unknown")
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.nack(event, action="unknown")
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_nack_park(self) -> None:
         self.construct_client()
@@ -3575,18 +3580,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.nack(event, action="park")
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.nack(event, action="park")
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_replay_parked(self) -> None:
         self.construct_client()
@@ -3609,34 +3615,34 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name, timeout=30
-        )
+        ) as subscription:
 
-        # Park event.
-        parked_events = []
-        for event in subscription:
-            subscription.nack(event, action="park")
-            parked_events.append(event)
-            if event.id == event3.id:
-                break
+            # Park event.
+            parked_events = []
+            for event in subscription:
+                subscription.nack(event, action="park")
+                parked_events.append(event)
+                if event.id == event3.id:
+                    break
 
-        # Sleep before calling replay_parked_events() so KurrentDB catches up.
-        sleep(0.5)
-        self.client.replay_parked_events(group_name=group_name)
+            # Sleep before calling replay_parked_events() so KurrentDB catches up.
+            sleep(0.5)
+            self.client.replay_parked_events(group_name=group_name)
 
-        replayed_events = []
-        # Todo: Flaky behaviour: Sometimes raises GrpcDeadlineExceededError,
-        #  in other words doesn't complete within 30s (timeout value above).
-        for event in subscription:
-            subscription.ack(event)
-            replayed_events.append(event)
-            if event.id == event3.id:
-                subscription.stop()
+            replayed_events = []
+            # Todo: Flaky behaviour: Sometimes raises GrpcDeadlineExceededError,
+            #  in other words doesn't complete within 30s (timeout value above).
+            for event in subscription:
+                subscription.ack(event)
+                replayed_events.append(event)
+                if event.id == event3.id:
+                    subscription.stop()
 
-        assert replayed_events[-3].data == event1.data
-        assert replayed_events[-2].data == event2.data
-        assert replayed_events[-1].data == event3.data
+            assert replayed_events[-3].data == event1.data
+            assert replayed_events[-2].data == event2.data
+            assert replayed_events[-1].data == event3.data
 
     def test_subscription_to_all_ack_with_wrong_object(self) -> None:
         self.construct_client()
@@ -3659,18 +3665,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name, timeout=30
-        )
+        ) as subscription:
 
-        class NotUUID:
-            pass
+            class NotUUID:
+                pass
 
-        # Ack with wrong type of object.
-        with self.assertRaises(ValueError) as cm:
-            for _ in subscription:
-                subscription.ack(NotUUID())  # type: ignore
-        self.assertIn("is not a UUID", str(cm.exception))
+            # Ack with wrong type of object.
+            with self.assertRaises(ValueError) as cm:
+                for _ in subscription:
+                    subscription.ack(NotUUID())  # type: ignore
+            self.assertIn("is not a UUID", str(cm.exception))
 
     def test_subscription_to_stream_replay_parked(self) -> None:
         self.construct_client()
@@ -3694,34 +3700,34 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name, stream_name=stream_name1
-        )
+        ) as subscription:
 
-        # Park event.
-        parked_events = []
-        for event in subscription:
-            subscription.nack(event, action="park")
-            parked_events.append(event)
-            if event.id == event3.id:
-                break
+            # Park event.
+            parked_events = []
+            for event in subscription:
+                subscription.nack(event, action="park")
+                parked_events.append(event)
+                if event.id == event3.id:
+                    break
 
-        # Sleep before calling replay_parked_events() so KurrentDB catches up.
-        sleep(0.5)
-        self.client.replay_parked_events(
-            group_name=group_name, stream_name=stream_name1
-        )
+            # Sleep before calling replay_parked_events() so KurrentDB catches up.
+            sleep(0.5)
+            self.client.replay_parked_events(
+                group_name=group_name, stream_name=stream_name1
+            )
 
-        replayed_events = []
-        for event in subscription:
-            subscription.ack(event)
-            replayed_events.append(event)
-            if event.id == event3.id:
-                subscription.stop()
+            replayed_events = []
+            for event in subscription:
+                subscription.ack(event)
+                replayed_events.append(event)
+                if event.id == event3.id:
+                    subscription.stop()
 
-        assert replayed_events[-3].data == event1.data
-        assert replayed_events[-2].data == event2.data
-        assert replayed_events[-1].data == event3.data
+            assert replayed_events[-3].data == event1.data
+            assert replayed_events[-2].data == event2.data
+            assert replayed_events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_nack_retry(self) -> None:
         self.construct_client()
@@ -3747,27 +3753,29 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            subscription.nack(event, action="retry")
-            events.append(event)
-            if event.id == event3.id:
-                break
+            events = []
+            for event in subscription:
+                subscription.nack(event, action="retry")
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
-        # Should get the events again.
-        expected_event_ids = {event1.id, event2.id, event3.id}
-        for event in subscription:
-            subscription.ack(event)
-            if event.id in expected_event_ids:
-                expected_event_ids.remove(event.id)
-            if len(expected_event_ids) == 0:
-                break
+            # Should get the events again.
+            expected_event_ids = {event1.id, event2.id, event3.id}
+            for event in subscription:
+                subscription.ack(event)
+                if event.id in expected_event_ids:
+                    expected_event_ids.remove(event.id)
+                if len(expected_event_ids) == 0:
+                    break
 
     def test_subscription_to_all_read_with_nack_skip(self) -> None:
         self.construct_client()
@@ -3790,18 +3798,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read all events.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.nack(event, action="skip")
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.nack(event, action="skip")
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_nack_stop(self) -> None:
         self.construct_client()
@@ -3824,18 +3833,20 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read all events.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            subscription.nack(event, action="stop")
-            events.append(event)
-            if event.id == event3.id:
-                break
+            events = []
+            for event in subscription:
+                subscription.nack(event, action="stop")
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_ack_after_stop(self) -> None:
         self.construct_client()
@@ -3883,29 +3894,29 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read all events.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name, event_buffer_size=1, max_ack_batch_size=1
-        )
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            # if event.id == event1.id:
-            #     print("Received event1")
-            # if event.id == event2.id:
-            #     print("Received event2")
-            # if event.id == event3.id:
-            #     print("Received event3")
-            events.append(event)
-            if event.id == event1.id and event.retry_count == 0:
-                continue
-            subscription.ack(event)
-            if len(events) == 4:
-                break
+            events = []
+            for event in subscription:
+                # if event.id == event1.id:
+                #     print("Received event1")
+                # if event.id == event2.id:
+                #     print("Received event2")
+                # if event.id == event3.id:
+                #     print("Received event3")
+                events.append(event)
+                if event.id == event1.id and event.retry_count == 0:
+                    continue
+                subscription.ack(event)
+                if len(events) == 4:
+                    break
 
-        assert events[-4].data == event1.data
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-4].data == event1.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     def test_subscription_to_all_read_with_message_timeout_event_buffer_size_10(
         self,
@@ -3932,29 +3943,29 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read all events.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name, event_buffer_size=10, max_ack_batch_size=1
-        )
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            # if event.id == event1.id:
-            #     print("Received event1")
-            # if event.id == event2.id:
-            #     print("Received event2")
-            # if event.id == event3.id:
-            #     print("Received event3")
-            events.append(event)
-            if event.id == event1.id and event.retry_count == 0:
-                continue
-            subscription.ack(event)
-            if len(events) == 4:
-                break
+            events = []
+            for event in subscription:
+                # if event.id == event1.id:
+                #     print("Received event1")
+                # if event.id == event2.id:
+                #     print("Received event2")
+                # if event.id == event3.id:
+                #     print("Received event3")
+                events.append(event)
+                if event.id == event1.id and event.retry_count == 0:
+                    continue
+                subscription.ack(event)
+                if len(events) == 4:
+                    break
 
-        assert events[-4].data == event1.data
-        assert events[-3].data == event2.data
-        assert events[-2].data == event3.data
-        assert events[-1].data == event1.data
+            assert events[-4].data == event1.data
+            assert events[-3].data == event2.data
+            assert events[-2].data == event3.data
+            assert events[-1].data == event1.data
 
     def test_subscription_to_all_read_with_max_retry_count_3(
         self,
@@ -3981,26 +3992,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read all events.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name,
             event_buffer_size=1,
-        )
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            events.append(event)
-            if event.id == event1.id:
-                continue
-            subscription.ack(event)
-            if len(events) == 6:
-                break
+            events = []
+            for event in subscription:
+                events.append(event)
+                if event.id == event1.id:
+                    continue
+                subscription.ack(event)
+                if len(events) == 6:
+                    break
 
-        assert events[-6].data == event1.data
-        assert events[-5].data == event1.data
-        assert events[-4].data == event1.data
-        assert events[-3].data == event1.data
-        assert events[-2].data == event2.data
-        assert events[-1].data == event3.data
+            assert events[-6].data == event1.data
+            assert events[-5].data == event1.data
+            assert events[-4].data == event1.data
+            assert events[-3].data == event1.data
+            assert events[-2].data == event2.data
+            assert events[-1].data == event3.data
 
     # def test_subscription_to_all_with_message_timeout_consumer_crashes_and_resumes(
     #     self,
@@ -4113,14 +4124,16 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
 
-        # Stop subscription.
-        subscription.stop()
+            # Stop subscription.
+            subscription.stop()
 
-        # Check we received zero events.
-        events = list(subscription)
-        assert len(events) == 0
+            # Check we received zero events.
+            events = list(subscription)
+            assert len(events) == 0
 
     def test_subscription_to_all_from_commit_position(self) -> None:
         self.construct_client()
@@ -4148,31 +4161,33 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
 
-        seen_first = False
+            seen_first = False
 
-        events = []
-        for event in subscription:
+            events = []
+            for event in subscription:
 
-            # Demonstrate commit position is inclusive.
-            if not seen_first:
-                self.assertEqual(event.commit_position, commit_position)
-                seen_first = True
+                # Demonstrate commit position is inclusive.
+                if not seen_first:
+                    self.assertEqual(event.commit_position, commit_position)
+                    seen_first = True
 
-            subscription.ack(event)
+                subscription.ack(event)
 
-            events.append(event)
+                events.append(event)
 
-            if event.id == event3.id:
-                break
+                if event.id == event3.id:
+                    break
 
-        # Expect persistent subscription results are inclusive of given
-        # commit position, so that we expect event1 to be included.
+            # Expect persistent subscription results are inclusive of given
+            # commit position, so that we expect event1 to be included.
 
-        assert events[0].id == event1.id
-        assert events[1].id == event2.id
-        assert events[2].id == event3.id
+            assert events[0].id == event1.id
+            assert events[1].id == event2.id
+            assert events[2].id == event3.id
 
     def test_subscription_to_all_from_end(self) -> None:
         self.construct_client()
@@ -4198,25 +4213,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read three events.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event3.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event3.id:
-                break
-
-        # Expect persistent subscription to return only new events appended
-        # after subscription was created. Although persistent subscription is
-        # inclusive when specifying commit position, and "end" surely refers
-        # to a commit position, the event at "end" happens to be the
-        # "PersistentConfig" event, and we are filtering this out by default.
-        # If this test is adjusted to set filter_exclude=[] the "PersistentConfig"
-        # event is returned as the first event from the response.
-        assert events[0].data == event1.data
-        assert events[1].data == event2.data
-        assert events[2].data == event3.data
+            # Expect persistent subscription to return only new events appended
+            # after subscription was created. Although persistent subscription is
+            # inclusive when specifying commit position, and "end" surely refers
+            # to a commit position, the event at "end" happens to be the
+            # "PersistentConfig" event, and we are filtering this out by default.
+            # If this test is adjusted to set filter_exclude=[] the "PersistentConfig"
+            # event is returned as the first event from the response.
+            assert events[0].data == event1.data
+            assert events[1].data == event2.data
+            assert events[2].data == event3.data
 
     def test_subscription_to_all_filter_exclude_event_types(self) -> None:
         self.construct_client()
@@ -4242,14 +4258,15 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
-
-        # Check we don't receive any OrderCreated events.
-        for event in subscription:
-            subscription.ack(event)
-            self.assertNotEqual(event.type, "OrderCreated")
-            if event.id == event3.id:
-                break
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            # Check we don't receive any OrderCreated events.
+            for event in subscription:
+                subscription.ack(event)
+                self.assertNotEqual(event.type, "OrderCreated")
+                if event.id == event3.id:
+                    break
 
     def test_subscription_to_all_filter_exclude_stream_names(self) -> None:
         self.construct_client()
@@ -4296,24 +4313,26 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check we don't receive any events from stream_name1.
-        subscription = self.client.read_subscription_to_all(group_name=group_name1)
-
-        for event in subscription:
-            if event.stream_name == stream_name1:
-                self.fail("Received event from stream_name1")
-            subscription.ack(event)
-            if event.id == event4.id:
-                break
+        with self.client.read_subscription_to_all(
+            group_name=group_name1
+        ) as subscription:
+            for event in subscription:
+                if event.stream_name == stream_name1:
+                    self.fail("Received event from stream_name1")
+                subscription.ack(event)
+                if event.id == event4.id:
+                    break
 
         # Check we don't receive any events from stream names starting with prefix1.
-        subscription = self.client.read_subscription_to_all(group_name=group_name2)
-
-        for event in subscription:
-            if event.stream_name.startswith(prefix1):
-                self.fail("Received event with stream name starting with prefix1")
-            subscription.ack(event)
-            if event.id == event4.id:
-                break
+        with self.client.read_subscription_to_all(
+            group_name=group_name2
+        ) as subscription:
+            for event in subscription:
+                if event.stream_name.startswith(prefix1):
+                    self.fail("Received event with stream name starting with prefix1")
+                subscription.ack(event)
+                if event.id == event4.id:
+                    break
 
     def test_subscription_to_all_filter_include_event_types(self) -> None:
         self.construct_client()
@@ -4339,13 +4358,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check we only receive any OrderCreated events.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
-
-        for event in subscription:
-            subscription.ack(event)
-            self.assertEqual(event.type, "OrderCreated")
-            if event.id == event1.id:
-                break
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            for event in subscription:
+                subscription.ack(event)
+                self.assertEqual(event.type, "OrderCreated")
+                if event.id == event1.id:
+                    break
 
     def test_subscription_to_all_filter_include_stream_names(self) -> None:
         self.construct_client()
@@ -4392,31 +4412,33 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Check we only receive events from stream4.
-        subscription = self.client.read_subscription_to_all(group_name=group_name1)
+        with self.client.read_subscription_to_all(
+            group_name=group_name1
+        ) as subscription:
+            events = []
+            for event in subscription:
+                subscription.ack(event1.id)
+                events.append(event)
+                if event.id == event4.id:
+                    break
 
-        events = []
-        for event in subscription:
-            subscription.ack(event1.id)
-            events.append(event)
-            if event.id == event4.id:
-                break
-
-        self.assertEqual(1, len(events))
-        self.assertEqual(events[0].id, event4.id)
+            self.assertEqual(1, len(events))
+            self.assertEqual(events[0].id, event4.id)
 
         # Check we only receive events with stream name starting with prefix1.
-        subscription = self.client.read_subscription_to_all(group_name=group_name2)
+        with self.client.read_subscription_to_all(
+            group_name=group_name2
+        ) as subscription:
+            events = []
+            for event in subscription:
+                events.append(event)
+                subscription.ack(event)
+                if event.id == event4.id:
+                    break
 
-        events = []
-        for event in subscription:
-            events.append(event)
-            subscription.ack(event)
-            if event.id == event4.id:
-                break
-
-        self.assertEqual(2, len(events))
-        self.assertEqual(events[0].id, event3.id)
-        self.assertEqual(events[1].id, event4.id)
+            self.assertEqual(2, len(events))
+            self.assertEqual(events[0].id, event3.id)
+            self.assertEqual(events[1].id, event4.id)
 
     def test_subscription_to_all_filter_nothing(self) -> None:
         if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
@@ -4431,13 +4453,14 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_all(group_name=group_name)
-
-        for event in subscription:
-            subscription.ack(event)
-            # Look for a "system" event.
-            if event.type.startswith("$"):
-                break
+        with self.client.read_subscription_to_all(
+            group_name=group_name
+        ) as subscription:
+            for event in subscription:
+                subscription.ack(event)
+                # Look for a "system" event.
+                if event.type.startswith("$"):
+                    break
 
     def test_subscription_to_all_resolve_links(self) -> None:
         if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
@@ -4484,18 +4507,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read subscription to all.
-        subscription = self.client.read_subscription_to_all(
+        with self.client.read_subscription_to_all(
             group_name=group_name,
-        )
-
-        # Wait for more than one instance of event1 (resolved system generated links).
-        counter = 0
-        for event in subscription:
-            subscription.ack(event)
-            if event.id == event1.id:
-                counter += 1
-            if counter > 1:
-                break
+        ) as subscription:
+            # Wait for more than one instance of event1,
+            # the resolved system generated links.
+            counter = 0
+            for event in subscription:
+                subscription.ack(event)
+                if event.id == event1.id:
+                    counter += 1
+                if counter > 1:
+                    break
 
     def test_subscription_to_all_with_consumer_strategy_round_robin(self) -> None:
         self.construct_client()
@@ -4507,56 +4530,62 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Multiple consumers.
-        subscription1 = self.client.read_subscription_to_all(group_name=group_name1)
-        subscription2 = self.client.read_subscription_to_all(group_name=group_name1)
+        with (
+            self.client.read_subscription_to_all(
+                group_name=group_name1
+            ) as subscription1,
+            self.client.read_subscription_to_all(
+                group_name=group_name1
+            ) as subscription2,
+        ):
 
-        # Append three events.
-        stream_name1 = str(uuid4())
+            # Append three events.
+            stream_name1 = str(uuid4())
 
-        event1 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
-        event2 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
-        event3 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
+            event1 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
+            event2 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
+            event3 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
 
-        self.client.append_events(
-            stream_name1,
-            current_version=StreamState.NO_STREAM,
-            events=[event1, event2, event3],
-        )
+            self.client.append_events(
+                stream_name1,
+                current_version=StreamState.NO_STREAM,
+                events=[event1, event2, event3],
+            )
 
-        # Append three more events.
-        stream_name2 = str(uuid4())
+            # Append three more events.
+            stream_name2 = str(uuid4())
 
-        event4 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
-        event5 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
-        event6 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
+            event4 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
+            event5 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
+            event6 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
 
-        self.client.append_events(
-            stream_name2,
-            current_version=StreamState.NO_STREAM,
-            events=[event4, event5, event6],
-        )
+            self.client.append_events(
+                stream_name2,
+                current_version=StreamState.NO_STREAM,
+                events=[event4, event5, event6],
+            )
 
-        events1 = []
-        events2 = []
-        while True:
-            event = next(subscription1)
-            subscription1.ack(event)
-            events1.append(event)
-            if event.id == event3.id:
-                break
-            event = next(subscription2)
-            subscription2.ack(event)
-            events2.append(event)
-            if event.id == event3.id:
-                break
+            events1 = []
+            events2 = []
+            while True:
+                event = next(subscription1)
+                subscription1.ack(event)
+                events1.append(event)
+                if event.id == event3.id:
+                    break
+                event = next(subscription2)
+                subscription2.ack(event)
+                events2.append(event)
+                if event.id == event3.id:
+                    break
 
-        len1 = len(events1)
-        self.assertTrue(len1)
-        len2 = len(events2)
-        self.assertTrue(len2)
+            len1 = len(events1)
+            self.assertTrue(len1)
+            len2 = len(events2)
+            self.assertTrue(len2)
 
-        # Check the consumers have received an equal number of events.
-        self.assertLess((len1 - len2) ** 2, 2)
+            # Check the consumers have received an equal number of events.
+            self.assertLess((len1 - len2) ** 2, 2)
 
     def test_subscription_to_all_raises_maximum_subscriptions_reached(self) -> None:
         self.construct_client()
@@ -4568,12 +4597,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Multiple consumers.
-        subscription1 = self.client.read_subscription_to_all(group_name=group_name1)
-        subscription2 = self.client.read_subscription_to_all(group_name=group_name1)
-        with self.assertRaises(MaximumSubscriptionsReachedError):
+        with (
+            self.client.read_subscription_to_all(group_name=group_name1),
+            self.client.read_subscription_to_all(group_name=group_name1),
+            self.assertRaises(MaximumSubscriptionsReachedError),
+        ):
             self.client.read_subscription_to_all(group_name=group_name1)
-        subscription1.stop()
-        subscription2.stop()
 
     # TODO: Sometimes hangs.
     def test_subscription_to_all_event_not_redelivered_after_ack(self) -> None:
@@ -4597,27 +4626,28 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # print("Created persistent subscription")
 
         # Start consumer.
-        subscription1 = self.client.read_subscription_to_all(group_name=group_name1)
-        # print("Started persistent subscription consumer #1")
+        with self.client.read_subscription_to_all(
+            group_name=group_name1
+        ) as subscription1:
+            # print("Started persistent subscription consumer #1")
 
-        # Append some events.
-        num_appended_events = 1
-        events = [
-            NewEvent(type="SomethingHappened", data=random_data(), metadata=b"{}")
-            for _ in range(num_appended_events)
-        ]
-        self.client.append_events(
-            stream_name1,
-            current_version=StreamState.NO_STREAM,
-            events=events,
-        )
-        # for new_event in events:
-        #     print("Appended event:", new_event.id)
-        appended_event_ids = {e.id for e in events}
+            # Append some events.
+            num_appended_events = 1
+            events = [
+                NewEvent(type="SomethingHappened", data=random_data(), metadata=b"{}")
+                for _ in range(num_appended_events)
+            ]
+            self.client.append_events(
+                stream_name1,
+                current_version=StreamState.NO_STREAM,
+                events=events,
+            )
+            # for new_event in events:
+            #     print("Appended event:", new_event.id)
+            appended_event_ids = {e.id for e in events}
 
-        # print("Consuming appended events...")
-        acked_event_ids = set[UUID]()
-        with subscription1:
+            # print("Consuming appended events...")
+            acked_event_ids = set[UUID]()
             while len(acked_event_ids) < num_appended_events:
                 event = next(subscription1)
                 if event.id not in appended_event_ids:
@@ -4645,10 +4675,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         #     print("Appended event:", new_event.id)
 
         # Start another consumer.
-        subscription2 = self.client.read_subscription_to_all(group_name=group_name1)
-        # print("Started persistent subscription consumer #2")
-        unacked_events_received = Counter[UUID]()
-        with subscription2:
+        with self.client.read_subscription_to_all(
+            group_name=group_name1
+        ) as subscription2:
+            # print("Started persistent subscription consumer #2")
+            unacked_events_received = Counter[UUID]()
             while (
                 unacked_events_received.total() < max_retry_count * num_appended_events
             ):
@@ -4684,30 +4715,29 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         # print("Created persistent subscription")
 
         # Start consumer.
-        subscription1 = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
-        )
-        # print("Started persistent subscription consumer #1")
+        ) as subscription1:
+            # print("Started persistent subscription consumer #1")
 
-        # Append some events.
-        num_appended_events = 1
-        events = [
-            NewEvent(type="SomethingHappened", data=random_data(), metadata=b"{}")
-            for _ in range(num_appended_events)
-        ]
-        self.client.append_events(
-            stream_name1,
-            current_version=StreamState.NO_STREAM,
-            events=events,
-        )
-        # for new_event in events:
-        #     print("Appended event:", new_event.id)
-        appended_event_ids = {e.id for e in events}
+            # Append some events.
+            num_appended_events = 1
+            events = [
+                NewEvent(type="SomethingHappened", data=random_data(), metadata=b"{}")
+                for _ in range(num_appended_events)
+            ]
+            self.client.append_events(
+                stream_name1,
+                current_version=StreamState.NO_STREAM,
+                events=events,
+            )
+            # for new_event in events:
+            #     print("Appended event:", new_event.id)
+            appended_event_ids = {e.id for e in events}
 
-        # print("Consuming appended events...")
-        acked_event_ids = set[UUID]()
-        with subscription1:
+            # print("Consuming appended events...")
+            acked_event_ids = set[UUID]()
             while len(acked_event_ids) < num_appended_events:
                 event = next(subscription1)
                 if event.id not in appended_event_ids:
@@ -4735,13 +4765,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         #     print("Appended event:", new_event.id)
 
         # Start another consumer.
-        subscription2 = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name1,
             stream_name=stream_name1,
-        )
-        # print("Started persistent subscription consumer #2")
-        unacked_events_received = Counter[UUID]()
-        with subscription2:
+        ) as subscription2:
+            # print("Started persistent subscription consumer #2")
+            unacked_events_received = Counter[UUID]()
             while (
                 unacked_events_received.total() < max_retry_count * num_appended_events
             ):
@@ -4768,12 +4797,12 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         self.assertEqual(info.event_source, "$all")
         self.assertEqual(len(info.connections), 0)
 
-        _read_response = self.client.read_subscription_to_all(group_name=group_name)
-        info = self.client.get_subscription_info(group_name)
-        self.assertEqual(len(info.connections), 1)
-        connection_info = info.connections[0]
-        self.assertIsInstance(connection_info, ConnectionInfo)
-        self.assertEqual(connection_info.from_, "")
+        with self.client.read_subscription_to_all(group_name=group_name):
+            info = self.client.get_subscription_info(group_name)
+            self.assertEqual(len(info.connections), 1)
+            connection_info = info.connections[0]
+            self.assertIsInstance(connection_info, ConnectionInfo)
+            self.assertEqual(connection_info.from_, "")
 
     def test_subscriptions_list(self) -> None:
         self.construct_client()
@@ -5415,54 +5444,54 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name,
             stream_name=stream_name2,
-        )
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event6.id:
-                break
+            events = []
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event6.id:
+                    break
 
-        # Check received events.
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].id, event4.id)
-        self.assertEqual(events[1].id, event5.id)
-        self.assertEqual(events[2].id, event6.id)
+            # Check received events.
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].id, event4.id)
+            self.assertEqual(events[1].id, event5.id)
+            self.assertEqual(events[2].id, event6.id)
 
-        # Append some more events.
-        event7 = NewEvent(type="OrderCreated", data=random_data())
-        event8 = NewEvent(type="OrderUpdated", data=random_data())
-        event9 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name1, current_version=2, events=[event7, event8, event9]
-        )
+            # Append some more events.
+            event7 = NewEvent(type="OrderCreated", data=random_data())
+            event8 = NewEvent(type="OrderUpdated", data=random_data())
+            event9 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name1, current_version=2, events=[event7, event8, event9]
+            )
 
-        event10 = NewEvent(type="OrderCreated", data=random_data())
-        event11 = NewEvent(type="OrderUpdated", data=random_data())
-        event12 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name2, current_version=2, events=[event10, event11, event12]
-        )
+            event10 = NewEvent(type="OrderCreated", data=random_data())
+            event11 = NewEvent(type="OrderUpdated", data=random_data())
+            event12 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name2, current_version=2, events=[event10, event11, event12]
+            )
 
-        # Continue receiving events.
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event12.id:
-                break
+            # Continue receiving events.
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event12.id:
+                    break
 
-        # Check received events.
-        self.assertEqual(len(events), 6)
-        self.assertEqual(events[0].id, event4.id)
-        self.assertEqual(events[1].id, event5.id)
-        self.assertEqual(events[2].id, event6.id)
-        self.assertEqual(events[3].id, event10.id)
-        self.assertEqual(events[4].id, event11.id)
-        self.assertEqual(events[5].id, event12.id)
+            # Check received events.
+            self.assertEqual(len(events), 6)
+            self.assertEqual(events[0].id, event4.id)
+            self.assertEqual(events[1].id, event5.id)
+            self.assertEqual(events[2].id, event6.id)
+            self.assertEqual(events[3].id, event10.id)
+            self.assertEqual(events[4].id, event11.id)
+            self.assertEqual(events[5].id, event12.id)
 
     def test_subscription_to_stream_from_stream_position(self) -> None:
         self.construct_client()
@@ -5497,60 +5526,60 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name,
             stream_name=stream_name2,
-        )
+        ) as subscription:
 
-        seen_first = False
+            seen_first = False
 
-        events = []
-        for event in subscription:
+            events = []
+            for event in subscription:
 
-            # Demonstrate stream position is inclusive.
-            if not seen_first:
-                self.assertEqual(event.stream_position, 1)
-                seen_first = True
+                # Demonstrate stream position is inclusive.
+                if not seen_first:
+                    self.assertEqual(event.stream_position, 1)
+                    seen_first = True
 
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event6.id:
-                break
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event6.id:
+                    break
 
-        # Check received events.
-        self.assertEqual(len(events), 2)
-        self.assertEqual(events[0].id, event5.id)
-        self.assertEqual(events[1].id, event6.id)
+            # Check received events.
+            self.assertEqual(len(events), 2)
+            self.assertEqual(events[0].id, event5.id)
+            self.assertEqual(events[1].id, event6.id)
 
-        # Append some more events.
-        event7 = NewEvent(type="OrderCreated", data=random_data())
-        event8 = NewEvent(type="OrderUpdated", data=random_data())
-        event9 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name1, current_version=2, events=[event7, event8, event9]
-        )
+            # Append some more events.
+            event7 = NewEvent(type="OrderCreated", data=random_data())
+            event8 = NewEvent(type="OrderUpdated", data=random_data())
+            event9 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name1, current_version=2, events=[event7, event8, event9]
+            )
 
-        event10 = NewEvent(type="OrderCreated", data=random_data())
-        event11 = NewEvent(type="OrderUpdated", data=random_data())
-        event12 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name2, current_version=2, events=[event10, event11, event12]
-        )
+            event10 = NewEvent(type="OrderCreated", data=random_data())
+            event11 = NewEvent(type="OrderUpdated", data=random_data())
+            event12 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name2, current_version=2, events=[event10, event11, event12]
+            )
 
-        # Continue receiving events.
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event12.id:
-                break
+            # Continue receiving events.
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event12.id:
+                    break
 
-        # Check received events.
-        self.assertEqual(len(events), 5)
-        self.assertEqual(events[0].id, event5.id)
-        self.assertEqual(events[1].id, event6.id)
-        self.assertEqual(events[2].id, event10.id)
-        self.assertEqual(events[3].id, event11.id)
-        self.assertEqual(events[4].id, event12.id)
+            # Check received events.
+            self.assertEqual(len(events), 5)
+            self.assertEqual(events[0].id, event5.id)
+            self.assertEqual(events[1].id, event6.id)
+            self.assertEqual(events[2].id, event10.id)
+            self.assertEqual(events[3].id, event11.id)
+            self.assertEqual(events[4].id, event12.id)
 
     def test_subscription_to_stream_from_end(self) -> None:
         self.construct_client()
@@ -5585,39 +5614,39 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name,
             stream_name=stream_name2,
-        )
+        ) as subscription:
 
-        # Append some more events.
-        event7 = NewEvent(type="OrderCreated", data=random_data())
-        event8 = NewEvent(type="OrderUpdated", data=random_data())
-        event9 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name1, current_version=2, events=[event7, event8, event9]
-        )
+            # Append some more events.
+            event7 = NewEvent(type="OrderCreated", data=random_data())
+            event8 = NewEvent(type="OrderUpdated", data=random_data())
+            event9 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name1, current_version=2, events=[event7, event8, event9]
+            )
 
-        event10 = NewEvent(type="OrderCreated", data=random_data())
-        event11 = NewEvent(type="OrderUpdated", data=random_data())
-        event12 = NewEvent(type="OrderDeleted", data=random_data())
-        self.client.append_events(
-            stream_name2, current_version=2, events=[event10, event11, event12]
-        )
+            event10 = NewEvent(type="OrderCreated", data=random_data())
+            event11 = NewEvent(type="OrderUpdated", data=random_data())
+            event12 = NewEvent(type="OrderDeleted", data=random_data())
+            self.client.append_events(
+                stream_name2, current_version=2, events=[event10, event11, event12]
+            )
 
-        # Receive events from subscription.
-        events = []
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            if event.id == event12.id:
-                break
+            # Receive events from subscription.
+            events = []
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                if event.id == event12.id:
+                    break
 
-        # Check received events.
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].id, event10.id)
-        self.assertEqual(events[1].id, event11.id)
-        self.assertEqual(events[2].id, event12.id)
+            # Check received events.
+            self.assertEqual(len(events), 3)
+            self.assertEqual(events[0].id, event10.id)
+            self.assertEqual(events[1].id, event11.id)
+            self.assertEqual(events[2].id, event12.id)
 
     def test_subscription_to_stream_with_consumer_strategy_round_robin(
         self,
@@ -5635,52 +5664,54 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Multiple consumers.
-        subscription1 = self.client.read_subscription_to_stream(
-            group_name=group_name1, stream_name=stream_name1
-        )
-        subscription2 = self.client.read_subscription_to_stream(
-            group_name=group_name1, stream_name=stream_name1
-        )
+        with (
+            self.client.read_subscription_to_stream(
+                group_name=group_name1, stream_name=stream_name1
+            ) as subscription1,
+            self.client.read_subscription_to_stream(
+                group_name=group_name1, stream_name=stream_name1
+            ) as subscription2,
+        ):
 
-        # Append three events.
-        event1 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
-        event2 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
-        event3 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
-        event4 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
-        self.client.append_events(
-            stream_name1,
-            current_version=StreamState.NO_STREAM,
-            events=[event1, event2, event3, event4],
-        )
+            # Append three events.
+            event1 = NewEvent(type="OrderCreated", data=random_data(), metadata=b"{}")
+            event2 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
+            event3 = NewEvent(type="OrderUpdated", data=random_data(), metadata=b"{}")
+            event4 = NewEvent(type="OrderDeleted", data=random_data(), metadata=b"{}")
+            self.client.append_events(
+                stream_name1,
+                current_version=StreamState.NO_STREAM,
+                events=[event1, event2, event3, event4],
+            )
 
-        events1 = []
-        events2 = []
-        while True:
-            event = next(subscription1)
-            subscription1.ack(event)
-            events1.append(event)
+            events1 = []
+            events2 = []
+            while True:
+                event = next(subscription1)
+                subscription1.ack(event)
+                events1.append(event)
 
-            event = next(subscription2)
-            subscription2.ack(event)
-            events2.append(event)
-            event_ids = {e.id for e in events1 + events2}
-            if event4.id in event_ids:
-                break
+                event = next(subscription2)
+                subscription2.ack(event)
+                events2.append(event)
+                event_ids = {e.id for e in events1 + events2}
+                if event4.id in event_ids:
+                    break
 
-        # Check events have been distributed evenly.
-        # NB: this only works if events are appended after consumers have started,
-        # otherwise some events are sent to both, and I'm not sure what would happen
-        # if consumers stop and are restarted.
-        len1 = len(events1)
-        len2 = len(events2)
+            # Check events have been distributed evenly.
+            # NB: this only works if events are appended after consumers have started,
+            # otherwise some events are sent to both, and I'm not sure what would happen
+            # if consumers stop and are restarted.
+            len1 = len(events1)
+            len2 = len(events2)
 
-        self.assertEqual(len1, 2)
-        self.assertEqual(events1[0].id, event1.id)
-        self.assertEqual(events1[1].id, event3.id)
+            self.assertEqual(len1, 2)
+            self.assertEqual(events1[0].id, event1.id)
+            self.assertEqual(events1[1].id, event3.id)
 
-        self.assertEqual(len2, 2)
-        self.assertEqual(events2[0].id, event2.id)
-        self.assertEqual(events2[1].id, event4.id)
+            self.assertEqual(len2, 2)
+            self.assertEqual(events2[0].id, event2.id)
+            self.assertEqual(events2[1].id, event4.id)
 
     def test_subscription_to_stream_can_be_stopped(self) -> None:
         self.construct_client()
@@ -6297,18 +6328,18 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         )
 
         # Multiple consumers.
-        subscription1 = self.client.read_subscription_to_stream(
-            group_name=group_name, stream_name=stream_name
-        )
-        subscription2 = self.client.read_subscription_to_stream(
-            group_name=group_name, stream_name=stream_name
-        )
-        with self.assertRaises(MaximumSubscriptionsReachedError):
+        with (
+            self.client.read_subscription_to_stream(
+                group_name=group_name, stream_name=stream_name
+            ),
+            self.client.read_subscription_to_stream(
+                group_name=group_name, stream_name=stream_name
+            ),
+            self.assertRaises(MaximumSubscriptionsReachedError),
+        ):
             self.client.read_subscription_to_stream(
                 group_name=group_name, stream_name=stream_name
             )
-        subscription1.stop()
-        subscription2.stop()
 
     def test_subscription_to_stream_already_exists(self) -> None:
         self.construct_client()
@@ -6391,19 +6422,19 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         sleep(1)
 
         # Read events from subscription.
-        subscription = self.client.read_subscription_to_stream(
+        with self.client.read_subscription_to_stream(
             group_name=group_name,
             stream_name=f"$et-{event_type}",
-        )
+        ) as subscription:
 
-        events = []
-        for event in subscription:
-            subscription.ack(event)
-            events.append(event)
-            break
+            events = []
+            for event in subscription:
+                subscription.ack(event)
+                events.append(event)
+                break
 
-        # Check received events.
-        self.assertEqual(len(events), 1)
+            # Check received events.
+            self.assertEqual(len(events), 1)
 
     # def test_print_resolve_links(self) -> None:
     #     if self.KDB_CLUSTER_SIZE > 1 or self.KDB_TLS is not True:
@@ -8380,9 +8411,11 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         def read() -> None:
             try:
-                counts.append(
-                    len(list(self.client.read_stream(stream, limit=sys.maxsize)))
-                )
+                read_response = self.client.read_stream(stream, limit=sys.maxsize)
+                try:
+                    counts.append(len(list(read_response)))
+                finally:
+                    read_response.stop()
             except Exception as e:
                 errors.append(e)
 
@@ -8436,14 +8469,54 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Read one event.
         read_response = self.client.read_stream(stream_name)
-        next(read_response)
-
-        # Reconnect the client.
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
             next(read_response)
+
+            # Reconnect the client.
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(read_response)
+        finally:
+            read_response.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_read_stream_causes_cancelled_error_midway(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read one event.
+    #     with self.client.read_stream(stream_name) as read_response:
+    #         next(read_response)
+    #
+    #         # Reconnect the client.
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(read_response)
 
     def test_reconnect_during_read_stream_causes_cancelled_error_at_end(
         self,
@@ -8471,20 +8544,65 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Read two events.
         read_response = self.client.read_stream(stream_name)
-        next(read_response)
-        next(read_response)
-
-        # Give the RPC response a bit of time to get the OK status code.
-        sleep(0.5)
-
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
+            next(read_response)
             next(read_response)
 
+            # Give the RPC response a bit of time to get the OK status code.
+            sleep(0.5)
+
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(read_response)
+        finally:
+            read_response.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_read_stream_causes_cancelled_error_at_end(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read two events.
+    #     with self.client.read_stream(stream_name) as read_response:
+    #         next(read_response)
+    #         next(read_response)
+    #
+    #         # Give the RPC response a bit of time to get the OK status code.
+    #         sleep(0.5)
+    #
+    #         # Reconnect the client.
+    #         # print("Calling reconnect() from test")
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(read_response)
+    #
     def test_reconnect_during_catchup_subscription_causes_cancelled_error_midway(
         self,
     ) -> None:
@@ -8511,14 +8629,54 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Read one event.
         subscription = self.client.subscribe_to_stream(stream_name)
-        next(subscription)
-
-        # Reconnect the client.
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
             next(subscription)
+
+            # Reconnect the client.
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(subscription)
+        finally:
+            subscription.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_catchup_subscription_causes_cancelled_error_midway(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read one event.
+    #     with self.client.subscribe_to_stream(stream_name) as subscription:
+    #         next(subscription)
+    #
+    #         # Reconnect the client.
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(subscription)
 
     def test_reconnect_during_catchup_subscribe_causes_cancelled_error_at_end(
         self,
@@ -8546,20 +8704,65 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
 
         # Read two events.
         subscription = self.client.subscribe_to_stream(stream_name)
-        next(subscription)
-        next(subscription)
-
-        # Give the RPC response a bit of time to get the OK status code.
-        sleep(0.5)
-
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
+            next(subscription)
             next(subscription)
 
+            # Give the RPC response a bit of time to get the OK status code.
+            sleep(0.5)
+
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(subscription)
+        finally:
+            subscription.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_catchup_subscribe_causes_cancelled_error_at_end(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read two events.
+    #     with self.client.subscribe_to_stream(stream_name) as subscription:
+    #         next(subscription)
+    #         next(subscription)
+    #
+    #         # Give the RPC response a bit of time to get the OK status code.
+    #         sleep(0.5)
+    #
+    #         # Reconnect the client.
+    #         # print("Calling reconnect() from test")
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(subscription)
+    #
     def test_reconnect_during_persistent_subscription_causes_cancelled_error_midway(
         self,
     ) -> None:
@@ -8588,15 +8791,59 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         group_name = str(uuid4())
         self.client.create_subscription_to_stream(group_name, stream_name)
         subscription = self.client.read_subscription_to_stream(group_name, stream_name)
-        next(subscription)
-
-        # Reconnect the client.
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
             next(subscription)
 
+            # Reconnect the client.
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(subscription)
+        finally:
+            subscription.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_persistent_subscription_causes_cancelled_error_midway(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read one event.
+    #     group_name = str(uuid4())
+    #     self.client.create_subscription_to_stream(group_name, stream_name)
+    #     with self.client.read_subscription_to_stream(
+    #         group_name, stream_name
+    #     ) as subscription:
+    #         next(subscription)
+    #
+    #         # Reconnect the client.
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(subscription)
+    #
     def test_reconnect_during_persistent_subscription_causes_cancelled_error_at_end(
         self,
     ) -> None:
@@ -8625,19 +8872,68 @@ class TestKurrentDBClient(KurrentDBClientTestCase):
         group_name = str(uuid4())
         self.client.create_subscription_to_stream(group_name, stream_name)
         subscription = self.client.read_subscription_to_stream(group_name, stream_name)
-        next(subscription)
-        next(subscription)
-
-        # Give the RPC response a bit of time to get the OK status code.
-        sleep(0.5)
-
-        # Reconnect the client.
-        # print("Calling reconnect() from test")
-        self.client.reconnect()
-
-        # Expect CancelledByClientError
-        with self.assertRaises(CancelledByClientError):
+        try:
             next(subscription)
+            next(subscription)
+
+            # Give the RPC response a bit of time to get the OK status code.
+            sleep(0.5)
+
+            # Reconnect the client.
+            # print("Calling reconnect() from test")
+            self.client.reconnect()
+
+            # Expect CancelledByClientError
+            with self.assertRaises(CancelledByClientError):
+                next(subscription)
+        finally:
+            subscription.stop()
+
+    # TODO: Make this work (don't get required exception)
+    # def test_reconnect_during_persistent_subscription_causes_cancelled_error_at_end(
+    #     self,
+    # ) -> None:
+    #     self.construct_client()
+    #
+    #     # Append two events.
+    #     stream_name = str(uuid4())
+    #     event1 = NewEvent(type="OrderCreated", data=random_data())
+    #     event2 = NewEvent(type="OrderUpdated", data=random_data())
+    #     self.client.append_events(
+    #         stream_name,
+    #         current_version=StreamState.NO_STREAM, events=[event1, event2],
+    #     )
+    #
+    #     # Make sure the client can read the stream.
+    #     while True:
+    #         try:
+    #             stream_events = self.client.get_stream(stream_name)
+    #         except NotFoundError:
+    #             pass
+    #         else:
+    #             if len(stream_events) == 2:
+    #                 break
+    #         sleep(0.1)
+    #
+    #     # Read two events.
+    #     group_name = str(uuid4())
+    #     self.client.create_subscription_to_stream(group_name, stream_name)
+    #     with self.client.read_subscription_to_stream(
+    #         group_name, stream_name
+    #     ) as subscription:
+    #         next(subscription)
+    #         next(subscription)
+    #
+    #         # Give the RPC response a bit of time to get the OK status code.
+    #         sleep(0.5)
+    #
+    #         # Reconnect the client.
+    #         # print("Calling reconnect() from test")
+    #         self.client.reconnect()
+    #
+    #         # Expect CancelledByClientError
+    #         with self.assertRaises(CancelledByClientError):
+    #             next(subscription)
 
     def test_avoid_reconnecting_if_already_have_new_connection(self) -> None:
         # This is used in the autoreconnect decorator to avoid a thread
@@ -9447,15 +9743,19 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
             )
 
     def test_read_stream(self) -> None:
-        read_response = self.client.read_stream(
-            str(uuid4()),
-        )
-        with self.assertRaises(ServiceUnavailableError):
+        with (
+            self.client.read_stream(
+                str(uuid4()),
+            ) as read_response,
+            self.assertRaises(ServiceUnavailableError),
+        ):
             tuple(read_response)
 
     def test_read_all(self) -> None:
-        read_response = self.client.read_all()
-        with self.assertRaises(ServiceUnavailableError):
+        with (
+            self.client.read_all() as read_response,
+            self.assertRaises(ServiceUnavailableError),
+        ):
             tuple(read_response)
 
     def test_append_event(self) -> None:
