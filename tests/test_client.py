@@ -9332,9 +9332,9 @@ class TestRequiresLeaderHeader(TimedTestCase):
                         else subscription.event_source
                     ),
                 )
+        finally:
             self.writer.close()
             self.reader.close()
-        finally:
             super().tearDown()
 
     def test_can_subscribe_to_all_on_follower(self) -> None:
@@ -9725,8 +9725,8 @@ class TestAutoReconnectAfterServiceUnavailable(TimedTestCase):
                         else subscription.event_source
                     ),
                 )
-            self.client.close()
         finally:
+            self.client.close()
             super().tearDown()
 
     def test_append_events(self) -> None:

@@ -699,6 +699,30 @@ class KurrentDBClient(BaseKurrentDBClient):
         """
         Returns a sequence of recorded events from the named stream.
         """
+        return self._get_stream(
+            stream_name=stream_name,
+            stream_position=stream_position,
+            backwards=backwards,
+            resolve_links=resolve_links,
+            limit=limit,
+            timeout=timeout,
+            credentials=credentials,
+        )
+
+    def _get_stream(
+        self,
+        stream_name: str,
+        *,
+        stream_position: int | None = None,
+        backwards: bool = False,
+        resolve_links: bool = False,
+        limit: int = sys.maxsize,
+        timeout: float | None = None,
+        credentials: grpc.CallCredentials | None = None,
+    ) -> tuple[RecordedEvent, ...]:
+        """
+        Returns a sequence of recorded events from the named stream.
+        """
         with self._read_stream(
             stream_name=stream_name,
             stream_position=stream_position,
@@ -863,17 +887,12 @@ class KurrentDBClient(BaseKurrentDBClient):
         or StreamState.NO_STREAM if the stream is not found.
         """
         try:
-            last_event = next(
-                iter(
-                    self.streams.read(
-                        stream_name=stream_name,
-                        backwards=True,
-                        limit=1,
-                        timeout=timeout,
-                        metadata=self._call_metadata,
-                        credentials=credentials or self._call_credentials,
-                    )
-                )
+            events = self._get_stream(
+                stream_name=stream_name,
+                backwards=True,
+                limit=1,
+                timeout=timeout,
+                credentials=credentials,
             )
         except NotFoundError:
             # StreamState.NO_STREAM is the correct "current version" both when appending
@@ -882,7 +901,7 @@ class KurrentDBClient(BaseKurrentDBClient):
             # before deletion is also correct).
             return StreamState.NO_STREAM
         else:
-            return last_event.stream_position
+            return events[0].stream_position
 
     @retrygrpc
     @autoreconnect

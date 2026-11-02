@@ -912,17 +912,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         or StreamState.NO_STREAM if the stream is not found.
         """
         try:
-            events = [
-                e
-                async for e in await self.connection.streams.read(
-                    stream_name=stream_name,
-                    backwards=True,
-                    limit=1,
-                    timeout=timeout,
-                    metadata=self._call_metadata,
-                    credentials=credentials or self._call_credentials,
-                )
-            ]
+            events = await self._get_stream(stream_name, backwards=True, limit=1)
         except NotFoundError:
             # StreamState.NO_STREAM is the correct "current version" both when appending
             # to a stream that never existed and when appending to a stream that has
