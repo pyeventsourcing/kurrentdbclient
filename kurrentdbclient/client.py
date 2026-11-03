@@ -128,6 +128,10 @@ def autoreconnect(f: _TCallable) -> _TCallable:
         #   the connection has changed. Need to think about this a bit more...
 
         except NodeIsNotLeaderError as e:
+            host = e.host
+            port = e.port
+            del e
+
             if (
                 client.connection_spec.options.node_preference == NODE_PREFERENCE_LEADER
                 and not (
@@ -136,7 +140,7 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 )
             ):
                 client.reconnect(
-                    grpc_target(e.host, e.port) if e.host and e.port else None,
+                    grpc_target(host, port) if host and port else None,
                     connection_id=connection_id,
                 )
                 sleep(0.1)
@@ -380,7 +384,7 @@ class KurrentDBClient(BaseKurrentDBClient):
         while True:
             # Attempt to discover preferred node.
             try:
-                last_exception: Exception | None = None
+                last_exception_msg: str = ""
                 for grpc_target in self.connection_spec.targets:
                     connection = self._construct_esdb_connection(
                         grpc_target=grpc_target,
@@ -393,17 +397,17 @@ class KurrentDBClient(BaseKurrentDBClient):
                             credentials=self._call_credentials,
                         )
                     except GrpcError as e:
-                        last_exception = e
+                        last_exception_msg = (
+                            "Failed to obtain cluster info from"
+                            f" '{','.join(self.connection_spec.targets)}':"
+                            f" {e!s}"
+                        )
+                        del e
                         connection.close()
                     else:
                         break
                 else:
-                    msg = (
-                        "Failed to obtain cluster info from"
-                        f" '{','.join(self.connection_spec.targets)}':"
-                        f" {last_exception!s}"
-                    )
-                    raise DiscoveryFailedError(msg) from last_exception
+                    raise DiscoveryFailedError(last_exception_msg) from None
 
                 preferred_member = self._select_preferred_member(cluster_members)
 

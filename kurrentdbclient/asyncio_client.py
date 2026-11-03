@@ -88,6 +88,9 @@ def autoreconnect(f: _TCallable) -> _TCallable:
             return await f(client, *args, **kwargs)
 
         except NodeIsNotLeaderError as e:
+            host = e.host
+            port = e.port
+            del e
             if (
                 client.connection_spec.options.node_preference == NODE_PREFERENCE_LEADER
                 and not (
@@ -96,7 +99,7 @@ def autoreconnect(f: _TCallable) -> _TCallable:
                 )
             ):
                 await client.reconnect(
-                    grpc_target(e.host, e.port) if e.host and e.port else None,
+                    grpc_target(host, port) if host and port else None,
                     connection_id=connection_id,
                 )
                 await asyncio.sleep(0.1)
@@ -244,7 +247,7 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
         while True:
             # Attempt to discover preferred node.
             try:
-                last_exception: Exception | None = None
+                last_exception_msg: str = ""
                 for grpc_target in self.connection_spec.targets:
                     connection = self._construct_esdb_connection(
                         grpc_target=grpc_target,
@@ -257,7 +260,13 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                             credentials=self._call_credentials,
                         )
                     except (GrpcError, DeadlineExceededError) as e:
-                        last_exception = e
+                        last_exception_msg = (
+                            "Failed to obtain cluster info from"
+                            f" '{','.join(self.connection_spec.targets)}':"
+                            f" {e!s}"
+                        )
+
+                        del e
                         await connection.close()
                     else:
                         break
@@ -265,9 +274,9 @@ class AsyncKurrentDBClient(BaseKurrentDBClient):
                     msg = (
                         "Failed to obtain cluster info from"
                         f" '{','.join(self.connection_spec.targets)}':"
-                        f" {last_exception!s}"
+                        f" {last_exception_msg}"
                     )
-                    raise DiscoveryFailedError(msg) from last_exception
+                    raise DiscoveryFailedError(msg) from None
 
                 preferred_member = self._select_preferred_member(cluster_members)
 

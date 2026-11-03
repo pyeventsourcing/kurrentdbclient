@@ -6,7 +6,7 @@ import math
 import re
 import sys
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, overload, runtime_checkable
 from uuid import UUID, uuid4
@@ -174,30 +174,38 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
         self._unary_stream_call = unary_stream_call
         self._read_resp_iter = unary_stream_call.__aiter__()
         self._read_resp_queue = asyncio.Queue[streams_pb2.ReadResp | None](maxsize=10)
-        self._read_resp_stream_worker_co = self._read_resp_stream_worker()
         self._read_resp_stream_worker_task = asyncio.create_task(
-            self._read_resp_stream_worker_co
+            self._read_resp_stream_worker(
+                self._read_resp_iter,
+                self._read_resp_queue,
+                self._iter_errors_for_testing,
+            )
         )
 
-    async def _read_resp_stream_worker(self) -> None:
+    @staticmethod
+    async def _read_resp_stream_worker(
+        read_resp_iter: AsyncIterator[streams_pb2.ReadResp],
+        read_resp_queue: asyncio.Queue[streams_pb2.ReadResp | None],
+        errors_for_testing: list[str],
+    ) -> None:
         """Coroutine for isolated task that only handles the gRPC stream."""
         try:
             while True:
-                read_resp = await self._read_resp_iter.__anext__()
-                await self._read_resp_queue.put(read_resp)
-                self._check_iter_error_for_testing()
+                read_resp = await read_resp_iter.__anext__()
+                await read_resp_queue.put(read_resp)
+                AsyncReadResponse._check_iter_error_for_testing(errors_for_testing)
         except StopAsyncIteration:
             # End of the stream, signal to end the iteration.
-            await self._read_resp_queue.put(None)
+            await read_resp_queue.put(None)
         except BaseException:
             # Drain the queue (to avoid blocking on put).
             try:
                 while True:
-                    self._read_resp_queue.get_nowait()
+                    read_resp_queue.get_nowait()
             except asyncio.queues.QueueEmpty:
                 pass
             # Unblock waiting on get().
-            await self._read_resp_queue.put(None)
+            await read_resp_queue.put(None)
             # Reraise the error (appears at 'await task').
             raise
 
@@ -214,11 +222,14 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
                 )
                 if recorded_event is not None:
                     return recorded_event
-        except BaseException as e:
+        except StopAsyncIteration:
             was_cancelled = self._is_cancelled
             await self.stop(cancel=True)
-            if was_cancelled and isinstance(e, StopAsyncIteration):
-                raise CancelledByClientError from e
+            if was_cancelled:
+                raise CancelledByClientError from None
+            raise
+        except BaseException:
+            await self.stop(cancel=True)
             raise
 
     async def stop(
@@ -238,11 +249,9 @@ class AsyncReadResponse(BaseReadResponse, AsyncGrpcStreamer, AbstractAsyncReadRe
             except asyncio.CancelledError:
                 pass
             except grpc.RpcError as e:
-                raise handle_streams_rpc_error(e) from e
-            finally:
-                # Break the cycle
-                del self._read_resp_stream_worker_task
-                del self._read_resp_stream_worker_co
+                error = handle_streams_rpc_error(e)
+                del e
+                raise error from None
 
     def __del__(self) -> None:
         # Safety net, last chance to cancel the streaming call.
@@ -310,38 +319,39 @@ class ReadResponse(GrpcStreamer, BaseReadResponse, AbstractReadResponse):
                 )
                 if recorded_event is not None:
                     return recorded_event
-        except StopIteration as e:
+        except StopIteration:
             # Grpc stream is finished.
             self.stop(cancel=False)
             if self._is_cancelled:
                 # Grpc stream is finished but response is cancelled.
-                raise CancelledByClientError from e
+                raise CancelledByClientError from None
             # Grpc stream is finished but response is not cancelled.
             raise
-        except CancelledByClientError as e:
+        except CancelledByClientError:
             # Grpc stream is cancelled.
             self.stop(cancel=True)
             if self._is_cancelled:
                 # Response is stopped and cancelled.
                 raise
             # Response is stopped but not cancelled.
-            raise StopIteration from e
-        except Exception as e:
+            raise StopIteration from None
+        except Exception:
             # Some channel error.
             if self._is_cancelled:
                 # Some channel error but response was cancelled.
-                # print("Was cancelled, got error:", e)
-                raise CancelledByClientError from e
+                raise CancelledByClientError from None
             # Some channel error but response was not cancelled.
             # print(f"Not cancelled ({id(self)}), got error:", e)
             self.stop(cancel=True)
-            raise e
+            raise
 
     def _get_next_read_resp(self) -> streams_pb2.ReadResp:
         try:
             read_resp = next(self._read_resps)
         except grpc.RpcError as e:
-            raise handle_streams_rpc_error(e) from e
+            error = handle_streams_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(read_resp, streams_pb2.ReadResp)
             return read_resp
@@ -873,7 +883,9 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
             # no cover: stop
 
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     @overload
     async def read(
@@ -1056,7 +1068,9 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_streams_rpc_error(e) from None
+            error = handle_streams_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(delete_resp, streams_pb2.DeleteResp), delete_resp
 
@@ -1078,7 +1092,9 @@ class AsyncStreamsService(BaseStreamsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_streams_rpc_error(e) from None
+            error = handle_streams_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(tombstone_resp, streams_pb2.TombstoneResp)
 
@@ -1272,7 +1288,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(append_resp, streams_pb2.AppendResp)
             # Response 'result' is either 'success' or 'wrong_expected_version'.
@@ -1418,7 +1436,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
             # no cover: stop
 
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     def delete(
         self,
@@ -1438,7 +1458,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_streams_rpc_error(e) from None
+            error = handle_streams_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(delete_resp, streams_pb2.DeleteResp)
             # position_option_oneof = delete_resp.WhichOneof("position_option")
@@ -1465,7 +1487,9 @@ class StreamsService(BaseStreamsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_streams_rpc_error(e) from None
+            error = handle_streams_rpc_error(e)
+            del e
+            raise error from None
         else:
             assert isinstance(tombstone_resp, streams_pb2.TombstoneResp)
             # position_option_oneof = tombstone_resp.WhichOneof("position_option")

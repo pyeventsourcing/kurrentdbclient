@@ -80,7 +80,9 @@ class AsyncGossipService(BaseGossipService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         return self._construct_cluster_members(read_resp)
 
@@ -104,6 +106,8 @@ class GossipService(BaseGossipService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         return self._construct_cluster_members(read_resp)

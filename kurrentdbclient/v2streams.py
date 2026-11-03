@@ -203,10 +203,13 @@ class V2StreamsService(BaseStreamsService[GrpcStreamers]):
                 and "Exception iterating requests!" in details
                 and append_requests.errored
             ):
+                del e
                 raise append_requests.errored from None
 
             # Otherwise handle a genuine RPC error.
-            raise handle_rpc_error(e) from e
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     def append_records(  # pragma: <26.1 no cover
         self,
@@ -229,7 +232,9 @@ class V2StreamsService(BaseStreamsService[GrpcStreamers]):
             )
             return _convert_append_records_response(append_records_response)
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from e
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
 
 def _convert_append_records_response(
@@ -303,7 +308,9 @@ class AsyncV2StreamsService(BaseStreamsService[AsyncGrpcStreamers]):
         except grpc.RpcError as e:
 
             # Otherwise handle a genuine RPC error.
-            raise handle_rpc_error(e) from e
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         except asyncio.CancelledError:
             # Check if there was an error iterating the request.
             if append_requests.errored:
@@ -331,7 +338,9 @@ class AsyncV2StreamsService(BaseStreamsService[AsyncGrpcStreamers]):
             )
             return _convert_append_records_response(append_records_response)
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from e
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
 
 # no cover <25.1: stop

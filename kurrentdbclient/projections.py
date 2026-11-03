@@ -302,7 +302,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(create_resp, projections_pb2.CreateResp)
 
     async def update(
@@ -328,7 +330,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(update_resp, projections_pb2.UpdateResp)
 
     async def delete(
@@ -356,7 +360,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(delete_resp, projections_pb2.DeleteResp)
 
     async def get_statistics(
@@ -384,7 +390,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
             raise KurrentDBClientError(msg)
             # no cover: stop
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     async def list_statistics(
         self,
@@ -413,7 +421,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 list_of_projection_statistics.append(projection_statistics)
             return list_of_projection_statistics
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     async def disable(
         self,
@@ -436,7 +446,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(disable_resp, projections_pb2.DisableResp)
 
     async def enable(
@@ -457,7 +469,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(enable_resp, projections_pb2.EnableResp)
 
     async def reset(
@@ -481,7 +495,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(reset_resp, projections_pb2.ResetResp)
 
     async def get_state(
@@ -504,7 +520,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(state_resp, projections_pb2.StateResp)
         value = self._extract_value(state_resp.state)
         return ProjectionState(value=value)
@@ -548,7 +566,9 @@ class AsyncProjectionsService(BaseProjectionsService[AsyncGrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:  # pragma: no cover
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(empty_resp, shared_pb2.Empty)
 
 
@@ -584,7 +604,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(create_resp, projections_pb2.CreateResp)
 
     def update(
@@ -610,7 +632,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(update_resp, projections_pb2.UpdateResp)
 
     def delete(
@@ -638,7 +662,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(delete_resp, projections_pb2.DeleteResp)
 
     def get_statistics(
@@ -695,7 +721,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 list_of_projection_statistics.append(projection_statistics)
             return list_of_projection_statistics
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
     def disable(
         self,
@@ -718,7 +746,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(disable_resp, projections_pb2.DisableResp)
 
     def enable(
@@ -739,7 +769,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(enable_resp, projections_pb2.EnableResp)
 
     def reset(
@@ -763,7 +795,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(reset_resp, projections_pb2.ResetResp)
 
     def get_state(
@@ -786,7 +820,9 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(state_resp, projections_pb2.StateResp)
         value = self._extract_value(state_resp.state)
         return ProjectionState(value=value)
@@ -830,5 +866,7 @@ class ProjectionsService(BaseProjectionsService[GrpcStreamers]):
                 credentials=credentials,
             )
         except grpc.RpcError as e:  # pragma: no cover
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(empty_resp, shared_pb2.Empty)

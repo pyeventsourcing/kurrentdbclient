@@ -237,7 +237,7 @@ class AsyncSubscriptionReadReqs(
                 if self._is_stopping:
                     # Allow time for server to process last n/acks.
                     await asyncio.sleep(self._stopping_grace)
-                    raise StopAsyncIteration from None
+                    raise StopAsyncIteration
 
                 try:
                     # Wait for next n/ack, timeout with "max ack delay".
@@ -299,7 +299,8 @@ class AsyncSubscriptionReadReqs(
             self._is_stopped.set()
             if not isinstance(e, StopAsyncIteration):
                 self.errored = e.with_traceback(None)
-            raise e
+            del e
+            raise
 
     async def ack(self, event_id: UUID) -> None:
         if self._is_poisoned:
@@ -451,6 +452,7 @@ class SubscriptionReadReqs(BaseSubscriptionReadReqs):
                         )
         except Exception as e:
             self.errored = e.with_traceback(None)
+            del e
             raise
 
     def ack(self, event_id: UUID) -> None:
@@ -512,27 +514,37 @@ class AsyncPersistentSubscription(
         self._read_resp_queue = asyncio.Queue[persistent_pb2.ReadResp | None](
             maxsize=10
         )
-        self._read_resp_stream_worker_co = self._read_resp_stream_worker()
         self._read_resp_stream_worker_task = asyncio.create_task(
-            self._read_resp_stream_worker_co
+            self._read_resp_stream_worker(
+                self._read_resp_iter,
+                self._read_resp_queue,
+                self._iter_errors_for_testing,
+            )
         )
 
-    async def _read_resp_stream_worker(self) -> None:
+    @staticmethod
+    async def _read_resp_stream_worker(
+        read_resp_iter: AsyncIterator[persistent_pb2.ReadResp],
+        read_resp_queue: asyncio.Queue[persistent_pb2.ReadResp | None],
+        errors_for_testing: list[str],
+    ) -> None:
         """Coroutine for isolated task that only handles the gRPC stream."""
         try:
             while True:
-                read_resp = await self._read_resp_iter.__anext__()
-                await self._read_resp_queue.put(read_resp)
-                self._check_iter_error_for_testing()
+                read_resp = await read_resp_iter.__anext__()
+                await read_resp_queue.put(read_resp)
+                AsyncPersistentSubscription._check_iter_error_for_testing(
+                    errors_for_testing
+                )
         except BaseException:
             # Drain the queue (to avoid blocking on put).
             try:
                 while True:
-                    self._read_resp_queue.get_nowait()
+                    read_resp_queue.get_nowait()
             except asyncio.queues.QueueEmpty:
                 pass
             # Unblock waiting on get().
-            await self._read_resp_queue.put(None)
+            await read_resp_queue.put(None)
             # Reraise the error (appears at 'await task').
             raise
 
@@ -597,11 +609,14 @@ class AsyncPersistentSubscription(
                         return recorded_event
                 else:  # pragma: no cover
                     pass
-        except BaseException as e:
+        except StopAsyncIteration:
             was_cancelled = self._is_cancelled
             await self.stop(timeout=1, cancel=True)
-            if was_cancelled and isinstance(e, StopAsyncIteration):
-                raise CancelledByClientError from e
+            if was_cancelled:
+                raise CancelledByClientError from None
+            raise
+        except BaseException:
+            await self.stop(timeout=1, cancel=True)
             raise
 
     async def stop(
@@ -616,22 +631,19 @@ class AsyncPersistentSubscription(
             try:
                 await self._read_reqs.stop(timeout=timeout)
             finally:
+                self._stream_stream_call.cancel()
+                self._read_resp_stream_worker_task.cancel()
+                self._remove()
                 try:
-                    self._stream_stream_call.cancel()
-                    self._read_resp_stream_worker_task.cancel()
-                    self._remove()
-                    try:
-                        await self._read_resp_stream_worker_task
-                    except asyncio.CancelledError:
-                        pass
-                    except grpc.RpcError as e:
-                        raise handle_rpc_error(e) from e
-                    if self._read_reqs.errored:
-                        raise self._read_reqs.errored
-                finally:
-                    # Break the reference cycles
-                    del self._read_resp_stream_worker_task
-                    del self._read_resp_stream_worker_co
+                    await self._read_resp_stream_worker_task
+                except asyncio.CancelledError:
+                    pass
+                except grpc.RpcError as e:
+                    error = handle_rpc_error(e)
+                    del e
+                    raise error from None
+                if self._read_reqs.errored:
+                    raise self._read_reqs.errored
 
     async def ack(self, item: UUID | RecordedEvent) -> None:
         await self._read_reqs.ack(event_id=self._get_event_id(item))
@@ -712,14 +724,14 @@ class PersistentSubscription(
         while True:
             try:
                 read_resp = self._get_next_read_resp()
-            except CancelledByClientError as e:
+            except CancelledByClientError:
                 # Grpc stream is cancelled.
                 self.stop(cancel=True)
                 if self._is_cancelled:
                     # Response is stopped and cancelled.
                     raise
                 # Response is stopped but not cancelled.
-                raise StopIteration from e
+                raise StopIteration from None
             content_oneof = read_resp.WhichOneof("content")
             if content_oneof == "event":
                 recorded_event = construct_recorded_event(read_resp.event)
@@ -742,8 +754,11 @@ class PersistentSubscription(
                 and "Exception iterating requests!" in details
                 and self._read_reqs.errored
             ):
+                del e
                 raise self._read_reqs.errored from None
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(read_resp, persistent_pb2.ReadResp)
         return read_resp
 
@@ -1488,7 +1503,9 @@ class AsyncPersistentSubscriptionsService(
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(response, persistent_pb2.CreateResp)
 
     async def read(
@@ -1551,8 +1568,12 @@ class AsyncPersistentSubscriptionsService(
                 e.code() == grpc.StatusCode.UNAVAILABLE
                 and e.details() == "Server Is Not Ready"
             ):
-                raise NodeIsNotLeaderError(e) from None
-            raise handle_rpc_error(e) from None
+                msg = str(e)
+                del e
+                raise NodeIsNotLeaderError(msg) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         else:
             assert isinstance(resp, persistent_pb2.GetInfoResp)
@@ -1580,8 +1601,12 @@ class AsyncPersistentSubscriptionsService(
                 e.code() == grpc.StatusCode.UNAVAILABLE
                 and e.details() == "Server Is Not Ready"
             ):
-                raise NodeIsNotLeaderError(e) from None
-            raise handle_rpc_error(e) from None
+                msg = str(e)
+                del e
+                raise NodeIsNotLeaderError(msg) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         assert isinstance(resp, persistent_pb2.ListResp)
         return self._construct_subscription_infos(resp)
@@ -1693,7 +1718,9 @@ class AsyncPersistentSubscriptionsService(
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(response, persistent_pb2.UpdateResp)
 
     async def delete(
@@ -1713,7 +1740,9 @@ class AsyncPersistentSubscriptionsService(
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(resp, persistent_pb2.DeleteResp)
 
     async def replay_parked(
@@ -1733,7 +1762,9 @@ class AsyncPersistentSubscriptionsService(
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(resp, persistent_pb2.ReplayParkedResp)
 
 
@@ -1867,7 +1898,9 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(response, persistent_pb2.CreateResp)
 
     def read(
@@ -1927,8 +1960,12 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 e.code() == grpc.StatusCode.UNAVAILABLE
                 and e.details() == "Server Is Not Ready"
             ):
-                raise NodeIsNotLeaderError(e) from None
-            raise handle_rpc_error(e) from None
+                msg = str(e)
+                del e
+                raise NodeIsNotLeaderError(msg) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         else:
             assert isinstance(resp, persistent_pb2.GetInfoResp)
@@ -1956,8 +1993,12 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 e.code() == grpc.StatusCode.UNAVAILABLE
                 and e.details() == "Server Is Not Ready"
             ):
-                raise NodeIsNotLeaderError(e) from None
-            raise handle_rpc_error(e) from None
+                msg = str(e)
+                del e
+                raise NodeIsNotLeaderError(msg) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
 
         assert isinstance(resp, persistent_pb2.ListResp)
         return self._construct_subscription_infos(resp)
@@ -2069,7 +2110,9 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(response, persistent_pb2.UpdateResp)
 
     def delete(
@@ -2089,7 +2132,9 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(resp, persistent_pb2.DeleteResp)
 
     def replay_parked(
@@ -2109,5 +2154,7 @@ class PersistentSubscriptionsService(BasePersistentSubscriptionsService[GrpcStre
                 credentials=credentials,
             )
         except grpc.RpcError as e:
-            raise handle_rpc_error(e) from None
+            error = handle_rpc_error(e)
+            del e
+            raise error from None
         assert isinstance(resp, persistent_pb2.ReplayParkedResp)

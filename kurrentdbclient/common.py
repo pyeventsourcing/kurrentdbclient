@@ -706,6 +706,7 @@ class AsyncRecordedEventIterator(
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._is_context_manager_active = False
+        self._iter_errors_for_testing: list[str] = []
 
     @abstractmethod
     async def stop(self, *, timeout: float | None = None) -> None:
@@ -728,15 +729,16 @@ class AsyncRecordedEventIterator(
         # receiving confirmation response, tried closing the channel
         # but the async streaming response continues (unlike with sync call). Needed
         # to inspire this error to test instrumentation span error during iteration.
-        self._iter_error_for_testing = msg
+        self._iter_errors_for_testing.append(msg)
 
-    def _check_iter_error_for_testing(self) -> None:
-        if msg := getattr(self, "_iter_error_for_testing", ""):
+    @staticmethod
+    def _check_iter_error_for_testing(errors: list[str]) -> None:
+        if errors:
             raise AioRpcError(
                 grpc.StatusCode.INTERNAL,
                 grpc.aio.Metadata(),
                 grpc.aio.Metadata(),
-                msg,
+                errors[0],
                 "",
             )
 
